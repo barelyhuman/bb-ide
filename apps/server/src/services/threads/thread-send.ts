@@ -248,6 +248,7 @@ function formatAgentThreadInput(
         messageText: "",
         senderThreadId: args.senderThreadId,
       }),
+      mentions: [],
     };
     return [textItem, ...args.input];
   }

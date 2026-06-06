@@ -14,6 +14,7 @@ import {
   listQueuedThreadCommands,
   waitForQueuedCommand,
 } from "../helpers/commands.js";
+import { textInput } from "../helpers/prompt-input.js";
 import {
   seedEnvironment,
   seedEvent,
@@ -57,7 +58,7 @@ function seedRunnableThread(args: SeedRunnableThreadArgs) {
     threadId: thread.id,
     environmentId: args.environmentId,
     type: "client/turn/requested",
-    input: [{ type: "text", text: "Bootstrap thread" }],
+    input: textInput("Bootstrap thread"),
     target: { kind: "thread-start" },
     execution: {
       model: "gpt-5",
@@ -275,7 +276,7 @@ describe("thread schedule sweep", () => {
       await sweepPromise;
 
       expect(queuedTurnSubmit.command).toMatchObject({
-        input: [{ type: "text", text: "Check active work." }],
+        input: textInput("Check active work."),
         target: {
           mode: "auto",
           expectedTurnId: "turn-active-schedule",

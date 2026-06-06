@@ -8,6 +8,7 @@ import {
   waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
+import { textInput } from "../helpers/prompt-input.js";
 import { seedHostSession, seedProjectWithSource } from "../helpers/seed.js";
 import { createTestAppHarness, withTestHarness } from "../helpers/test-app.js";
 import { InferenceTimeoutError } from "../../src/services/ai/inference.js";
@@ -520,12 +521,7 @@ describe("generated managed branch names", () => {
     try {
       await expect(
         generateThreadMetadataWithOutcome(harness.deps, {
-          input: [
-            {
-              type: "text",
-              text: "Improve timed out metadata generation behavior",
-            },
-          ],
+          input: textInput("Improve timed out metadata generation behavior"),
           threadId: "thr_timeout",
           timeoutMs: 1,
         }),
@@ -562,12 +558,7 @@ describe("generated managed branch names", () => {
     try {
       await expect(
         generateThreadMetadataWithOutcome(harness.deps, {
-          input: [
-            {
-              type: "text",
-              text: "Improve timed out metadata generation behavior",
-            },
-          ],
+          input: textInput("Improve timed out metadata generation behavior"),
           threadId: "thr_retry_timeout",
           timeoutMaxAttempts: 2,
           timeoutMs: 1,
@@ -607,12 +598,7 @@ describe("generated managed branch names", () => {
     await withTestHarness(async (harness) => {
       await expect(
         generateThreadMetadataWithOutcome(harness.deps, {
-          input: [
-            {
-              type: "text",
-              text: "Improve failed metadata generation behavior",
-            },
-          ],
+          input: textInput("Improve failed metadata generation behavior"),
           threadId: "thr_failed_metadata",
           timeoutMaxAttempts: 2,
           timeoutMs: 1,

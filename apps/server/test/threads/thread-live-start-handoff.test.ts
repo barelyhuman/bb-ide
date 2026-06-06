@@ -18,6 +18,7 @@ import {
   waitForQueuedCommand,
   type QueuedCommand,
 } from "../helpers/commands.js";
+import { textInput } from "../helpers/prompt-input.js";
 import {
   seedEnvironment,
   seedHostSession,
@@ -75,7 +76,7 @@ async function startLiveThreadStartRpc(
   await requestThreadStart(args.harness.deps, {
     thread,
     environment,
-    input: [{ type: "text", text: "start live runtime" }],
+    input: textInput("start live runtime"),
     requestId: encodeClientTurnRequestIdNumber({
       value: args.requestIdValue,
     }),

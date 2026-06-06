@@ -17,6 +17,7 @@ import {
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
 } from "../helpers/commands.js";
+import { textInput } from "../helpers/prompt-input.js";
 import {
   createAllowForSessionResolution,
   createAllowOnceResolution,
@@ -833,7 +834,7 @@ describe("public thread interaction routes", () => {
       });
       const queuedMessage = createQueuedThreadMessage(harness.db, harness.hub, {
         threadId: thread.id,
-        content: [{ type: "text", text: "Queued message" }],
+        content: textInput("Queued message"),
         model: "gpt-5",
         serviceTier: "default",
         reasoningLevel: "medium",

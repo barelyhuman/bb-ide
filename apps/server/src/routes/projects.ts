@@ -778,6 +778,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
             {
               type: "text" as const,
               text: renderTemplate("systemMessageManagerQuickStart", {}),
+              mentions: [],
               visibility: "agent-only" as const,
             },
             ...quickStartUserInput,
@@ -786,6 +787,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
             {
               type: "text" as const,
               text: renderTemplate("systemMessageManagerWelcome", {}),
+              mentions: [],
             },
           ];
 

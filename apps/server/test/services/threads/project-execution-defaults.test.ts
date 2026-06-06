@@ -9,6 +9,7 @@ import {
   seedHostSession,
   seedProjectWithSource,
 } from "../../helpers/seed.js";
+import { textInput } from "../../helpers/prompt-input.js";
 import { withTestHarness } from "../../helpers/test-app.js";
 
 describe("project execution defaults persistence", () => {
@@ -50,7 +51,7 @@ describe("project execution defaults persistence", () => {
         permissionMode: "workspace-write",
         serviceTier: "fast",
         type: "standard",
-        input: [{ type: "text", text: "Reuse one-off" }],
+        input: textInput("Reuse one-off"),
         environment: { type: "reuse", environmentId: environment.id },
       });
 
@@ -98,7 +99,7 @@ describe("project execution defaults persistence", () => {
         permissionMode: "workspace-write",
         serviceTier: "fast",
         type: "standard",
-        input: [{ type: "text", text: "Set new defaults" }],
+        input: textInput("Set new defaults"),
         environment: {
           type: "host",
           hostId: host.id,

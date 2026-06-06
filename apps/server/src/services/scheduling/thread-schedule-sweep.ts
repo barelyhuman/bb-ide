@@ -137,6 +137,7 @@ function buildThreadScheduleInput(schedule: ThreadScheduleRow): PromptInput[] {
     {
       type: "text",
       text: schedule.prompt,
+      mentions: [],
     },
   ];
 }

@@ -11,6 +11,7 @@ function textInput(text: string): PromptInput {
   return {
     type: "text",
     text,
+    mentions: [],
   };
 }
 

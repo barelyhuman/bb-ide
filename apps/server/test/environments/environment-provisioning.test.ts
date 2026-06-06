@@ -21,6 +21,7 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
+import { textInput } from "../helpers/prompt-input.js";
 import {
   requireManagedWorktreeEnvironmentProvisionLiveCommand,
   waitForQueuedCommand,
@@ -296,7 +297,7 @@ describe("environment reprovisioning", () => {
               baseBranch: { kind: "default" },
             },
           },
-          input: [{ type: "text", text: "offline create" }],
+          input: textInput("offline create"),
           origin: "cli",
           projectId: project.id,
           providerId: "codex",

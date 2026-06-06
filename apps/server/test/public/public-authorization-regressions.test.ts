@@ -8,6 +8,7 @@ import {
 } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import { readJson } from "../helpers/json.js";
+import { textInput } from "../helpers/prompt-input.js";
 import {
   seedQueuedMessage,
   seedEnvironment,
@@ -179,11 +180,11 @@ describe("public authorization regressions", () => {
       });
       seedQueuedMessage(harness.deps, {
         threadId: threadA.id,
-        content: [{ type: "text", text: "Queued message A" }],
+        content: textInput("Queued message A"),
       });
       const queuedMessageB = seedQueuedMessage(harness.deps, {
         threadId: threadB.id,
-        content: [{ type: "text", text: "Queued message B" }],
+        content: textInput("Queued message B"),
       });
 
       const response = await harness.app.request(

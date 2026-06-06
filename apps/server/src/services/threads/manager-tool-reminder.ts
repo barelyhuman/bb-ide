@@ -51,5 +51,5 @@ export function appendManagerToolReminder(
     return input;
   }
 
-  return [...input, { type: "text", text: reminderText }];
+  return [...input, { type: "text", text: reminderText, mentions: [] }];
 }

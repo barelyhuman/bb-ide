@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { threadScope, turnScope } from "@bb/domain";
+import { threadScope, turnScope, type PromptInput } from "@bb/domain";
 import { createConnection } from "../../src/connection.js";
 import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
@@ -88,6 +88,10 @@ function createTurnEventFields(args: CreateTurnEventFieldsArgs) {
     ...emptyItemFields,
     scope: turnScope(args.turnId),
   };
+}
+
+function textInput(text: string): PromptInput[] {
+  return [{ type: "text", text, mentions: [] }];
 }
 
 interface CreateTokenUsageDataArgs {
@@ -736,7 +740,7 @@ describe("events", () => {
         ...threadEventFields,
         data: JSON.stringify({
           initiator: "user",
-          input: [{ type: "text", text: "user message" }],
+          input: textInput("user message"),
           target: { kind: "new-turn" },
         }),
       },
@@ -747,7 +751,7 @@ describe("events", () => {
         ...threadEventFields,
         data: JSON.stringify({
           initiator: "system",
-          input: [{ type: "text", text: "system message" }],
+          input: textInput("system message"),
           target: { kind: "new-turn" },
         }),
       },
@@ -758,7 +762,7 @@ describe("events", () => {
         ...threadEventFields,
         data: JSON.stringify({
           initiator: "user",
-          input: [{ type: "text", text: "accepted steer" }],
+          input: textInput("accepted steer"),
           target: { kind: "auto", expectedTurnId: "turn-1" },
         }),
       },
@@ -769,7 +773,7 @@ describe("events", () => {
         ...threadEventFields,
         data: JSON.stringify({
           initiator: "user",
-          input: [{ type: "text", text: "auto new turn" }],
+          input: textInput("auto new turn"),
           target: { kind: "auto", expectedTurnId: null },
         }),
       },
@@ -780,7 +784,7 @@ describe("events", () => {
         ...threadEventFields,
         data: JSON.stringify({
           initiator: "user",
-          input: [{ type: "text", text: "explicit steer" }],
+          input: textInput("explicit steer"),
           target: { kind: "steer", expectedTurnId: "turn-1" },
         }),
       },
@@ -791,7 +795,7 @@ describe("events", () => {
         ...threadEventFields,
         data: JSON.stringify({
           initiator: "user",
-          input: [{ type: "text", text: "" }],
+          input: textInput(""),
           target: { kind: "new-turn" },
         }),
       },
@@ -813,7 +817,7 @@ describe("events", () => {
         ...threadEventFields,
         data: JSON.stringify({
           initiator: "user",
-          input: [{ type: "text", text: "legacy target" }],
+          input: textInput("legacy target"),
         }),
       },
       {
@@ -845,7 +849,7 @@ describe("events", () => {
         ...threadEventFields,
         data: JSON.stringify({
           initiator: "agent",
-          input: [{ type: "text", text: "agent message" }],
+          input: textInput("agent message"),
           target: { kind: "new-turn" },
         }),
       },
@@ -1026,7 +1030,7 @@ describe("events", () => {
           requestId: "creq_23456789ab",
           source: "tell",
           initiator: "user",
-          input: [{ type: "text", text: "first" }],
+          input: textInput("first"),
           target: { kind: "new-turn" },
           request: { method: "turn/start", params: {} },
           execution: {
@@ -1048,7 +1052,7 @@ describe("events", () => {
           requestId: "creq_23456789ac",
           source: "tell",
           initiator: "user",
-          input: [{ type: "text", text: "second" }],
+          input: textInput("second"),
           target: { kind: "new-turn" },
           request: { method: "turn/start", params: {} },
           execution: {
@@ -1116,7 +1120,7 @@ describe("events", () => {
           requestId: "creq_23456789ab",
           source: "tell",
           initiator: "user",
-          input: [{ type: "text", text: "first" }],
+          input: textInput("first"),
           target: { kind: "new-turn" },
           request: { method: "turn/start", params: {} },
           execution: {
@@ -1145,7 +1149,7 @@ describe("events", () => {
           requestId: "creq_23456789ac",
           source: "tell",
           initiator: "user",
-          input: [{ type: "text", text: "second" }],
+          input: textInput("second"),
           target: { kind: "new-turn" },
           request: { method: "turn/start", params: {} },
           execution: {
@@ -1167,7 +1171,7 @@ describe("events", () => {
           requestId: "creq_23456789ad",
           source: "tell",
           initiator: "user",
-          input: [{ type: "text", text: "other thread" }],
+          input: textInput("other thread"),
           target: { kind: "new-turn" },
           request: { method: "turn/start", params: {} },
           execution: {
@@ -1260,7 +1264,7 @@ describe("events", () => {
         initiator: "user",
         senderThreadId: null,
         requestId: "creq_runtime",
-        input: [{ type: "text", text: "start" }],
+        input: textInput("start"),
         target: { kind: "thread-start" },
         request: { method: "thread/start", params: {} },
         execution: {

@@ -20,6 +20,11 @@ import {
   waitForQueuedCommand,
 } from "../helpers/commands.js";
 import {
+  agentOnlyTextPrompt,
+  textInput,
+  textPrompt,
+} from "../helpers/prompt-input.js";
+import {
   seedEnvironment,
   seedHostSession,
   seedProjectWithSource,
@@ -70,32 +75,28 @@ const providerReminderCases: ProviderReminderCase[] = [
 
 const slashCommandReminderCases: SlashCommandReminderCase[] = [
   {
-    input: [{ type: "text", text: "/compact" }],
+    input: textInput("/compact"),
     name: "slash command",
   },
   {
-    input: [{ type: "text", text: "   /foo" }],
+    input: textInput("   /foo"),
     name: "slash command with leading whitespace",
   },
   {
-    input: [{ type: "text", text: "/" }],
+    input: textInput("/"),
     name: "slash-only command",
   },
   {
     input: [
       { type: "image", url: "https://example.com/input.png" },
-      { type: "text", text: "/review" },
+      textPrompt("/review"),
     ],
     name: "slash command after an attachment",
   },
   {
     input: [
-      {
-        type: "text",
-        text: "[bb system] Updated manager preferences.",
-        visibility: "agent-only",
-      },
-      { type: "text", text: "/loop" },
+      agentOnlyTextPrompt("[bb system] Updated manager preferences."),
+      textPrompt("/loop"),
     ],
     name: "slash command after an agent-only system block",
   },
@@ -179,10 +180,7 @@ async function prepareTurnSubmitPayloadForThread(
 }
 
 function expectedReminderInput(providerId: AgentProviderId): PromptInput {
-  return {
-    type: "text",
-    text: buildManagerToolReminderText(providerId),
-  };
+  return textPrompt(buildManagerToolReminderText(providerId));
 }
 
 describe("manager tool reminders", () => {
@@ -196,7 +194,7 @@ describe("manager tool reminders", () => {
   it.each(providerReminderCases)(
     "appends a $providerId manager turn reminder with the provider-specific tool name",
     async ({ providerId }) => {
-      const input: PromptInput[] = [{ type: "text", text: "continue work" }];
+      const input = textInput("continue work");
 
       const { payload } = await prepareTurnSubmitPayloadForThread({
         input,
@@ -221,7 +219,7 @@ describe("manager tool reminders", () => {
   it("appends the reminder when the first block is not text and the user text is not a slash command", () => {
     const input: PromptInput[] = [
       { type: "image", url: "https://example.com/context.png" },
-      { type: "text", text: "use this image" },
+      textPrompt("use this image"),
     ];
 
     expect(appendManagerToolReminder(input, "codex")).toEqual([
@@ -231,7 +229,7 @@ describe("manager tool reminders", () => {
   });
 
   it("leaves standard thread input unchanged", async () => {
-    const input: PromptInput[] = [{ type: "text", text: "standard turn" }];
+    const input = textInput("standard turn");
 
     const { payload } = await prepareTurnSubmitPayloadForThread({
       input,
@@ -244,7 +242,7 @@ describe("manager tool reminders", () => {
 
   it("does not double-append when input already ends with the exact reminder", async () => {
     const input: PromptInput[] = [
-      { type: "text", text: "continue work" },
+      textPrompt("continue work"),
       expectedReminderInput("codex"),
     ];
 
@@ -298,7 +296,7 @@ describe("manager tool reminders", () => {
         providerThreadId,
         turnId: "turn-manager-reminder-steer",
       });
-      const input: PromptInput[] = [{ type: "text", text: "adjust course" }];
+      const input = textInput("adjust course");
       const eventSequenceBeforeSend = getLatestThreadSequence(harness.db, {
         threadId: thread.id,
       });

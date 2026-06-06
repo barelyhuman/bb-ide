@@ -26,6 +26,7 @@ import {
   waitForQueuedCommandAfter,
   type QueuedCommand,
 } from "../helpers/commands.js";
+import { textInput } from "../helpers/prompt-input.js";
 import {
   seedEnvironment,
   seedEvent,
@@ -116,7 +117,7 @@ describe("thread provisioning recovery", () => {
           environmentId: environment.id,
         },
         execution: THREAD_START_EXECUTION,
-        input: [{ type: "text", text: "start after workspace ready" }],
+        input: textInput("start after workspace ready"),
         titleProvided: true,
       });
       const attachedContext = createEnvironmentAttachedContext(

@@ -9,7 +9,6 @@ import {
   noopNotifier,
   upsertHost,
 } from "@bb/db";
-import type { PromptInput } from "@bb/domain";
 import { getActiveThreadProvisionContext } from "../../src/services/threads/thread-provisioning-active-context.js";
 import {
   requestThreadProvision,
@@ -17,6 +16,7 @@ import {
 } from "../../src/services/threads/thread-provisioning.js";
 import { NotificationHub } from "../../src/ws/hub.js";
 import { assertPromptHistoryForTurnRequest } from "../helpers/prompt-history.js";
+import { textInput } from "../helpers/prompt-input.js";
 
 function setup() {
   const db = createConnection(":memory:");
@@ -48,9 +48,7 @@ function setup() {
 describe("thread provisioning state", () => {
   it("stores provisioning progress in live context without a durable row payload", () => {
     const { db, host, hub, thread } = setup();
-    const input: PromptInput[] = [
-      { type: "text", text: "start this workspace" },
-    ];
+    const input = textInput("start this workspace");
 
     const context = requestThreadProvision(
       { db, hub },
@@ -89,9 +87,7 @@ describe("thread provisioning state", () => {
 
   it("keeps reprovision progress in live context and records prompt history", () => {
     const { db, environment, hub, thread } = setup();
-    const input: PromptInput[] = [
-      { type: "text", text: "resume after reprovision" },
-    ];
+    const input = textInput("resume after reprovision");
 
     const provisioningId = createThreadProvisioningId();
     const context = requestThreadReprovision(

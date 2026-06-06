@@ -1414,6 +1414,7 @@ export function registerGlobalAppRoutes(app: Hono, deps: AppDeps): void {
             {
               type: "text",
               text: formatAppMessagePayload(payload.payload),
+              mentions: [],
             },
           ],
           mode: "auto",

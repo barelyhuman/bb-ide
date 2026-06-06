@@ -15,6 +15,7 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
+import { textInput } from "../helpers/prompt-input.js";
 import { withTestHarness } from "../helpers/test-app.js";
 
 function resolveLocalTimezone(): string {
@@ -328,7 +329,7 @@ describe("thread runtime config", () => {
         environment,
         execution,
         permissionEscalation: "ask",
-        input: [{ type: "text", text: "hello" }],
+        input: textInput("hello"),
         projectId: project.id,
         providerId: "codex",
         requestId: encodeClientTurnRequestIdNumber({ value: 1 }),

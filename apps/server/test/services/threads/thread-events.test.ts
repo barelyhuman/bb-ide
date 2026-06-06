@@ -14,6 +14,7 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../../helpers/seed.js";
+import { textInput } from "../../helpers/prompt-input.js";
 import { createTestAppHarness } from "../../helpers/test-app.js";
 
 interface CreateThreadEventTestContextArgs {
@@ -334,7 +335,7 @@ describe("thread event appends", () => {
         threadId: thread.id,
         environmentId: environment.id,
         type: "client/turn/requested",
-        input: [{ type: "text", text: "kick off the audit" }],
+        input: textInput("kick off the audit"),
         target: { kind: "new-turn" },
         execution: {
           model: "gpt-5",
@@ -383,7 +384,7 @@ describe("thread event appends", () => {
         threadId: thread.id,
         environmentId: environment.id,
         type: "client/turn/requested",
-        input: [{ type: "text", text: "agent handoff" }],
+        input: textInput("agent handoff"),
         target: { kind: "new-turn" },
         execution: {
           model: "gpt-5",

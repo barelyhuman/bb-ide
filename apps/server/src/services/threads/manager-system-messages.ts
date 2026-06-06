@@ -74,7 +74,7 @@ interface QueueActiveManagerSystemMessageResult {
 }
 
 function buildSystemInput(messageText: string): PromptInput[] {
-  return [{ type: "text", text: messageText }];
+  return [{ type: "text", text: messageText, mentions: [] }];
 }
 
 function queueActiveManagerSystemMessageInTransaction(

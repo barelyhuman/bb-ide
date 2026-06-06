@@ -39,6 +39,7 @@ import {
 } from "../helpers/commands.js";
 import { registerProviderHostRpcResponder } from "../helpers/host-rpc.js";
 import { readJson } from "../helpers/json.js";
+import { textInput } from "../helpers/prompt-input.js";
 import {
   seedQueuedMessage,
   seedEnvironment,
@@ -890,15 +891,15 @@ describe("public thread data routes", () => {
       });
       const firstQueuedMessage = seedQueuedMessage(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "First queued message" }],
+        content: textInput("First queued message"),
       });
       const secondQueuedMessage = seedQueuedMessage(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "Second queued message" }],
+        content: textInput("Second queued message"),
       });
       const thirdQueuedMessage = seedQueuedMessage(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "Third queued message" }],
+        content: textInput("Third queued message"),
       });
 
       const response = await harness.app.request(
@@ -950,15 +951,15 @@ describe("public thread data routes", () => {
       });
       const firstQueuedMessage = seedQueuedMessage(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "First queued message" }],
+        content: textInput("First queued message"),
       });
       const secondQueuedMessage = seedQueuedMessage(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "Second queued message" }],
+        content: textInput("Second queued message"),
       });
       const thirdQueuedMessage = seedQueuedMessage(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "Third queued message" }],
+        content: textInput("Third queued message"),
       });
 
       const notFoundResponse = await harness.app.request(
@@ -1015,15 +1016,15 @@ describe("public thread data routes", () => {
       });
       const firstQueuedMessage = seedQueuedMessage(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "First queued message" }],
+        content: textInput("First queued message"),
       });
       const secondQueuedMessage = seedQueuedMessage(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "Second queued message" }],
+        content: textInput("Second queued message"),
       });
       const thirdQueuedMessage = seedQueuedMessage(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "Third queued message" }],
+        content: textInput("Third queued message"),
       });
       const response = await harness.app.request(
         `/api/v1/threads/${thread.id}/queued-messages/${secondQueuedMessage.id}/order`,
@@ -1065,15 +1066,15 @@ describe("public thread data routes", () => {
       });
       const firstQueuedMessage = seedQueuedMessage(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "First queued message" }],
+        content: textInput("First queued message"),
       });
       const secondQueuedMessage = seedQueuedMessage(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "Second queued message" }],
+        content: textInput("Second queued message"),
       });
       const thirdQueuedMessage = seedQueuedMessage(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "Third queued message" }],
+        content: textInput("Third queued message"),
       });
 
       expect(
@@ -1195,7 +1196,7 @@ describe("public thread data routes", () => {
       const { thread } = seedThreadFixture(harness);
       seedQueuedMessage(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "First queued message" }],
+        content: textInput("First queued message"),
         model: "gpt-5",
         reasoningLevel: "medium",
         permissionMode: "full",
@@ -1203,7 +1204,7 @@ describe("public thread data routes", () => {
       });
       seedQueuedMessage(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "Second queued message" }],
+        content: textInput("Second queued message"),
         model: "gpt-5",
         reasoningLevel: "high",
         permissionMode: "full",
@@ -1222,14 +1223,14 @@ describe("public thread data routes", () => {
       expect(queuedMessages).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            content: [{ type: "text", text: "First queued message" }],
+            content: textInput("First queued message"),
             model: "gpt-5",
             reasoningLevel: "medium",
             permissionMode: "full",
             serviceTier: "default",
           }),
           expect.objectContaining({
-            content: [{ type: "text", text: "Second queued message" }],
+            content: textInput("Second queued message"),
             model: "gpt-5",
             reasoningLevel: "high",
             permissionMode: "full",
@@ -1331,11 +1332,11 @@ describe("public thread data routes", () => {
         threadId: thread.id,
         scope: "thread",
         requestSequence: 1,
-        input: [{ type: "text", text: "Accepted prompt" }],
+        input: textInput("Accepted prompt"),
       });
       seedQueuedMessage(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "Queued message" }],
+        content: textInput("Queued message"),
         model: "gpt-5.5",
         reasoningLevel: "xhigh",
         permissionMode: "workspace-write",
@@ -1367,14 +1368,14 @@ describe("public thread data routes", () => {
         executionOptions.providers[0]?.capabilities.supportsUserQuestion,
       ).toBe(true);
       expect(executionOptions.models[0]?.model).toBe("gpt-5.5");
-      expect(bootstrap.queuedMessages[0]?.content).toEqual([
-        { type: "text", text: "Queued message" },
-      ]);
+      expect(bootstrap.queuedMessages[0]?.content).toEqual(
+        textInput("Queued message"),
+      );
       expect(bootstrap.pendingInteractions).toEqual([]);
       expect(bootstrap.promptHistory.map((entry) => entry.input)).toEqual(
         expect.arrayContaining([
-          [{ type: "text", text: "Accepted prompt" }],
-          [{ type: "text", text: "Queued message" }],
+          textInput("Accepted prompt"),
+          textInput("Queued message"),
         ]),
       );
       expect(

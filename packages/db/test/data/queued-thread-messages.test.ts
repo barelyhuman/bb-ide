@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { PromptInput } from "@bb/domain";
 import { createConnection } from "../../src/connection.js";
 import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
@@ -19,8 +20,12 @@ import { createProject } from "../../src/data/projects.js";
 import { createThread } from "../../src/data/threads.js";
 import { upsertHost } from "../../src/data/hosts.js";
 
-const defaultInput = [{ type: "text" as const, text: "hello" }];
-const altInput = [{ type: "text" as const, text: "world" }];
+function textInput(text: string): PromptInput[] {
+  return [{ type: "text", text, mentions: [] }];
+}
+
+const defaultInput = textInput("hello");
+const altInput = textInput("world");
 
 function setup() {
   const db = createConnection(":memory:");
@@ -290,7 +295,7 @@ describe("queued thread messages", () => {
     });
     const thirdQueuedMessage = createQueuedThreadMessage(db, noopNotifier, {
       threadId: thread.id,
-      content: [{ type: "text", text: "third" }],
+      content: textInput("third"),
       model: "gpt-5",
       reasoningLevel: "medium",
       permissionMode: "full",
@@ -408,7 +413,7 @@ describe("queued thread messages", () => {
     });
     const thirdQueuedMessage = createQueuedThreadMessage(db, noopNotifier, {
       threadId: thread.id,
-      content: [{ type: "text", text: "third" }],
+      content: textInput("third"),
       model: "gpt-5",
       reasoningLevel: "medium",
       permissionMode: "full",

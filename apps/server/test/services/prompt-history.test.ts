@@ -18,6 +18,7 @@ import {
   listThreadPromptHistory,
   recordAcceptedPromptHistoryEntry,
 } from "../../src/services/prompt-history.js";
+import { textInput } from "../helpers/prompt-input.js";
 
 type TestDb = ReturnType<typeof createConnection>;
 
@@ -90,7 +91,7 @@ describe("prompt history service", () => {
       scope: "project",
       requestSequence: 1,
       createdAt: 10,
-      input: [{ type: "text", text: "Investigate auth flow" }],
+      input: textInput("Investigate auth flow"),
     });
     insertPromptHistoryEntry({
       db,
@@ -99,7 +100,7 @@ describe("prompt history service", () => {
       scope: "project",
       requestSequence: 1,
       createdAt: 20,
-      input: [{ type: "text", text: "Open incident thread" }],
+      input: textInput("Open incident thread"),
     });
     insertPromptHistoryEntry({
       db,
@@ -108,7 +109,7 @@ describe("prompt history service", () => {
       scope: "project",
       requestSequence: 2,
       createdAt: 30,
-      input: [{ type: "text", text: "Open incident thread" }],
+      input: textInput("Open incident thread"),
     });
     insertPromptHistoryEntry({
       db,
@@ -117,7 +118,7 @@ describe("prompt history service", () => {
       scope: "thread",
       requestSequence: 3,
       createdAt: 40,
-      input: [{ type: "text", text: "Follow up inside thread" }],
+      input: textInput("Follow up inside thread"),
     });
     insertPromptHistoryEntry({
       db,
@@ -126,7 +127,7 @@ describe("prompt history service", () => {
       scope: "project",
       requestSequence: 1,
       createdAt: 60,
-      input: [{ type: "text", text: "Other project prompt" }],
+      input: textInput("Other project prompt"),
     });
 
     expect(
@@ -141,12 +142,12 @@ describe("prompt history service", () => {
       {
         id: expect.stringMatching(/^phist_/u),
         createdAt: 30,
-        input: [{ type: "text", text: "Open incident thread" }],
+        input: textInput("Open incident thread"),
       },
       {
         id: expect.stringMatching(/^phist_/u),
         createdAt: 10,
-        input: [{ type: "text", text: "Investigate auth flow" }],
+        input: textInput("Investigate auth flow"),
       },
     ]);
   });
@@ -169,7 +170,7 @@ describe("prompt history service", () => {
       scope: "project",
       requestSequence: 1,
       createdAt: 10,
-      input: [{ type: "text", text: "Visible starter prompt" }],
+      input: textInput("Visible starter prompt"),
     });
     insertPromptHistoryEntry({
       db,
@@ -178,7 +179,7 @@ describe("prompt history service", () => {
       scope: "project",
       requestSequence: 1,
       createdAt: 20,
-      input: [{ type: "text", text: "Archived starter prompt" }],
+      input: textInput("Archived starter prompt"),
     });
     archiveThread(db, noopNotifier, archivedThread.id);
 
@@ -194,12 +195,12 @@ describe("prompt history service", () => {
       {
         id: expect.stringMatching(/^phist_/u),
         createdAt: 20,
-        input: [{ type: "text", text: "Archived starter prompt" }],
+        input: textInput("Archived starter prompt"),
       },
       {
         id: expect.stringMatching(/^phist_/u),
         createdAt: 10,
-        input: [{ type: "text", text: "Visible starter prompt" }],
+        input: textInput("Visible starter prompt"),
       },
     ]);
   });
@@ -222,7 +223,7 @@ describe("prompt history service", () => {
       scope: "project",
       requestSequence: 1,
       createdAt: 10,
-      input: [{ type: "text", text: "Visible starter prompt" }],
+      input: textInput("Visible starter prompt"),
     });
     insertPromptHistoryEntry({
       db,
@@ -231,7 +232,7 @@ describe("prompt history service", () => {
       scope: "project",
       requestSequence: 1,
       createdAt: 20,
-      input: [{ type: "text", text: "Deleted starter prompt" }],
+      input: textInput("Deleted starter prompt"),
     });
     markThreadDeleted(db, noopNotifier, { threadId: deletedThread.id });
 
@@ -247,7 +248,7 @@ describe("prompt history service", () => {
       {
         id: expect.stringMatching(/^phist_/u),
         createdAt: 10,
-        input: [{ type: "text", text: "Visible starter prompt" }],
+        input: textInput("Visible starter prompt"),
       },
     ]);
   });
@@ -274,7 +275,7 @@ describe("prompt history service", () => {
         { db },
         {
           thread: directThread,
-          input: [{ type: "text", text: "User-created thread" }],
+          input: textInput("User-created thread"),
           initiator: "user",
           target: { kind: "thread-start" },
           requestSequence: 1,
@@ -286,7 +287,7 @@ describe("prompt history service", () => {
         { db },
         {
           thread: managedThread,
-          input: [{ type: "text", text: "Manager-created worker" }],
+          input: textInput("Manager-created worker"),
           initiator: "user",
           target: { kind: "thread-start" },
           requestSequence: 1,
@@ -306,7 +307,7 @@ describe("prompt history service", () => {
       {
         id: expect.stringMatching(/^phist_/u),
         createdAt: expect.any(Number),
-        input: [{ type: "text", text: "User-created thread" }],
+        input: textInput("User-created thread"),
       },
     ]);
   });
@@ -325,7 +326,7 @@ describe("prompt history service", () => {
       scope: "project",
       requestSequence: 1,
       createdAt: 10,
-      input: [{ type: "text", text: "Start thread" }],
+      input: textInput("Start thread"),
     });
     insertPromptHistoryEntry({
       db,
@@ -334,7 +335,7 @@ describe("prompt history service", () => {
       scope: "thread",
       requestSequence: 2,
       createdAt: 30,
-      input: [{ type: "text", text: "Fix the flaky test" }],
+      input: textInput("Fix the flaky test"),
     });
     insertPromptHistoryEntry({
       db,
@@ -343,11 +344,11 @@ describe("prompt history service", () => {
       scope: "thread",
       requestSequence: 3,
       createdAt: 40,
-      input: [{ type: "text", text: "Add regression coverage" }],
+      input: textInput("Add regression coverage"),
     });
     createQueuedThreadMessage(db, noopNotifier, {
       threadId: thread.id,
-      content: [{ type: "text", text: "Add regression coverage" }],
+      content: textInput("Add regression coverage"),
       model: "gpt-5",
       reasoningLevel: "medium",
       permissionMode: "full",
@@ -366,12 +367,12 @@ describe("prompt history service", () => {
       {
         id: expect.stringMatching(/^queued-message:/u),
         createdAt: expect.any(Number),
-        input: [{ type: "text", text: "Add regression coverage" }],
+        input: textInput("Add regression coverage"),
       },
       {
         id: expect.stringMatching(/^phist_/u),
         createdAt: 30,
-        input: [{ type: "text", text: "Fix the flaky test" }],
+        input: textInput("Fix the flaky test"),
       },
     ]);
   });
@@ -394,7 +395,7 @@ describe("prompt history service", () => {
       scope: "project",
       requestSequence: 1,
       createdAt: 10,
-      input: [{ type: "text", text: "Recover valid prompt history" }],
+      input: textInput("Recover valid prompt history"),
     });
     db.insert(promptHistoryEntries)
       .values({
@@ -420,7 +421,7 @@ describe("prompt history service", () => {
       {
         id: expect.stringMatching(/^phist_/u),
         createdAt: 10,
-        input: [{ type: "text", text: "Recover valid prompt history" }],
+        input: textInput("Recover valid prompt history"),
       },
     ]);
     expect(logger.warn).toHaveBeenCalledWith(
