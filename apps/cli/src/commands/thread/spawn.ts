@@ -5,7 +5,6 @@ import { action } from "../../action.js";
 import { createCliBbSdk } from "../../client.js";
 import {
   resolveProjectId,
-  resolveEnvironmentId,
   resolveExplicitIdFlag,
   resolveThreadId,
 } from "../../context-env.js";
@@ -48,6 +47,16 @@ export function requireHostId(hostId: string | null): string {
     throw new Error("Cannot reach local host daemon. Is it running?");
   }
   return hostId;
+}
+
+function resolveSpawnEnvironmentValue(flagValue?: string): string | undefined {
+  const trimmedValue = flagValue?.trim();
+  if (!trimmedValue) return undefined;
+  if (looksLikePath(trimmedValue)) return trimmedValue;
+  return resolveExplicitIdFlag({
+    flagName: "--environment flag",
+    value: trimmedValue,
+  });
 }
 
 export function buildSpawnEnvironment(args: {
@@ -123,7 +132,7 @@ export function registerSpawnCommand(
     )
     .option(
       "--environment <id-or-path>",
-      "Existing environment UUID or unmanaged workspace path",
+      "Existing environment ID or unmanaged workspace path",
     )
     .option(
       "--new-environment <kind>",
@@ -165,7 +174,9 @@ export function registerSpawnCommand(
         }
 
         const projectId = resolveProjectId(opts.project) ?? PERSONAL_PROJECT_ID;
-        const environmentValue = resolveEnvironmentId(opts.environment);
+        const environmentValue = resolveSpawnEnvironmentValue(
+          opts.environment,
+        );
         const defaultPersonalWorkspace =
           projectId === PERSONAL_PROJECT_ID &&
           !environmentValue &&

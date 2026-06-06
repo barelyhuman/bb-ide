@@ -68,12 +68,6 @@ export function resolveExplicitIdFlag(
   return undefined;
 }
 
-export function resolveEnvironmentId(flagValue?: string): string | undefined {
-  const fromFlag = trimToUndefined(flagValue);
-  if (fromFlag) return validateId(fromFlag, "--environment flag");
-  return undefined;
-}
-
 export function requireProjectId(flagValue?: string): string {
   const projectId = resolveProjectId(flagValue);
   if (projectId) return projectId;

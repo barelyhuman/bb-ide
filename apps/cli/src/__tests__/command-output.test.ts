@@ -3000,7 +3000,7 @@ describe("CLI command output contracts", () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it("bb thread spawn forwards --environment", async () => {
+  it("bb thread spawn forwards a valid --environment ID", async () => {
     vi.stubEnv("BB_PROJECT_ID", "proj-1");
     const thread: Thread = makeThread({
       id: "thread-env-1",
@@ -3053,6 +3053,108 @@ describe("CLI command output contracts", () => {
         environment: { type: "reuse", environmentId: "env-worktree-001" },
       },
     });
+  });
+
+  it("bb thread spawn forwards an absolute --environment path as an unmanaged workspace", async () => {
+    vi.stubEnv("BB_PROJECT_ID", "proj-1");
+    const workspacePath = "/Users/michael/Projects/bb";
+    const thread: Thread = makeThread({
+      id: "thread-env-path-1",
+      projectId: "proj-1",
+      providerId: "codex",
+      type: "standard",
+      status: "created",
+      environmentId: "env-unmanaged-001",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const post = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $post: post,
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      [
+        "thread",
+        "spawn",
+        "--project",
+        "proj-1",
+        "--environment",
+        workspacePath,
+        "--prompt",
+        "hello",
+        "--provider",
+        "codex",
+        "--model",
+        "gpt-5",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(resolveLocalHostIdMock).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenCalledWith({
+      json: {
+        origin: "cli",
+        projectId: "proj-1",
+        providerId: "codex",
+        model: "gpt-5",
+        input: [{ type: "text", text: "hello", mentions: [] }],
+        environment: {
+          type: "host",
+          hostId: "host-test-001",
+          workspace: { type: "unmanaged", path: workspacePath },
+        },
+      },
+    });
+  });
+
+  it("bb thread spawn rejects invalid non-path --environment IDs", async () => {
+    vi.stubEnv("BB_PROJECT_ID", "proj-1");
+    const post = vi.fn();
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $post: post,
+            },
+          },
+        },
+      }),
+    );
+
+    await expect(
+      runCommand(
+        [
+          "thread",
+          "spawn",
+          "--project",
+          "proj-1",
+          "--environment",
+          "env:bad",
+          "--prompt",
+          "hello",
+          "--provider",
+          "codex",
+          "--model",
+          "gpt-5",
+        ],
+        (program) => registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    expect(console.error).toHaveBeenCalledWith(
+      'Error: Invalid ID from --environment flag: "env:bad". IDs must contain only letters, digits, hyphens, and underscores.',
+    );
+    expect(post).not.toHaveBeenCalled();
   });
 
   it("bb thread spawn forwards --new-environment", async () => {
