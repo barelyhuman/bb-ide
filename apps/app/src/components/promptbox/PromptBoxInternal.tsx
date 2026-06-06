@@ -19,6 +19,7 @@ import {
   useState,
   type ChangeEvent,
   type FormEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type Ref,
 } from "react";
@@ -258,6 +259,22 @@ type ZenModeUpdate =
   | typeof RESET
   | ((previous: boolean) => boolean | typeof RESET);
 
+type PromptBoxMouseDownEvent = ReactMouseEvent<HTMLFormElement>;
+
+const PROMPTBOX_INTERACTIVE_TARGET_SELECTOR = [
+  "a[href]",
+  "button",
+  "input",
+  "select",
+  "textarea",
+  "[contenteditable='true']",
+  "[data-prompt-mention='true']",
+  "[role='button']",
+  "[role='link']",
+  "[role='menuitem']",
+  "[role='option']",
+].join(",");
+
 function createTransientZenModeAtom() {
   const baseAtom = atom(false);
   return atom(
@@ -455,6 +472,12 @@ function revealPromptEditorSelection({
   if (bottomOverflow > 0) {
     scrollContainer.scrollTop += bottomOverflow;
   }
+}
+
+function isPromptBoxChromeTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+
+  return target.closest(PROMPTBOX_INTERACTIVE_TARGET_SELECTOR) === null;
 }
 
 export function PromptBoxInternal({
@@ -1190,6 +1213,20 @@ export function PromptBoxInternal({
     submitPrompt();
   };
 
+  const handlePromptBoxMouseDown = useCallback(
+    (event: PromptBoxMouseDownEvent) => {
+      if (!isPromptBoxChromeTarget(event.target)) return;
+
+      const currentEditor = editorRef.current;
+      if (!currentEditor || currentEditor.isDestroyed) return;
+
+      event.preventDefault();
+      currentEditor.commands.focus("end");
+      scheduleRevealEditorSelection();
+    },
+    [scheduleRevealEditorSelection],
+  );
+
   const handleEditorKeyDown = useCallback(
     (event: KeyboardEvent): boolean => {
       const currentEditor = editorRef.current;
@@ -1366,6 +1403,7 @@ export function PromptBoxInternal({
       ref={formRef}
       data-promptbox=""
       onSubmit={handleSubmit}
+      onMouseDown={handlePromptBoxMouseDown}
       onDragOver={(event) => {
         if (!onAttachFiles) return;
         event.preventDefault();
