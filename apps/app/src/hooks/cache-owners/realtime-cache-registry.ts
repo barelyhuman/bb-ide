@@ -13,6 +13,7 @@ import {
   getCachedEnvironmentRefWorkspaceStateInvalidationQueryKeys,
   getCachedGlobalThreadListInvalidationQueryKeys,
   getCachedProjectThreadListInvalidationQueryKeys,
+  getCachedSidebarNavigationThreads,
   getEnvironmentBranchListInvalidationQueryKeys,
   getEnvironmentRecordInvalidationQueryKeys,
   getEnvironmentWorkspaceStateInvalidationQueryKeys,
@@ -192,6 +193,7 @@ export const REALTIME_ENVIRONMENT_CHANGE_REGISTRY = {
       dirtyEnvironmentRecordQueries, // Branch/display metadata is rendered directly.
       dirtyEnvironmentWorkspaceStateQueries, // Metadata can change workspace-state request resolution.
       dirtyEnvironmentBranchListQueries, // Branch metadata can change merge-base options.
+      dirtyEnvironmentThreadListQueries, // Sidebar/worktree rows project environment labels from thread lists.
     ],
   },
   "status-changed": {
@@ -625,6 +627,33 @@ function dirtyEnvironmentBranchListQueries(
   context: EnvironmentRealtimeDirtyContext,
 ): QueryKey[] {
   return getEnvironmentBranchListInvalidationQueryKeys(context);
+}
+
+function dirtyEnvironmentThreadListQueries({
+  environmentId,
+  queryClient,
+}: EnvironmentRealtimeDirtyContext): QueryKey[] {
+  const queryKeys: QueryKey[] = [];
+  for (const { data, queryKey } of getCachedThreadLists(queryClient, {
+    queryKey: threadsQueryKey(),
+  })) {
+    for (const thread of iterateThreadListCacheEntries(data)) {
+      if (thread.environmentId !== environmentId) {
+        continue;
+      }
+      queryKeys.push(queryKey);
+      break;
+    }
+  }
+
+  const sidebarContainsEnvironment = getCachedSidebarNavigationThreads(
+    queryClient,
+  ).some((thread) => thread.environmentId === environmentId);
+  if (sidebarContainsEnvironment) {
+    queryKeys.push(sidebarNavigationQueryKey());
+  }
+
+  return queryKeys;
 }
 
 function dirtyThreadStorageQueriesForEnvironment({

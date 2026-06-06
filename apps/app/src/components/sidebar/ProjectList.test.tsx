@@ -115,6 +115,7 @@ function makeThreadListEntry(
     environmentBranchName: null,
     environmentHostId: null,
     environmentId: null,
+    environmentName: null,
     environmentWorkspaceDisplayKind: "other",
     hasPendingInteraction: false,
     id: `thread-${index}`,

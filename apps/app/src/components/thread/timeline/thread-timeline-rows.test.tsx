@@ -77,6 +77,7 @@ function threadListEntry({
     environmentBranchName: null,
     environmentHostId: null,
     environmentId: "environment-1",
+    environmentName: null,
     environmentWorkspaceDisplayKind: "other",
     hasPendingInteraction: false,
     id,

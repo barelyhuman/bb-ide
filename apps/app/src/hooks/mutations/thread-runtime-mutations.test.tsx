@@ -137,6 +137,7 @@ function makeThreadListEntry(
     ...thread,
     hasPendingInteraction: false,
     environmentHostId: "host-1",
+    environmentName: null,
     environmentBranchName: null,
     environmentWorkspaceDisplayKind: "managed-worktree",
     pinSortKey: null,

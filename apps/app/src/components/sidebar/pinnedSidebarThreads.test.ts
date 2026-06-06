@@ -29,6 +29,7 @@ function createThread(
     updatedAt: 2,
     hasPendingInteraction: false,
     environmentHostId: null,
+    environmentName: null,
     environmentBranchName: null,
     environmentWorkspaceDisplayKind: "other",
     runtime: {

@@ -39,6 +39,7 @@ function makeThreadListEntry(
     environmentId: "environment-1",
     environmentBranchName: "main",
     environmentHostId: "host-1",
+    environmentName: null,
     environmentWorkspaceDisplayKind: "managed-worktree",
     hasPendingInteraction: false,
     id: "thr_default",

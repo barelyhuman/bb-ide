@@ -2,6 +2,7 @@ import { environmentSchema, type Environment } from "@bb/domain";
 import {
   commitActionResponseSchema,
   squashMergeActionResponseSchema,
+  updateEnvironmentRequestSchema,
 } from "@bb/server-contract";
 import type {
   CommitActionResponse,
@@ -22,10 +23,33 @@ export interface EnvironmentGetArgs {
   environmentId: string;
 }
 
-export interface EnvironmentUpdateArgs {
-  environmentId: string;
-  mergeBaseBranch: string | null;
+type EnvironmentMergeBaseBranchUpdateValue = Exclude<
+  UpdateEnvironmentRequest["mergeBaseBranch"],
+  undefined
+>;
+
+type EnvironmentNameUpdateValue = Exclude<
+  UpdateEnvironmentRequest["name"],
+  undefined
+>;
+
+interface EnvironmentMergeBaseBranchUpdate {
+  mergeBaseBranch: EnvironmentMergeBaseBranchUpdateValue;
+  name?: EnvironmentNameUpdateValue;
 }
+
+interface EnvironmentNameUpdate {
+  mergeBaseBranch?: EnvironmentMergeBaseBranchUpdateValue;
+  name: EnvironmentNameUpdateValue;
+}
+
+type EnvironmentUpdateFields =
+  | EnvironmentMergeBaseBranchUpdate
+  | EnvironmentNameUpdate;
+
+export type EnvironmentUpdateArgs = EnvironmentUpdateFields & {
+  environmentId: string;
+};
 
 export interface EnvironmentStatusArgs extends EnvironmentStatusQuery {
   environmentId: string;
@@ -71,9 +95,14 @@ export interface EnvironmentsArea {
 function environmentUpdateJson(
   args: EnvironmentUpdateArgs,
 ): UpdateEnvironmentRequest {
-  return {
-    mergeBaseBranch: args.mergeBaseBranch,
-  };
+  const request: UpdateEnvironmentRequest = {};
+  if (args.mergeBaseBranch !== undefined) {
+    request.mergeBaseBranch = args.mergeBaseBranch;
+  }
+  if (args.name !== undefined) {
+    request.name = args.name;
+  }
+  return updateEnvironmentRequestSchema.parse(request);
 }
 
 function environmentStatusQuery(

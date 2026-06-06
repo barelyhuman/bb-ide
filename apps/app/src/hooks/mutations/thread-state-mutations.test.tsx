@@ -83,6 +83,7 @@ function makeThreadListEntry(
     ...thread,
     environmentBranchName: null,
     environmentHostId: null,
+    environmentName: null,
     environmentWorkspaceDisplayKind: "other",
     hasPendingInteraction: false,
     pinSortKey: null,

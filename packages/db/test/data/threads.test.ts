@@ -696,6 +696,7 @@ describe("threads", () => {
     const worktreeEnvironment = createEnvironment(db, noopNotifier, {
       projectId: project.id,
       hostId: host.id,
+      name: "Review workspace",
       workspaceProvisionType: "managed-worktree",
       isWorktree: true,
       branchName: "bb/worktree",
@@ -742,6 +743,7 @@ describe("threads", () => {
           {
             environmentBranchName: thread.environmentBranchName,
             environmentHostId: thread.environmentHostId,
+            environmentName: thread.environmentName,
           },
         ],
       ),
@@ -750,10 +752,12 @@ describe("threads", () => {
     expect(environmentIdentityByThreadId.get(directThread.id)).toEqual({
       environmentBranchName: "main",
       environmentHostId: host.id,
+      environmentName: null,
     });
     expect(environmentIdentityByThreadId.get(worktreeThread.id)).toEqual({
       environmentBranchName: "bb/worktree",
       environmentHostId: host.id,
+      environmentName: "Review workspace",
     });
   });
 

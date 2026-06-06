@@ -137,6 +137,7 @@ function createThreadListEntry(
     reasoningLevelOverride: null,
     environmentBranchName: null,
     environmentHostId: args.environmentHostId,
+    environmentName: null,
     environmentWorkspaceDisplayKind: "other",
     hasPendingInteraction: false,
   };

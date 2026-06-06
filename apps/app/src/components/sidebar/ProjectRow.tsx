@@ -31,7 +31,11 @@ import type { ThreadListEntry } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useCreateThreadInWorktree } from "@/hooks/useCreateThreadInWorktree";
-import { useArchiveEnvironmentThreads } from "@/hooks/mutations/environment-mutations";
+import {
+  useArchiveEnvironmentThreads,
+  useUpdateEnvironment,
+} from "@/hooks/mutations/environment-mutations";
+import { useDialogState } from "@/hooks/useDialogState";
 import { Button } from "@/components/ui/button.js";
 import {
   DropdownMenu,
@@ -52,6 +56,10 @@ import {
   ProjectActionsMenu,
 } from "@/components/project/ProjectActionsMenu";
 import {
+  EnvironmentRenameDialog,
+  type EnvironmentRenameDialogTarget,
+} from "@/components/dialogs/EnvironmentRenameDialog";
+import {
   COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS,
   COARSE_POINTER_GLYPH_BOX_CLASS,
   COARSE_POINTER_ICON_SIZE_CLASS,
@@ -65,6 +73,7 @@ import {
 import type { CollapsedChildActivity } from "@/lib/thread-activity";
 import { cn } from "@/lib/utils";
 import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
+import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { getProjectSettingsRoutePath } from "@/lib/app-route-paths";
 import type { NeighborReorderRequest } from "@/lib/neighbor-reorder";
 import { appToast } from "@/components/ui/app-toast";
@@ -261,6 +270,7 @@ interface EnvironmentThreadGroupHeaderProps {
   archiveThreadsPending?: boolean;
   onArchiveThreads?: () => void;
   onCreateNewThread?: () => void;
+  onRenameEnvironment?: () => void;
   onToggleCollapsed: (environmentId: string) => void;
 }
 
@@ -268,6 +278,7 @@ interface EnvironmentThreadGroupHeaderActionsProps {
   archiveThreadsPending: boolean;
   onArchiveThreads?: () => void;
   onCreateNewThread?: () => void;
+  onRenameEnvironment?: () => void;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -280,6 +291,23 @@ interface UseArchiveEnvironmentThreadGroupActionArgs {
 interface UseArchiveEnvironmentThreadGroupActionResult {
   archiveThreadsPending: boolean;
   onArchiveThreads: () => void;
+}
+
+interface UseEnvironmentThreadGroupRenameActionArgs {
+  environmentId: string;
+  representativeThread: ThreadListEntry;
+}
+
+interface UseEnvironmentThreadGroupRenameActionResult {
+  onRenameDialogOpenChange: (open: boolean) => void;
+  onRenameEnvironment: () => void;
+  onSubmitRenameEnvironment: (
+    environmentId: string,
+    name: string | null,
+  ) => void;
+  renameDialogTarget: EnvironmentRenameDialogTarget | null;
+  renameEnvironmentErrorMessage: string | null;
+  renameEnvironmentPending: boolean;
 }
 
 function getRootThreadNodeId(node: ProjectThreadNode): string {
@@ -419,9 +447,7 @@ function isTopLevelManagerNode(node: ProjectThreadNode): boolean {
   return node.depth === 0 && node.thread.type === "manager";
 }
 
-function ThreadTreeGroupLine({
-  parentRowDepth,
-}: ThreadTreeGroupLineProps) {
+function ThreadTreeGroupLine({ parentRowDepth }: ThreadTreeGroupLineProps) {
   return (
     <span
       className="pointer-events-none absolute bottom-0 top-0 z-30 w-px bg-border-hairline"
@@ -509,13 +535,69 @@ function useArchiveEnvironmentThreadGroupAction({
   };
 }
 
+function useEnvironmentThreadGroupRenameAction({
+  environmentId,
+  representativeThread,
+}: UseEnvironmentThreadGroupRenameActionArgs): UseEnvironmentThreadGroupRenameActionResult {
+  const renameDialog = useDialogState<EnvironmentRenameDialogTarget>();
+  const updateEnvironment = useUpdateEnvironment();
+  const {
+    error,
+    isPending,
+    mutate: updateEnvironmentMutate,
+    reset: resetUpdateEnvironment,
+    variables,
+  } = updateEnvironment;
+  const renameEnvironmentPending = isPending && variables?.id === environmentId;
+  const renameEnvironmentErrorMessage =
+    error && variables?.id === environmentId
+      ? getMutationErrorMessage({
+          error,
+          fallbackMessage: "Failed to update environment.",
+        })
+      : null;
+  const { onClose, onOpen, onOpenChange, target } = renameDialog;
+
+  const onRenameEnvironment = useCallback(() => {
+    resetUpdateEnvironment();
+    onOpen({
+      ...(representativeThread.environmentBranchName !== null
+        ? { branchName: representativeThread.environmentBranchName }
+        : {}),
+      canClearName: representativeThread.environmentName !== null,
+      id: environmentId,
+      currentName: representativeThread.environmentName ?? "",
+    });
+  }, [environmentId, onOpen, representativeThread, resetUpdateEnvironment]);
+
+  const onSubmitRenameEnvironment = useCallback(
+    (targetEnvironmentId: string, name: string | null) => {
+      updateEnvironmentMutate(
+        { id: targetEnvironmentId, name },
+        { onSuccess: onClose },
+      );
+    },
+    [onClose, updateEnvironmentMutate],
+  );
+
+  return {
+    onRenameDialogOpenChange: onOpenChange,
+    onRenameEnvironment,
+    onSubmitRenameEnvironment,
+    renameDialogTarget: target,
+    renameEnvironmentErrorMessage,
+    renameEnvironmentPending,
+  };
+}
+
 function EnvironmentThreadGroupHeaderActions({
   archiveThreadsPending,
   onArchiveThreads,
   onCreateNewThread,
+  onRenameEnvironment,
   onOpenChange,
 }: EnvironmentThreadGroupHeaderActionsProps) {
-  if (!onCreateNewThread && !onArchiveThreads) {
+  if (!onCreateNewThread && !onArchiveThreads && !onRenameEnvironment) {
     return null;
   }
 
@@ -544,6 +626,16 @@ function EnvironmentThreadGroupHeaderActions({
           {onCreateNewThread ? (
             <DropdownMenuItem onSelect={onCreateNewThread}>
               New thread
+            </DropdownMenuItem>
+          ) : null}
+          {onRenameEnvironment ? (
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                onRenameEnvironment();
+              }}
+            >
+              Rename
             </DropdownMenuItem>
           ) : null}
           {onArchiveThreads ? (
@@ -578,11 +670,19 @@ function EnvironmentThreadGroupHeader({
   archiveThreadsPending = false,
   onArchiveThreads,
   onCreateNewThread,
+  onRenameEnvironment,
   onToggleCollapsed,
 }: EnvironmentThreadGroupHeaderProps) {
   const [isActionsOpen, setIsActionsOpen] = useState(false);
+  const environmentName = representativeThread.environmentName;
   const branchName = representativeThread.environmentBranchName;
-  const headerTitle = branchName ? `Worktree: ${branchName}` : "Worktree";
+  const headerTitle = environmentName
+    ? branchName
+      ? `${environmentName} (${branchName})`
+      : environmentName
+    : branchName
+      ? `Worktree: ${branchName}`
+      : "Worktree";
   const iconName = getEnvironmentWorkspaceLabelIconName(
     representativeThread.environmentWorkspaceDisplayKind,
   );
@@ -662,10 +762,10 @@ function EnvironmentThreadGroupHeader({
         </span>
       </span>
       <span className="pointer-events-none relative z-10 min-w-0 flex-1 truncate text-left">
-        <span>Worktree</span>
+        <span>{environmentName ?? "Worktree"}</span>
         {branchName ? (
           <>
-            <span>:</span>{" "}
+            <span>{environmentName ? " · " : ": "}</span>
             <span className="text-muted-foreground">{branchName}</span>
           </>
         ) : null}
@@ -702,6 +802,7 @@ function EnvironmentThreadGroupHeader({
             archiveThreadsPending={archiveThreadsPending}
             onArchiveThreads={onArchiveThreads}
             onCreateNewThread={onCreateNewThread}
+            onRenameEnvironment={onRenameEnvironment}
             onOpenChange={setIsActionsOpen}
           />
         </div>
@@ -745,6 +846,7 @@ const EnvironmentThreadGroupRow = memo(function EnvironmentThreadGroupRow({
 }: EnvironmentThreadGroupRowProps) {
   const { environmentId, nodes, stats } = environmentThreadGroup;
   const representativeNode = nodes[0];
+  const representativeThread = representativeNode.thread;
   const nodeDepth = representativeNode.depth;
   const rowDepth = getThreadRowDepth({
     depthOffset,
@@ -773,48 +875,69 @@ const EnvironmentThreadGroupRow = memo(function EnvironmentThreadGroupRow({
     onProjectSelect?.();
     createThreadInWorktree();
   }, [createThreadInWorktree, onProjectSelect]);
+  const {
+    onRenameDialogOpenChange,
+    onRenameEnvironment,
+    onSubmitRenameEnvironment,
+    renameDialogTarget,
+    renameEnvironmentErrorMessage,
+    renameEnvironmentPending,
+  } = useEnvironmentThreadGroupRenameAction({
+    environmentId,
+    representativeThread,
+  });
 
   return (
-    <SidebarStickyGroup className="space-y-0.5">
-      <EnvironmentThreadGroupHeader
-        environmentId={environmentId}
-        representativeThread={representativeNode.thread}
-        rowDepth={rowDepth}
-        stickyLevel={getThreadNodeStickyLevel({
-          depthOffset,
-          node: representativeNode,
-        })}
-        parentLineDepth={parentLineDepth}
-        childCount={stats.childCount}
-        childActivity={stats.childActivity}
-        isCollapsed={isCollapsed}
-        archiveThreadsPending={archiveThreadsPending}
-        onArchiveThreads={onArchiveThreads}
-        onCreateNewThread={handleCreateNewThread}
-        onToggleCollapsed={onToggleEnvironmentCollapsed}
+    <>
+      <SidebarStickyGroup className="space-y-0.5">
+        <EnvironmentThreadGroupHeader
+          environmentId={environmentId}
+          representativeThread={representativeThread}
+          rowDepth={rowDepth}
+          stickyLevel={getThreadNodeStickyLevel({
+            depthOffset,
+            node: representativeNode,
+          })}
+          parentLineDepth={parentLineDepth}
+          childCount={stats.childCount}
+          childActivity={stats.childActivity}
+          isCollapsed={isCollapsed}
+          archiveThreadsPending={archiveThreadsPending}
+          onArchiveThreads={onArchiveThreads}
+          onCreateNewThread={handleCreateNewThread}
+          onRenameEnvironment={onRenameEnvironment}
+          onToggleCollapsed={onToggleEnvironmentCollapsed}
+        />
+        {!isCollapsed ? (
+          <div className="relative space-y-px">
+            <ThreadTreeGroupLine parentRowDepth={rowDepth} />
+            {nodes.map((node) => (
+              <ThreadTreeNodeRow
+                key={node.thread.id}
+                projectId={projectId}
+                node={node}
+                depthOffset={depthOffset + 1}
+                isEnvGrouped
+                selectedThreadId={selectedThreadId}
+                collapsedThreadIds={collapsedThreadIds}
+                collapsedEnvironmentIds={collapsedEnvironmentIds}
+                variant={variant}
+                onProjectSelect={onProjectSelect}
+                onToggleThreadCollapsed={onToggleThreadCollapsed}
+                onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
+              />
+            ))}
+          </div>
+        ) : null}
+      </SidebarStickyGroup>
+      <EnvironmentRenameDialog
+        errorMessage={renameEnvironmentErrorMessage}
+        target={renameDialogTarget}
+        pending={renameEnvironmentPending}
+        onOpenChange={onRenameDialogOpenChange}
+        onRename={onSubmitRenameEnvironment}
       />
-      {!isCollapsed ? (
-        <div className="relative space-y-px">
-          <ThreadTreeGroupLine parentRowDepth={rowDepth} />
-          {nodes.map((node) => (
-            <ThreadTreeNodeRow
-              key={node.thread.id}
-              projectId={projectId}
-              node={node}
-              depthOffset={depthOffset + 1}
-              isEnvGrouped
-              selectedThreadId={selectedThreadId}
-              collapsedThreadIds={collapsedThreadIds}
-              collapsedEnvironmentIds={collapsedEnvironmentIds}
-              variant={variant}
-              onProjectSelect={onProjectSelect}
-              onToggleThreadCollapsed={onToggleThreadCollapsed}
-              onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
-            />
-          ))}
-        </div>
-      ) : null}
-    </SidebarStickyGroup>
+    </>
   );
 });
 
@@ -973,51 +1096,49 @@ export const ThreadTreeNodeRow = memo(function ThreadTreeNodeRow({
   );
 });
 
-const SortableRootThreadNodeRow = memo(
-  function SortableRootThreadNodeRow({
+const SortableRootThreadNodeRow = memo(function SortableRootThreadNodeRow({
+  disabled,
+  node,
+  ...props
+}: SortableRootThreadNodeRowProps) {
+  const threadId = node.thread.id;
+  const {
+    attributes,
+    isDragging,
+    listeners,
+    setActivatorNodeRef,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({
+    id: threadId,
     disabled,
-    node,
-    ...props
-  }: SortableRootThreadNodeRowProps) {
-    const threadId = node.thread.id;
-    const {
-      attributes,
-      isDragging,
-      listeners,
-      setActivatorNodeRef,
-      setNodeRef,
-      transform,
+    transition: SIDEBAR_SORTABLE_TRANSITION,
+  });
+  const style = useMemo<CSSProperties>(
+    () => ({
+      transform: CSS.Transform.toString(transform),
       transition,
-    } = useSortable({
-      id: threadId,
-      disabled,
-      transition: SIDEBAR_SORTABLE_TRANSITION,
-    });
-    const style = useMemo<CSSProperties>(
-      () => ({
-        transform: CSS.Transform.toString(transform),
-        transition,
-      }),
-      [transform, transition],
-    );
+    }),
+    [transform, transition],
+  );
 
-    return (
-      <ThreadTreeNodeRow
-        {...props}
-        node={node}
-        isDragging={isDragging}
-        dragBindings={{
-          attributes,
-          disabled,
-          listeners,
-          setActivatorNodeRef,
-        }}
-        sortableRef={setNodeRef}
-        sortableStyle={style}
-      />
-    );
-  },
-);
+  return (
+    <ThreadTreeNodeRow
+      {...props}
+      node={node}
+      isDragging={isDragging}
+      dragBindings={{
+        attributes,
+        disabled,
+        listeners,
+        setActivatorNodeRef,
+      }}
+      sortableRef={setNodeRef}
+      sortableStyle={style}
+    />
+  );
+});
 
 export const ProjectThreadTree = memo(function ProjectThreadTree({
   projectId,
@@ -1052,8 +1173,7 @@ export const ProjectThreadTree = memo(function ProjectThreadTree({
   const remainingRootItems = useMemo(
     () =>
       rootItems.filter(
-        (item) =>
-          item.kind !== "thread" || !isTopLevelManagerNode(item.node),
+        (item) => item.kind !== "thread" || !isTopLevelManagerNode(item.node),
       ),
     [rootItems],
   );

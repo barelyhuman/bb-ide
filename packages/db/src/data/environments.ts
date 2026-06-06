@@ -18,6 +18,7 @@ type EnvironmentRow = typeof environments.$inferSelect;
 export interface CreateEnvironmentInput {
   cleanupMode?: EnvironmentCleanupMode | null;
   cleanupRequestedAt?: number | null;
+  name?: string | null;
   projectId: string;
   hostId: string;
   workspaceProvisionType: WorkspaceProvisionType;
@@ -43,6 +44,7 @@ export function createEnvironment(
     .insert(environments)
     .values({
       id,
+      name: input.name ?? null,
       projectId: input.projectId,
       hostId: input.hostId,
       path: input.path ?? null,
@@ -119,6 +121,7 @@ interface EnvironmentMetadataUpdateColumns {
   isGitRepo?: boolean;
   isWorktree?: boolean;
   mergeBaseBranch?: string | null;
+  name?: string | null;
   path?: string | null;
 }
 
@@ -150,7 +153,8 @@ export interface ApplyProvisionedEnvironmentInput extends DiscoveredWorkspacePro
 }
 
 export interface UpdateEnvironmentMetadataInput {
-  mergeBaseBranch: string | null;
+  mergeBaseBranch?: string | null;
+  name?: string | null;
 }
 
 export interface UpdateEnvironmentStatusInput {
@@ -211,6 +215,7 @@ function buildEnvironmentMetadataUpdateSet(
   if ("branchName" in input) set.branchName = input.branchName;
   if ("defaultBranch" in input) set.defaultBranch = input.defaultBranch;
   if ("mergeBaseBranch" in input) set.mergeBaseBranch = input.mergeBaseBranch;
+  if ("name" in input) set.name = input.name;
   return set;
 }
 
@@ -230,7 +235,8 @@ function environmentMetadataChanged(
     ("defaultBranch" in args.metadata &&
       args.updated.defaultBranch !== args.existing.defaultBranch) ||
     ("mergeBaseBranch" in args.metadata &&
-      args.updated.mergeBaseBranch !== args.existing.mergeBaseBranch)
+      args.updated.mergeBaseBranch !== args.existing.mergeBaseBranch) ||
+    ("name" in args.metadata && args.updated.name !== args.existing.name)
   );
 }
 
@@ -378,9 +384,7 @@ export function updateEnvironmentMetadata(
   id: string,
   input: UpdateEnvironmentMetadataInput,
 ) {
-  return updateEnvironmentMetadataRecord(db, notifier, id, {
-    mergeBaseBranch: input.mergeBaseBranch,
-  });
+  return updateEnvironmentMetadataRecord(db, notifier, id, input);
 }
 
 export function setEnvironmentStatus(

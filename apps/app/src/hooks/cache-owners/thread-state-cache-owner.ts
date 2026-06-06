@@ -20,13 +20,12 @@ import {
   removeThreadScopedQueries,
 } from "./mutation-cache-effects";
 import {
-  applyToCachedSidebarNavigationThreads,
+  applyToCachedThreadListsAndSidebarNavigation,
   restoreCachedSidebarNavigation,
   snapshotCachedSidebarNavigation,
   type CachedSidebarNavigationSnapshot,
 } from "./query-cache";
 import {
-  applyToCachedThreadLists,
   restoreCachedThreadLists,
   snapshotCachedThreadLists,
   type CachedThreadListSnapshot,
@@ -135,20 +134,6 @@ export interface DeleteThreadTransaction {
   previousSidebarNavigation: CachedSidebarNavigationSnapshot;
   previousThread: ThreadWithRuntime | undefined;
   previousThreadLists: CachedThreadListSnapshot;
-}
-
-function applyToCachedThreadListsAndSidebarNavigation(
-  queryClient: QueryClient,
-  mapper: (list: ThreadListEntry[]) => ThreadListEntry[],
-): void {
-  applyToCachedThreadLists(queryClient, {
-    queryKey: threadsQueryKey(),
-    mapper,
-  });
-  applyToCachedSidebarNavigationThreads({
-    queryClient,
-    mapper,
-  });
 }
 
 function removeThreadFromLists(queryClient: QueryClient, id: string): void {

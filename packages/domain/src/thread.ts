@@ -172,6 +172,7 @@ export const threadListEntrySchema = threadWithRuntimeSchema.extend({
   pinSortKey: z.string().nullable(),
   hasPendingInteraction: z.boolean(),
   environmentHostId: z.string().nullable(),
+  environmentName: z.string().nullable(),
   environmentBranchName: z.string().nullable(),
   environmentWorkspaceDisplayKind: environmentWorkspaceDisplayKindSchema,
 });

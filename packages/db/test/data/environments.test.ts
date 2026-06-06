@@ -63,6 +63,26 @@ describe("environments", () => {
     ]);
   });
 
+  it("emits metadata-changed when environment name changes", () => {
+    const { db, host, project } = setup();
+    const environment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      workspaceProvisionType: "managed-worktree",
+      status: "ready",
+    });
+    const notifier = createNotifierSpy();
+
+    const updated = updateEnvironmentMetadata(db, notifier, environment.id, {
+      name: "Review workspace",
+    });
+
+    expect(updated?.name).toBe("Review workspace");
+    expect(notifier.notifyEnvironment).toHaveBeenCalledWith(environment.id, [
+      "metadata-changed",
+    ]);
+  });
+
   it("does not emit metadata-changed when merge base branch is unchanged", () => {
     const { db, host, project } = setup();
     const environment = createEnvironment(db, noopNotifier, {
@@ -79,6 +99,25 @@ describe("environments", () => {
     });
 
     expect(updated?.mergeBaseBranch).toBe("main");
+    expect(notifier.notifyEnvironment).not.toHaveBeenCalled();
+  });
+
+  it("does not emit metadata-changed when environment name is unchanged", () => {
+    const { db, host, project } = setup();
+    const environment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      workspaceProvisionType: "managed-worktree",
+      name: "Review workspace",
+      status: "ready",
+    });
+    const notifier = createNotifierSpy();
+
+    const updated = updateEnvironmentMetadata(db, notifier, environment.id, {
+      name: "Review workspace",
+    });
+
+    expect(updated?.name).toBe("Review workspace");
     expect(notifier.notifyEnvironment).not.toHaveBeenCalled();
   });
 

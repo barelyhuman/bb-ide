@@ -74,6 +74,7 @@ interface ThreadDetailPromptAreaProps {
   composerQueriesStaleTime?: number;
   contextWindowUsage?: ThreadTimelineResponse["contextWindowUsage"];
   environmentBranchName?: string;
+  environmentCompactLabel?: string;
   environmentHostConnected?: boolean;
   environmentHostLabel?: string;
   environmentIcon?: IconName;
@@ -127,6 +128,7 @@ export function ThreadDetailPromptArea({
   composerQueriesStaleTime,
   contextWindowUsage,
   environmentBranchName,
+  environmentCompactLabel,
   environmentHostConnected,
   environmentHostLabel,
   environmentIcon,
@@ -777,6 +779,7 @@ export function ThreadDetailPromptArea({
       environmentLabel || environmentHostConnected !== undefined ? (
         <ThreadEnvironmentSummary
           environmentLabel={environmentLabel}
+          environmentCompactLabel={environmentCompactLabel}
           environmentHostLabel={environmentHostLabel}
           environmentHostConnected={environmentHostConnected}
           environmentIcon={environmentIcon}
@@ -786,6 +789,7 @@ export function ThreadDetailPromptArea({
       ) : null,
     [
       environmentBranchName,
+      environmentCompactLabel,
       environmentHostConnected,
       environmentHostLabel,
       environmentIcon,

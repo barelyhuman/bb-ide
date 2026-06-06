@@ -1236,6 +1236,7 @@ export function ThreadDetailView() {
       }
       environmentIcon={threadEnvironmentIcon ?? undefined}
       environmentLabel={threadEnvironmentDisplay?.modeLabel}
+      environmentCompactLabel={threadEnvironmentDisplay?.compactModeLabel}
       environmentHostLabel={
         threadEnvironmentDisplay?.location === "remote"
           ? (threadEnvironmentDisplay.hostLabel ?? undefined)

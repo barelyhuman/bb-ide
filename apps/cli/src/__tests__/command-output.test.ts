@@ -237,6 +237,7 @@ function makeEnvironment(
   },
 ): Environment {
   return {
+    name: null,
     path: "/tmp/environment",
     managed: false,
     isGitRepo: true,
@@ -3718,6 +3719,200 @@ describe("CLI command output contracts", () => {
     expect(collectLogLines(vi.mocked(console.log))).toContain(
       "Merge base branch cleared",
     );
+  });
+
+  it("bb environment update renames the environment", async () => {
+    const environment = makeEnvironment({
+      id: "env-update-name",
+      projectId: "proj-1",
+      hostId: "host-1",
+      name: "Review workspace",
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    const patch = vi.fn(async () => environment);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            environments: {
+              ":id": {
+                $patch: patch,
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      ["environment", "update", "env-update-name", "--name", "Review workspace"],
+      (program) => registerEnvironmentCommands(program, () => "http://server"),
+    );
+
+    expect(patch).toHaveBeenCalledWith({
+      param: { id: "env-update-name" },
+      json: { name: "Review workspace" },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Environment env-update-name updated",
+    );
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Name: Review workspace",
+    );
+  });
+
+  it("bb environment update clears the environment name", async () => {
+    const environment = makeEnvironment({
+      id: "env-clear-name",
+      projectId: "proj-1",
+      hostId: "host-1",
+      name: null,
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    const patch = vi.fn(async () => environment);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            environments: {
+              ":id": {
+                $patch: patch,
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      ["environment", "update", "env-clear-name", "--clear-name"],
+      (program) => registerEnvironmentCommands(program, () => "http://server"),
+    );
+
+    expect(patch).toHaveBeenCalledWith({
+      param: { id: "env-clear-name" },
+      json: { name: null },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain("Name cleared");
+  });
+
+  it("bb environment update sets name and merge base together", async () => {
+    const environment = makeEnvironment({
+      id: "env-update-combined",
+      projectId: "proj-1",
+      hostId: "host-1",
+      name: "Review workspace",
+      mergeBaseBranch: "release",
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    const patch = vi.fn(async () => environment);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            environments: {
+              ":id": {
+                $patch: patch,
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      [
+        "environment",
+        "update",
+        "env-update-combined",
+        "--name",
+        "Review workspace",
+        "--merge-base-branch",
+        "release",
+      ],
+      (program) => registerEnvironmentCommands(program, () => "http://server"),
+    );
+
+    expect(patch).toHaveBeenCalledWith({
+      param: { id: "env-update-combined" },
+      json: { mergeBaseBranch: "release", name: "Review workspace" },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Merge base branch: release",
+    );
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Name: Review workspace",
+    );
+  });
+
+  it("bb environment update rejects name and clear-name together", async () => {
+    const patch = vi.fn();
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            environments: {
+              ":id": {
+                $patch: patch,
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await expect(
+      runCommand(
+        [
+          "environment",
+          "update",
+          "env-update-name-conflict",
+          "--name",
+          "Review workspace",
+          "--clear-name",
+        ],
+        (program) =>
+          registerEnvironmentCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    expect(vi.mocked(console.error)).toHaveBeenCalledWith(
+      expect.stringContaining("Cannot combine --name with --clear-name."),
+    );
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it("bb environment update rejects an empty name", async () => {
+    const patch = vi.fn();
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            environments: {
+              ":id": {
+                $patch: patch,
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await expect(
+      runCommand(
+        ["environment", "update", "env-update-empty-name", "--name", ""],
+        (program) =>
+          registerEnvironmentCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    expect(vi.mocked(console.error)).toHaveBeenCalledWith(
+      expect.stringContaining("Environment name cannot be empty."),
+    );
+    expect(patch).not.toHaveBeenCalled();
   });
 
   it("bb thread show prints archived timestamp for archived threads", async () => {

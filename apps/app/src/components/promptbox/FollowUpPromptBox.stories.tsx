@@ -98,6 +98,7 @@ function makeEnvironmentSummary({
   return (
     <ThreadEnvironmentSummary
       environmentLabel={display.modeLabel}
+      environmentCompactLabel={display.compactModeLabel}
       environmentHostLabel={
         display.location === "remote"
           ? (display.hostLabel ?? undefined)

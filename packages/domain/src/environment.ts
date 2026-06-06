@@ -77,6 +77,7 @@ export type DiscoveredWorkspaceProperties = z.infer<
 
 export const environmentSchema = z.object({
   id: z.string(),
+  name: z.string().nullable(),
   projectId: z.string(),
   hostId: z.string(),
   path: z.string().nullable(),

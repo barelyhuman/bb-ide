@@ -211,6 +211,7 @@ function makeThreadListEntry(
     hasPendingInteraction: false,
     environmentHostId: "host_local",
     environmentBranchName: "bb/reuse-worktree",
+    environmentName: null,
     environmentWorkspaceDisplayKind: "managed-worktree",
     ...overrides,
   };

@@ -394,6 +394,7 @@ export function listActiveVisiblePinnedThreadRootsWithPendingInteractionState(
       environmentBranchName: environments.branchName,
       environmentHostId: environments.hostId,
       environmentIsWorktree: environments.isWorktree,
+      environmentName: environments.name,
       environmentWorkspaceProvisionType: environments.workspaceProvisionType,
       pendingInteractionCount: count(pendingInteractions.id),
     })
@@ -458,6 +459,7 @@ export class InvalidThreadStatusTransitionError extends Error {
 export interface ThreadWithPendingInteractionState extends ThreadRow {
   environmentBranchName: string | null;
   environmentHostId: string | null;
+  environmentName: string | null;
   hasPendingInteraction: boolean;
   environmentWorkspaceDisplayKind: EnvironmentWorkspaceDisplayKind;
 }
@@ -466,6 +468,7 @@ interface ThreadWithPendingInteractionStateRow extends ThreadRow {
   environmentBranchName: string | null;
   environmentHostId: string | null;
   environmentIsWorktree: boolean | null;
+  environmentName: string | null;
   environmentWorkspaceProvisionType: WorkspaceProvisionType | null;
   pendingInteractionCount: number;
 }
@@ -682,6 +685,7 @@ function toThreadWithPendingInteractionState(
     environmentWorkspaceProvisionType,
     environmentBranchName,
     environmentHostId,
+    environmentName,
     pendingInteractionCount,
     ...thread
   } = row;
@@ -689,6 +693,7 @@ function toThreadWithPendingInteractionState(
     ...thread,
     environmentBranchName,
     environmentHostId,
+    environmentName,
     environmentWorkspaceDisplayKind: resolveEnvironmentWorkspaceDisplayKind({
       environment: {
         isWorktree: environmentIsWorktree,
@@ -725,6 +730,7 @@ export function listThreadsWithPendingInteractionState(
       environmentBranchName: environments.branchName,
       environmentHostId: environments.hostId,
       environmentIsWorktree: environments.isWorktree,
+      environmentName: environments.name,
       environmentWorkspaceProvisionType: environments.workspaceProvisionType,
       pendingInteractionCount: count(pendingInteractions.id),
     })
@@ -766,6 +772,7 @@ export function listThreadsWithPendingInteractionStateForProjects(
       environmentBranchName: environments.branchName,
       environmentHostId: environments.hostId,
       environmentIsWorktree: environments.isWorktree,
+      environmentName: environments.name,
       environmentWorkspaceProvisionType: environments.workspaceProvisionType,
       pendingInteractionCount: count(pendingInteractions.id),
     })

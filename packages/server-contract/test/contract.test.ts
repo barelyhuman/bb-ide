@@ -120,6 +120,10 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Automation PATCH requests omit name when leaving it unchanged.",
   "updateAutomationRequestSchema.trigger":
     "Automation PATCH requests omit trigger when leaving it unchanged.",
+  "updateEnvironmentRequestSchema.mergeBaseBranch":
+    "Environment PATCH requests omit mergeBaseBranch when leaving it unchanged or use null to clear it.",
+  "updateEnvironmentRequestSchema.name":
+    "Environment PATCH requests omit name when leaving it unchanged or use null to clear the custom display name.",
   "createManagerThreadRequestSchema.model":
     "Manager creation may omit model and inherit remembered manager defaults for the resolved provider or the server manager default.",
   "createManagerThreadRequestSchema.name":
@@ -497,9 +501,15 @@ describe("git branch name contract", () => {
     ).toBe(true);
     expect(
       updateEnvironmentRequestSchema.safeParse({
+        name: "Review workspace",
+      }).success,
+    ).toBe(true);
+    expect(
+      updateEnvironmentRequestSchema.safeParse({
         mergeBaseBranch: "origin/main lock",
       }).success,
     ).toBe(false);
+    expect(updateEnvironmentRequestSchema.safeParse({}).success).toBe(false);
     expect(
       contract.environmentStatusQuerySchema.safeParse({
         mergeBaseBranch: "origin/main",
@@ -1062,6 +1072,7 @@ describe("server-contract canonical schemas", () => {
           },
           hasPendingInteraction: true,
           environmentHostId: "host_123",
+          environmentName: null,
           environmentBranchName: "bb/test",
           environmentWorkspaceDisplayKind: "managed-worktree",
         },
@@ -1071,6 +1082,7 @@ describe("server-contract canonical schemas", () => {
         id: "thr_123",
         hasPendingInteraction: true,
         environmentHostId: "host_123",
+        environmentName: null,
         environmentBranchName: "bb/test",
         environmentWorkspaceDisplayKind: "managed-worktree",
       },
@@ -1166,6 +1178,13 @@ describe("server-contract canonical schemas", () => {
       }),
     ).toEqual({
       mergeBaseBranch: null,
+    });
+    expect(
+      updateEnvironmentRequestSchema.parse({
+        name: "  Review workspace  ",
+      }),
+    ).toEqual({
+      name: "Review workspace",
     });
 
     expect(
@@ -1624,6 +1643,7 @@ describe("server-contract clients", () => {
       resolvePendingInteractionRequestSchema:
         contract.resolvePendingInteractionRequestSchema,
       updateAutomationRequestSchema: contract.updateAutomationRequestSchema,
+      updateEnvironmentRequestSchema: contract.updateEnvironmentRequestSchema,
       updateProjectRequestSchema: contract.updateProjectRequestSchema,
       updateProjectSourceRequestSchema:
         contract.updateProjectSourceRequestSchema,

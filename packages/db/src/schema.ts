@@ -179,6 +179,7 @@ export const environments = sqliteTable(
   "environments",
   {
     id: text("id").primaryKey(),
+    name: text("name"),
     projectId: text("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),

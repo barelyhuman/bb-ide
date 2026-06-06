@@ -303,6 +303,7 @@ export const STORY_WORKTREE_OPTIONS: readonly ReuseThreadOption[] = [
   {
     environmentId: "env_review_flow",
     branchName: "bb/review-flow-thr_4hge9xn14m",
+    name: null,
     threads: [
       { id: "thr_review", title: "Review flow cleanup" },
       { id: "thr_tests", title: "Backfill promptbox tests" },
@@ -311,6 +312,7 @@ export const STORY_WORKTREE_OPTIONS: readonly ReuseThreadOption[] = [
   {
     environmentId: "env_timeline",
     branchName: "bb/timeline-pagination-thr_qfk8ksbxkk",
+    name: "Timeline workspace",
     threads: [{ id: "thr_timeline", title: "Timeline pagination" }],
   },
 ];
@@ -416,6 +418,7 @@ export function makeThreadListEntry(
     updatedAt: 100,
     hasPendingInteraction: false,
     environmentHostId: null,
+    environmentName: null,
     environmentBranchName: null,
     environmentWorkspaceDisplayKind: "other",
     runtime: { displayStatus: "idle", hostReconnectGraceExpiresAt: null },
@@ -476,6 +479,7 @@ export function makeEnvironment(
 ): Environment {
   const base: Environment = {
     id: "env_demo",
+    name: null,
     projectId: PROJECT_IDS.bb,
     hostId: HOST_IDS.local,
     path: "/Users/michael/Projects/bb",

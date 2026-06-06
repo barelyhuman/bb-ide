@@ -30,6 +30,7 @@ const REUSE_THREAD_PREVIEW_LIMIT = 2;
 export interface ReuseThreadOption {
   environmentId: string;
   branchName: string | null;
+  name: string | null;
   /** Threads in this worktree, ordered most-recently-active first. */
   threads: ReadonlyArray<{ id: string; title: string }>;
 }
@@ -66,7 +67,8 @@ export function WorktreePicker({
     () => options.find((option) => option.environmentId === value) ?? null,
     [options, value],
   );
-  const triggerLabel = activeOption?.branchName ?? "Pick a worktree";
+  const triggerLabel =
+    activeOption?.name ?? activeOption?.branchName ?? "Pick a worktree";
   return (
     <DropdownMenu defaultOpen={defaultOpen} modal={modal}>
       <DropdownMenuTrigger asChild>
@@ -140,6 +142,8 @@ function WorktreeMenuItem({
   const previewThreads = option.threads.slice(0, REUSE_THREAD_PREVIEW_LIMIT);
   const additionalCount = option.threads.length - previewThreads.length;
   const branchIcon = getEnvironmentWorkspaceLabelIconName("managed-worktree");
+  const label = option.name ?? option.branchName ?? "Worktree";
+  const branchDetail = option.name ? option.branchName : null;
   return (
     <DropdownMenuItem
       onSelect={() => onSelect(option.environmentId)}
@@ -153,8 +157,13 @@ function WorktreeMenuItem({
             COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
           )}
         />
-        <span className="min-w-0 flex-1 truncate text-xs font-medium">
-          {option.branchName ?? "Worktree"}
+        <span className="flex min-w-0 flex-1 items-baseline gap-1 truncate text-xs">
+          <span className="min-w-0 truncate font-medium">{label}</span>
+          {branchDetail ? (
+            <span className="min-w-0 truncate text-muted-foreground">
+              {branchDetail}
+            </span>
+          ) : null}
         </span>
         <Icon
           name="Check"

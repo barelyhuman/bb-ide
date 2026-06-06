@@ -60,9 +60,11 @@ export interface CachedGlobalThreadListInvalidationParams {
 }
 
 type SidebarNavigationProject = SidebarBootstrapResponse["projects"][number];
-type SidebarNavigationThreadMapper = (
+export type CachedThreadListsAndSidebarNavigationMapper = (
   threads: ThreadListEntry[],
 ) => ThreadListEntry[];
+type SidebarNavigationThreadMapper =
+  CachedThreadListsAndSidebarNavigationMapper;
 
 interface ApplyToCachedSidebarNavigationThreadsArgs {
   mapper: SidebarNavigationThreadMapper;
@@ -244,6 +246,20 @@ export function applyToCachedSidebarNavigationThreads({
       };
     },
   );
+}
+
+export function applyToCachedThreadListsAndSidebarNavigation(
+  queryClient: QueryClient,
+  mapper: CachedThreadListsAndSidebarNavigationMapper,
+): void {
+  applyToCachedThreadLists(queryClient, {
+    queryKey: threadsQueryKey(),
+    mapper,
+  });
+  applyToCachedSidebarNavigationThreads({
+    queryClient,
+    mapper,
+  });
 }
 
 export function getCachedSidebarNavigationThreads(
@@ -472,6 +488,7 @@ export function optimisticallyInsertThread(
         ...thread,
         environmentBranchName: null,
         environmentHostId: null,
+        environmentName: null,
         runtime: thread.runtime,
         hasPendingInteraction: false,
         pinSortKey: null,
@@ -577,26 +594,12 @@ export function updateCachedThreadListPendingInteractionState(
   threadId: string,
   hasPendingInteraction: boolean,
 ): void {
-  applyToCachedThreadLists(queryClient, {
-    queryKey: threadsQueryKey(),
-    mapper: (list) => {
-      if (!list.some((thread) => thread.id === threadId)) {
-        return list;
-      }
-      return list.map((thread) =>
-        thread.id === threadId ? { ...thread, hasPendingInteraction } : thread,
-      );
-    },
-  });
-  applyToCachedSidebarNavigationThreads({
-    queryClient,
-    mapper: (list) => {
-      if (!list.some((thread) => thread.id === threadId)) {
-        return list;
-      }
-      return list.map((thread) =>
-        thread.id === threadId ? { ...thread, hasPendingInteraction } : thread,
-      );
-    },
+  applyToCachedThreadListsAndSidebarNavigation(queryClient, (list) => {
+    if (!list.some((thread) => thread.id === threadId)) {
+      return list;
+    }
+    return list.map((thread) =>
+      thread.id === threadId ? { ...thread, hasPendingInteraction } : thread,
+    );
   });
 }

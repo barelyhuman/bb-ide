@@ -3,6 +3,7 @@ import type {
   CommitActionResponse,
   SquashMergeActionResponse,
 } from "@bb/server-contract";
+import type { EnvironmentUpdateArgs } from "@bb/sdk";
 import { action } from "../action.js";
 import { createCliBbSdk } from "../client.js";
 import {
@@ -21,13 +22,58 @@ interface EnvironmentShowCommandOptions {
 
 interface EnvironmentUpdateCommandOptions {
   clearMergeBaseBranch?: boolean;
+  clearName?: boolean;
   json?: boolean;
   mergeBaseBranch?: string;
+  name?: string;
 }
 
 interface EnvironmentSquashMergeCommandOptions {
   mergeBaseBranch: string;
   json?: boolean;
+}
+
+interface BuildEnvironmentUpdateArgsInput {
+  id: string;
+  opts: EnvironmentUpdateCommandOptions;
+}
+
+function buildEnvironmentUpdateArgs({
+  id,
+  opts,
+}: BuildEnvironmentUpdateArgsInput): EnvironmentUpdateArgs {
+  if (opts.clearMergeBaseBranch === true) {
+    if (opts.clearName === true) {
+      return { environmentId: id, mergeBaseBranch: null, name: null };
+    }
+    if (opts.name !== undefined) {
+      return { environmentId: id, mergeBaseBranch: null, name: opts.name };
+    }
+    return { environmentId: id, mergeBaseBranch: null };
+  }
+
+  if (opts.mergeBaseBranch !== undefined) {
+    const mergeBaseBranch = opts.mergeBaseBranch;
+    if (opts.clearName === true) {
+      return { environmentId: id, mergeBaseBranch, name: null };
+    }
+    if (opts.name !== undefined) {
+      return { environmentId: id, mergeBaseBranch, name: opts.name };
+    }
+    return { environmentId: id, mergeBaseBranch };
+  }
+
+  if (opts.clearName === true) {
+    return { environmentId: id, name: null };
+  }
+
+  if (opts.name !== undefined) {
+    return { environmentId: id, name: opts.name };
+  }
+
+  throw new Error(
+    "No changes requested. Provide --merge-base-branch, --clear-merge-base-branch, --name, or --clear-name.",
+  );
 }
 
 export function registerEnvironmentCommands(
@@ -53,6 +99,9 @@ export function registerEnvironmentCommands(
         console.log(`  Status: ${env.status}`);
         if (env.path) {
           console.log(`  Path: ${env.path}`);
+        }
+        if (env.name) {
+          console.log(`  Name: ${env.name}`);
         }
         console.log(`  Managed: ${env.managed}`);
         console.log(`  Provision type: ${env.workspaceProvisionType}`);
@@ -80,35 +129,57 @@ export function registerEnvironmentCommands(
       "Set the merge-base branch override",
     )
     .option("--clear-merge-base-branch", "Clear the merge-base branch override")
+    .option("--name <name>", "Set the environment display name")
+    .option("--clear-name", "Clear the environment display name")
     .option("--json", "Print machine-readable JSON output")
     .action(
       action(async (id: string, opts: EnvironmentUpdateCommandOptions) => {
-        if (opts.mergeBaseBranch && opts.clearMergeBaseBranch) {
+        const hasMergeBaseBranch = opts.mergeBaseBranch !== undefined;
+        const hasClearMergeBaseBranch = opts.clearMergeBaseBranch === true;
+        const hasName = opts.name !== undefined;
+        const hasClearName = opts.clearName === true;
+
+        if (hasMergeBaseBranch && hasClearMergeBaseBranch) {
           throw new Error(
             "Cannot combine --merge-base-branch with --clear-merge-base-branch.",
           );
         }
-        if (!opts.mergeBaseBranch && !opts.clearMergeBaseBranch) {
+        if (hasName && hasClearName) {
+          throw new Error("Cannot combine --name with --clear-name.");
+        }
+        if (opts.name !== undefined && opts.name.trim().length === 0) {
+          throw new Error("Environment name cannot be empty.");
+        }
+        if (
+          !hasMergeBaseBranch &&
+          !hasClearMergeBaseBranch &&
+          !hasName &&
+          !hasClearName
+        ) {
           throw new Error(
-            "No changes requested. Provide --merge-base-branch or --clear-merge-base-branch.",
+            "No changes requested. Provide --merge-base-branch, --clear-merge-base-branch, --name, or --clear-name.",
           );
         }
 
         const sdk = createCliBbSdk(getUrl());
-        const environment = await sdk.environments.update({
-          environmentId: id,
-          mergeBaseBranch: opts.clearMergeBaseBranch
-            ? null
-            : (opts.mergeBaseBranch ?? null),
-        });
+        const environment = await sdk.environments.update(
+          buildEnvironmentUpdateArgs({ id, opts }),
+        );
 
         if (outputJson(opts, environment)) return;
         console.log(`Environment ${environment.id} updated`);
-        console.log(
-          environment.mergeBaseBranch
-            ? `Merge base branch: ${environment.mergeBaseBranch}`
-            : "Merge base branch cleared",
-        );
+        if (hasClearMergeBaseBranch || hasMergeBaseBranch) {
+          console.log(
+            environment.mergeBaseBranch
+              ? `Merge base branch: ${environment.mergeBaseBranch}`
+              : "Merge base branch cleared",
+          );
+        }
+        if (hasClearName || hasName) {
+          console.log(
+            environment.name ? `Name: ${environment.name}` : "Name cleared",
+          );
+        }
       }),
     );
 

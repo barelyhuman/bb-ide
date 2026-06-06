@@ -1,11 +1,34 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { Environment } from "@bb/domain";
+import type { Environment, ThreadListEntry } from "@bb/domain";
 import { environmentQueryKey } from "../queries/query-keys";
 import { invalidateEnvironmentWorkspaceStateQueries } from "./environment-cache-effects";
+import {
+  applyToCachedThreadListsAndSidebarNavigation,
+  type CachedThreadListsAndSidebarNavigationMapper,
+} from "./query-cache";
 
 interface EnvironmentUpdateResultArgs {
   environment: Environment;
   queryClient: QueryClient;
+}
+
+interface ApplyEnvironmentNameToCachedThreadArgs {
+  environment: Environment;
+  thread: ThreadListEntry;
+}
+
+function applyEnvironmentNameToCachedThread({
+  environment,
+  thread,
+}: ApplyEnvironmentNameToCachedThreadArgs): ThreadListEntry {
+  if (thread.environmentId !== environment.id) {
+    return thread;
+  }
+
+  return {
+    ...thread,
+    environmentName: environment.name,
+  };
 }
 
 export function applyEnvironmentUpdateResult({
@@ -15,6 +38,16 @@ export function applyEnvironmentUpdateResult({
   queryClient.setQueryData<Environment>(
     environmentQueryKey(environment.id),
     environment,
+  );
+  const applyEnvironmentName: CachedThreadListsAndSidebarNavigationMapper = (
+    threads,
+  ) =>
+    threads.map((thread) =>
+      applyEnvironmentNameToCachedThread({ environment, thread }),
+    );
+  applyToCachedThreadListsAndSidebarNavigation(
+    queryClient,
+    applyEnvironmentName,
   );
   invalidateEnvironmentWorkspaceStateQueries({
     environmentId: environment.id,

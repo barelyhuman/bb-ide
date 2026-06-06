@@ -3,10 +3,17 @@ import { resolveEnvironmentWorkspaceDisplayKind } from "@bb/domain";
 
 export interface EnvironmentDisplayInfo {
   /**
-   * Human-readable mode: "Provisioning" while the environment is still being
-   * set up, otherwise "Working locally", "Working remotely", or "Worktree".
+   * Human-readable environment label: a custom environment name when present,
+   * "Provisioning" while the environment is still being set up, otherwise
+   * "Working locally", "Working remotely", or "Worktree".
    */
   modeLabel: string;
+  /**
+   * Compact mode label for constrained prompt/composer surfaces. Custom names
+   * stay custom names; generated direct-workspace labels compact to
+   * "Local" / "Remote".
+   */
+  compactModeLabel: string;
   /** Host display name, if available. Null when the host has no name. */
   hostLabel: string | null;
   id: string;
@@ -43,7 +50,7 @@ export function formatEnvironmentDisplay({
   // While the workspace is still being provisioned, discovered properties such
   // as `isWorktree` are not yet populated, so the mode is not yet knowable.
   // Report the lifecycle state honestly instead of guessing "Working locally".
-  const modeLabel =
+  const generatedModeLabel =
     environment.status === "provisioning"
       ? "Provisioning"
       : mode === "worktree"
@@ -51,6 +58,16 @@ export function formatEnvironmentDisplay({
         : isLocalHost
           ? "Working locally"
           : "Working remotely";
+  const generatedCompactModeLabel =
+    environment.status === "provisioning"
+      ? "Provisioning"
+      : mode === "worktree"
+        ? "Worktree"
+        : isLocalHost
+          ? "Local"
+          : "Remote";
+  const modeLabel = environment.name ?? generatedModeLabel;
+  const compactModeLabel = environment.name ?? generatedCompactModeLabel;
 
   const location: EnvironmentDisplayInfo["location"] = isLocalHost
     ? "local"
@@ -58,6 +75,7 @@ export function formatEnvironmentDisplay({
 
   return {
     modeLabel,
+    compactModeLabel,
     hostLabel: hostName ?? null,
     id: environment.id,
     location,

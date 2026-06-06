@@ -2,23 +2,28 @@
 
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
+import type { Environment, ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import type { SidebarBootstrapResponse } from "@bb/server-contract";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import * as api from "@/lib/api";
 import {
   archivedThreadsListQueryKey,
+  environmentQueryKey,
   sidebarNavigationQueryKey,
   threadListQueryKey,
   threadQueryKey,
 } from "../queries/query-keys";
-import { useArchiveEnvironmentThreads } from "./environment-mutations";
+import {
+  useArchiveEnvironmentThreads,
+  useUpdateEnvironment,
+} from "./environment-mutations";
 
 vi.mock("@/lib/api", () => {
   class HttpError extends Error {}
   return {
     HttpError,
     archiveEnvironmentThreads: vi.fn(),
+    updateEnvironment: vi.fn(),
   };
 });
 
@@ -61,6 +66,7 @@ function makeThreadListEntry(
     ...thread,
     environmentBranchName: null,
     environmentHostId: null,
+    environmentName: null,
     environmentWorkspaceDisplayKind: "managed-worktree",
     hasPendingInteraction: false,
     pinSortKey: null,
@@ -95,11 +101,116 @@ function makeSidebarNavigationResponse(
   };
 }
 
+function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
+  return {
+    id: "environment-1",
+    name: null,
+    projectId: "project-1",
+    hostId: "host-1",
+    path: "/tmp/project",
+    managed: true,
+    isGitRepo: true,
+    isWorktree: true,
+    workspaceProvisionType: "managed-worktree",
+    branchName: "bb/test",
+    baseBranch: null,
+    defaultBranch: "main",
+    mergeBaseBranch: null,
+    cleanupRequestedAt: null,
+    cleanupMode: null,
+    status: "ready",
+    createdAt: 1,
+    updatedAt: 1,
+    ...overrides,
+  };
+}
+
 afterEach(() => {
   vi.clearAllMocks();
 });
 
 describe("environment mutations", () => {
+  it("patches cached environment names in thread lists after update", async () => {
+    const renamedEnvironment = makeEnvironment({
+      name: "Review workspace",
+      updatedAt: 2,
+    });
+    vi.mocked(api.updateEnvironment).mockResolvedValue(renamedEnvironment);
+
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const activeListKey = threadListQueryKey({
+      archived: false,
+      projectId: "project-1",
+    });
+    const sidebarNavigationKey = sidebarNavigationQueryKey();
+    const renamedThread = makeThreadListEntry({ id: "thread-1" });
+    const otherThread = makeThreadListEntry({
+      environmentId: "environment-2",
+      id: "thread-2",
+    });
+    queryClient.setQueryData<ThreadListEntry[]>(activeListKey, [
+      renamedThread,
+      otherThread,
+    ]);
+    queryClient.setQueryData<SidebarBootstrapResponse>(
+      sidebarNavigationKey,
+      makeSidebarNavigationResponse([renamedThread, otherThread]),
+    );
+
+    const { result } = renderHook(() => useUpdateEnvironment(), {
+      wrapper,
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        id: renamedEnvironment.id,
+        name: renamedEnvironment.name,
+      });
+    });
+
+    expect(api.updateEnvironment).toHaveBeenCalledWith(renamedEnvironment.id, {
+      name: renamedEnvironment.name,
+    });
+    expect(
+      queryClient.getQueryData<Environment>(
+        environmentQueryKey(renamedEnvironment.id),
+      ),
+    ).toEqual(renamedEnvironment);
+    expect(queryClient.getQueryData<ThreadListEntry[]>(activeListKey)).toEqual([
+      expect.objectContaining({
+        environmentId: renamedEnvironment.id,
+        environmentName: renamedEnvironment.name,
+        id: renamedThread.id,
+      }),
+      expect.objectContaining({
+        environmentId: otherThread.environmentId,
+        environmentName: null,
+        id: otherThread.id,
+      }),
+    ]);
+    expect(
+      queryClient
+        .getQueryData<SidebarBootstrapResponse>(sidebarNavigationKey)
+        ?.projects.at(0)
+        ?.threads.map((thread) => ({
+          environmentId: thread.environmentId,
+          environmentName: thread.environmentName,
+          id: thread.id,
+        })),
+    ).toEqual([
+      {
+        environmentId: renamedEnvironment.id,
+        environmentName: renamedEnvironment.name,
+        id: renamedThread.id,
+      },
+      {
+        environmentId: otherThread.environmentId,
+        environmentName: null,
+        id: otherThread.id,
+      },
+    ]);
+  });
+
   it("archives cached live worktree threads and invalidates thread lists", async () => {
     const firstThread = makeThread({ id: "thread-1" });
     const secondThread = makeThread({ id: "thread-2" });

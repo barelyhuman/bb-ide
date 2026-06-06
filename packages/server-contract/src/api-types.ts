@@ -938,9 +938,20 @@ export const updateThreadRequestSchema = z
   );
 export type UpdateThreadRequest = z.infer<typeof updateThreadRequestSchema>;
 
-export const updateEnvironmentRequestSchema = z.object({
-  mergeBaseBranch: gitBranchNameSchema.nullable(),
-});
+export const environmentNameSchema = z.string().trim().min(1).max(80);
+
+export const updateEnvironmentRequestSchema = z
+  .object({
+    // Omitted fields are left unchanged. `null` clears the configured value.
+    mergeBaseBranch: gitBranchNameSchema.nullable(),
+    name: environmentNameSchema.nullable(),
+  })
+  .partial()
+  .refine(
+    (value) =>
+      value.mergeBaseBranch !== undefined || value.name !== undefined,
+    "At least one field must be provided",
+  );
 export type UpdateEnvironmentRequest = z.infer<
   typeof updateEnvironmentRequestSchema
 >;

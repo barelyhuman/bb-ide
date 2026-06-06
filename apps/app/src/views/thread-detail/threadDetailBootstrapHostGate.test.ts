@@ -13,6 +13,7 @@ function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
     defaultBranch: "main",
     hostId: "host-1",
     id: "environment-1",
+    name: null,
     isGitRepo: true,
     isWorktree: false,
     managed: false,

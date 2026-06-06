@@ -19,6 +19,7 @@ function makeEnvironment(overrides: EnvironmentOverrides = {}): Environment {
     defaultBranch: "main",
     hostId: "host-1",
     id: "env-1",
+    name: null,
     isGitRepo: true,
     isWorktree: true,
     managed: true,

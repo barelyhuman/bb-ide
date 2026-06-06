@@ -44,6 +44,7 @@ function makeThread(overrides: ThreadOverrides = {}): Thread {
 function makeEnvironment(overrides: EnvironmentOverrides = {}): Environment {
   const base: Environment = {
     id: "env_test",
+    name: null,
     projectId: "proj_test",
     hostId: "hst_test",
     path: "/Users/michael/Projects/bb",

@@ -7,6 +7,8 @@ import { Icon, type IconName } from "@/components/ui/icon.js";
 export interface ThreadEnvironmentSummaryProps {
   /** Mode label (e.g. "Working locally" / "Worktree"). Never truncates. */
   environmentLabel?: string;
+  /** Compact label for constrained promptbox layouts. */
+  environmentCompactLabel?: string;
   /** Remote host name shown after the mode label as a muted suffix. Hidden below `lg`. */
   environmentHostLabel?: string;
   /** Whether the host backing the environment is connected. */
@@ -19,19 +21,6 @@ export interface ThreadEnvironmentSummaryProps {
    * environment label. Caller is responsible for only providing this when the
    * environment is a worktree. */
   onCreateNewThreadInWorktree?: () => void;
-}
-
-function getCompactEnvironmentLabel(label: string): string {
-  if (label.includes("remotely")) {
-    return "Remote";
-  }
-  if (label.includes("locally")) {
-    return "Local";
-  }
-  if (label.includes("Worktree")) {
-    return "Worktree";
-  }
-  return label;
 }
 
 /**
@@ -49,6 +38,7 @@ function getCompactEnvironmentLabel(label: string): string {
  */
 export const ThreadEnvironmentSummary = memo(function ThreadEnvironmentSummary({
   environmentLabel,
+  environmentCompactLabel,
   environmentHostLabel,
   environmentHostConnected,
   environmentIcon,
@@ -80,7 +70,7 @@ export const ThreadEnvironmentSummary = memo(function ThreadEnvironmentSummary({
               ) : null}
             </span>
           }
-          compactValue={getCompactEnvironmentLabel(environmentLabel)}
+          compactValue={environmentCompactLabel ?? environmentLabel}
           compactValueHiddenWhenTiny
           leading={
             environmentIcon ? (

@@ -210,6 +210,10 @@ function closeConnection(db: DbConnection): void {
   db.$client.close();
 }
 
+function dropEnvironmentNameColumn(db: DbConnection): void {
+  db.$client.prepare("ALTER TABLE environments DROP COLUMN name").run();
+}
+
 function readIndexNames(args: ReadIndexNamesArgs): string[] {
   return args.db.$client
     .prepare<TableNameParameters, IndexNameRow>(
@@ -1172,6 +1176,7 @@ describe("migrate", () => {
           `,
         )
         .run("main-0001-hash", publishedTerminalSessionUserInputWhen);
+      dropEnvironmentNameColumn(db);
 
       expect(
         readIndexNames({ db, tableName: "host_daemon_sessions" }),
@@ -1374,6 +1379,7 @@ describe("migrate", () => {
           `,
         )
         .run(threadSchedulesMigrationWhen);
+      dropEnvironmentNameColumn(db);
       db.$client
         .prepare(
           `
@@ -1563,6 +1569,7 @@ describe("migrate", () => {
           `,
         )
         .run(terminalSessionRuntimeStateHonestyWhen);
+      dropEnvironmentNameColumn(db);
 
       migrate(db);
 

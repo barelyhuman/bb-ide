@@ -106,6 +106,7 @@ function buildReuseThreadOptions(
   // with no unarchived threads naturally drop out.
   const threadsByEnvironmentId = new Map<string, ThreadListEntry[]>();
   const branchByEnvironmentId = new Map<string, string | null>();
+  const nameByEnvironmentId = new Map<string, string | null>();
   for (const thread of threads) {
     if (!isWorktreeWithEnv(thread)) continue;
     if (thread.environmentId === null) continue;
@@ -117,6 +118,7 @@ function buildReuseThreadOptions(
         thread.environmentId,
         thread.environmentBranchName,
       );
+      nameByEnvironmentId.set(thread.environmentId, thread.environmentName);
     }
     bucket.push(thread);
   }
@@ -128,6 +130,7 @@ function buildReuseThreadOptions(
     options.push({
       environmentId,
       branchName: branchByEnvironmentId.get(environmentId) ?? null,
+      name: nameByEnvironmentId.get(environmentId) ?? null,
       threads: bucket.map((thread) => ({
         id: thread.id,
         title: getThreadDisplayTitle(thread),
@@ -135,8 +138,10 @@ function buildReuseThreadOptions(
     });
   }
   options.sort((left, right) => {
-    if (left.branchName && right.branchName) {
-      return left.branchName.localeCompare(right.branchName);
+    const leftLabel = left.name ?? left.branchName;
+    const rightLabel = right.name ?? right.branchName;
+    if (leftLabel && rightLabel) {
+      return leftLabel.localeCompare(rightLabel);
     }
     return left.environmentId.localeCompare(right.environmentId);
   });
