@@ -299,6 +299,27 @@ describe("ThreadSecondaryPanel", () => {
     expect(surface?.className).not.toContain("w-96");
   });
 
+  it("does not land focus on the first popout action when the menu opens", () => {
+    renderPanel({
+      renderNewTabMenu: () => (
+        <div data-testid="new-tab-action-menu">
+          <button type="button">Open file</button>
+          <button type="button">Open browser</button>
+        </div>
+      ),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open tab menu" }));
+
+    // Opening the popout must not autofocus the first row: that paints it with
+    // the keyboard-focus highlight and makes Open file read as already
+    // selected/hovered at rest. Focus rests on the dialog container instead, so
+    // the first Tab still reaches Open file with the visible focus cue.
+    const openFile = screen.getByRole("button", { name: "Open file" });
+    expect(document.activeElement).not.toBe(openFile);
+    expect(document.activeElement).toBe(screen.getByRole("dialog"));
+  });
+
   it("closes the new-tab action popout after a menu action", async () => {
     const onOpenFile = vi.fn();
     renderPanel({

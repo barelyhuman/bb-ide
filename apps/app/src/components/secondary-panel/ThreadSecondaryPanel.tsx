@@ -4,6 +4,7 @@ import {
   type ReactNode,
   useCallback,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useAtomValue } from "jotai";
@@ -506,8 +507,18 @@ function NewTabButton({
   usesDesktopChrome,
 }: NewTabButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
   const closeMenu = useCallback(() => {
     setIsOpen(false);
+  }, []);
+  const handleOpenAutoFocus = useCallback((event: Event) => {
+    // Radix focuses the first row on open, which paints it with the
+    // keyboard-focus highlight and makes the menu read as if Open file were
+    // already selected. Move focus to the popout container instead so no row is
+    // highlighted at rest; the first Tab still lands on Open file with the
+    // visible focus cue, and the menu stays keyboard-reachable inside the portal.
+    event.preventDefault();
+    contentRef.current?.focus();
   }, []);
 
   return (
@@ -528,11 +539,13 @@ function NewTabButton({
         </Button>
       </PopoverTrigger>
       <PopoverContent
+        ref={contentRef}
         align="start"
         side="bottom"
         sideOffset={6}
         className="w-auto min-w-40 p-1 focus-visible:ring-0"
         mobileTitle="New tab menu"
+        onOpenAutoFocus={handleOpenAutoFocus}
       >
         {renderNewTabMenu({ closeMenu })}
       </PopoverContent>

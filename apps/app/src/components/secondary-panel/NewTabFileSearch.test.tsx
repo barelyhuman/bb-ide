@@ -364,6 +364,10 @@ describe("NewTabActionMenu", () => {
     for (const button of within(menu).getAllByRole("button")) {
       expect(button.getAttribute("aria-selected")).toBeNull();
       expect(button.className).not.toContain("focus-visible:ring");
+      // No row carries the active/selected highlight at rest — opening the menu
+      // must not leave the first action looking hovered/selected by default —
+      // while the non-ring keyboard-focus cue stays in place.
+      expect(button.className).not.toContain("bg-state-active");
       expect(button.className).toContain("focus-visible:bg-state-hover");
     }
   });
