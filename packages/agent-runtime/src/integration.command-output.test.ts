@@ -11,6 +11,7 @@ import {
   turnCompletedCountForThread,
   waitForRuntimeCondition,
 } from "./test/runtime-integration-harness.js";
+import { promptTextInput } from "./test/prompt-input.js";
 
 const providers = ["codex", "claude-code", "pi"];
 
@@ -51,7 +52,7 @@ for (const providerId of providers) {
           clientRequestId: "creq_222222222r",
           threadId,
           options,
-          input: [{ type: "text", text: createDelayedOutputPrompt() }],
+          input: [promptTextInput({ text: createDelayedOutputPrompt() })],
         });
 
         await waitForRuntimeCondition({

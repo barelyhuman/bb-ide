@@ -6,6 +6,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { promptTextInput } from "./test/prompt-input.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -411,7 +412,7 @@ rl.on("line", (line) => {
 
       await runtime.runTurn({
         clientRequestId: "creq_222222224p",
-        input: [{ type: "text", text: "commit" }],
+        input: [promptTextInput({ text: "commit" })],
         options: workspaceWriteOptions,
         threadId: "t1",
       });
@@ -459,7 +460,7 @@ rl.on("line", (line) => {
       runtime.runTurn({
         clientRequestId: "creq_222222224q",
         threadId: "t1",
-        input: [{ type: "text", text: "hello" }],
+        input: [promptTextInput({ text: "hello" })],
         options: fullRuntimeOptions,
       }),
     ).rejects.toThrow(/returned no provider request for turn\/start/);
@@ -497,7 +498,7 @@ rl.on("line", (line) => {
     await runtime.runTurn({
       clientRequestId: "creq_222222224r",
       threadId: "t1",
-      input: [{ type: "text", text: "delay:500" }],
+      input: [promptTextInput({ text: "delay:500" })],
       options: fullRuntimeOptions,
     });
     await waitForThreadTurnStarted({
@@ -512,7 +513,7 @@ rl.on("line", (line) => {
         clientRequestId: "creq_222222224s",
         threadId: "t1",
         expectedTurnId: "turn-1",
-        input: [{ type: "text", text: "steer" }],
+        input: [promptTextInput({ text: "steer" })],
         options: fullRuntimeOptions,
       }),
     ).rejects.toThrow(/returned no provider request for turn\/steer/);
@@ -571,7 +572,7 @@ rl.on("line", (line) => {
       runtime.runTurn({
         clientRequestId: "creq_222222224t",
         threadId: missingProviderThreadId,
-        input: [{ type: "text", text: "hello" }],
+        input: [promptTextInput({ text: "hello" })],
         options: fullRuntimeOptions,
       }),
     ).rejects.toThrow(missingProviderThreadIdError);
@@ -720,7 +721,7 @@ process.on("SIGTERM", () => {
         clientRequestId: "creq_222222224u",
         threadId: missingProviderThreadId,
         expectedTurnId: "turn-1",
-        input: [{ type: "text", text: "steer" }],
+        input: [promptTextInput({ text: "steer" })],
         options: fullRuntimeOptions,
       }),
     ).rejects.toThrow(missingProviderThreadIdError);
@@ -786,7 +787,7 @@ process.on("SIGTERM", () => {
     await runtime.runTurn({
       clientRequestId: "creq_222222224v",
       threadId: "t1",
-      input: [{ type: "text", text: "delay:500" }],
+      input: [promptTextInput({ text: "delay:500" })],
       options: fullRuntimeOptions,
     });
     await waitForThreadTurnStarted({

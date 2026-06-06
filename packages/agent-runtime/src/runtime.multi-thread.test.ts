@@ -16,6 +16,7 @@ import {
   waitForThreadAgentMessageText,
   waitForThreadTurnCompleted,
 } from "./test/runtime-test-harness.js";
+import { promptTextInput } from "./test/prompt-input.js";
 
 interface WaitForBothThreadsStartedArgs {
   events: ThreadEvent[];
@@ -96,13 +97,13 @@ describe("createAgentRuntime multi-thread routing", () => {
       runtime.runTurn({
         clientRequestId: "creq_222222222b",
         threadId: "t1",
-        input: [{ type: "text", text: "thread 1" }],
+        input: [promptTextInput({ text: "thread 1" })],
         options: fullRuntimeOptions,
       }),
       runtime.runTurn({
         clientRequestId: "creq_222222222c",
         threadId: "t2",
-        input: [{ type: "text", text: "thread 2" }],
+        input: [promptTextInput({ text: "thread 2" })],
         options: fullRuntimeOptions,
       }),
     ]);
@@ -175,13 +176,13 @@ describe("createAgentRuntime multi-thread routing", () => {
       runtime.runTurn({
         clientRequestId: "creq_222222222d",
         threadId: "t1",
-        input: [{ type: "text", text: "delay:500 thread A should stop" }],
+        input: [promptTextInput({ text: "delay:500 thread A should stop" })],
         options: fullRuntimeOptions,
       }),
       runtime.runTurn({
         clientRequestId: "creq_222222222e",
         threadId: "t2",
-        input: [{ type: "text", text: "delay:500 thread B should survive" }],
+        input: [promptTextInput({ text: "delay:500 thread B should survive" })],
         options: fullRuntimeOptions,
       }),
     ]);
@@ -207,7 +208,7 @@ describe("createAgentRuntime multi-thread routing", () => {
     await runtime.runTurn({
       clientRequestId: "creq_222222222f",
       threadId: "t2",
-      input: [{ type: "text", text: "thread B still accepts turns" }],
+      input: [promptTextInput({ text: "thread B still accepts turns" })],
       options: fullRuntimeOptions,
     });
     await waitForThreadAgentMessageText({
@@ -243,7 +244,7 @@ describe("createAgentRuntime multi-thread routing", () => {
     await runtime.runTurn({
       clientRequestId: "creq_222222222g",
       threadId: "my-thread",
-      input: [{ type: "text", text: "check ids" }],
+      input: [promptTextInput({ text: "check ids" })],
       options: fullRuntimeOptions,
     });
     await waitForThreadTurnCompleted({
@@ -297,13 +298,13 @@ describe("createAgentRuntime multi-thread routing", () => {
       runtime.runTurn({
         clientRequestId: "creq_222222222h",
         threadId: "t1",
-        input: [{ type: "text", text: "from t1" }],
+        input: [promptTextInput({ text: "from t1" })],
         options: fullRuntimeOptions,
       }),
       runtime.runTurn({
         clientRequestId: "creq_222222222i",
         threadId: "t2",
-        input: [{ type: "text", text: "from t2" }],
+        input: [promptTextInput({ text: "from t2" })],
         options: fullRuntimeOptions,
       }),
     ]);
@@ -536,13 +537,13 @@ rl.on("line", (line) => {
       runtime.runTurn({
         clientRequestId: "creq_222222222j",
         threadId: "t1",
-        input: [{ type: "text", text: "from t1" }],
+        input: [promptTextInput({ text: "from t1" })],
         options: fullRuntimeOptions,
       }),
       runtime.runTurn({
         clientRequestId: "creq_222222222k",
         threadId: "t2",
-        input: [{ type: "text", text: "from t2" }],
+        input: [promptTextInput({ text: "from t2" })],
         options: fullRuntimeOptions,
       }),
     ]);
@@ -620,13 +621,13 @@ rl.on("line", (line) => {
       runtime.runTurn({
         clientRequestId: "creq_222222222m",
         threadId: "t1",
-        input: [{ type: "text", text: "from a" }],
+        input: [promptTextInput({ text: "from a" })],
         options: fullRuntimeOptions,
       }),
       runtime.runTurn({
         clientRequestId: "creq_222222222n",
         threadId: "t2",
-        input: [{ type: "text", text: "from b" }],
+        input: [promptTextInput({ text: "from b" })],
         options: fullRuntimeOptions,
       }),
     ]);
@@ -676,7 +677,7 @@ rl.on("line", (line) => {
     await runtime1.runTurn({
       clientRequestId: "creq_222222222p",
       threadId: "t1",
-      input: [{ type: "text", text: "first runtime" }],
+      input: [promptTextInput({ text: "first runtime" })],
       options: fullRuntimeOptions,
     });
     await waitForThreadTurnCompleted({
@@ -709,7 +710,7 @@ rl.on("line", (line) => {
     await runtime2.runTurn({
       clientRequestId: "creq_222222222q",
       threadId: "t1-resumed",
-      input: [{ type: "text", text: "second runtime" }],
+      input: [promptTextInput({ text: "second runtime" })],
       options: fullRuntimeOptions,
     });
     await waitForThreadTurnCompleted({

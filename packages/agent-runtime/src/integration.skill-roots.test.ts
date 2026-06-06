@@ -14,6 +14,7 @@ import {
   resolveRuntimeOptions,
   waitForThreadTurnCompleted,
 } from "./test/runtime-integration-harness.js";
+import { promptTextInput } from "./test/prompt-input.js";
 
 type SkillRootProviderId = "claude-code" | "codex" | "pi";
 type DirectorySkillRootProviderId = "codex" | "pi";
@@ -173,12 +174,11 @@ for (const providerId of providers) {
           clientRequestId: "creq_23456789ab",
           options,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 `Use the available skill named ${skillName}. ` +
                 "Reply with exactly the runtime skill integration token from that skill and nothing else.",
-            },
+            }),
           ],
         });
 

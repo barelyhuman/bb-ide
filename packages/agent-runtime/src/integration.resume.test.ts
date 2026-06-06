@@ -14,6 +14,7 @@ import {
   waitForThreadTurnCompleted,
   waitForToolCallBeforeTurnCompletion,
 } from "./test/runtime-integration-harness.js";
+import { promptTextInput } from "./test/prompt-input.js";
 
 const providers = ["codex", "claude-code", "pi"];
 const CODEX_TOOL_CALL_TIMEOUT_MS = 60_000;
@@ -51,10 +52,9 @@ for (const providerId of providers) {
           clientRequestId: "creq_2222222222",
           threadId: firstThreadId,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text: "Remember the word STRAWBERRY. Just confirm you will remember it.",
-            },
+            }),
           ],
           options,
         });
@@ -101,10 +101,9 @@ for (const providerId of providers) {
             clientRequestId: "creq_2222222223",
             threadId,
             input: [
-              {
-                type: "text",
+              promptTextInput({
                 text: "What was the word I asked you to remember? Reply with just the word.",
-              },
+              }),
             ],
             options,
           });
@@ -197,7 +196,7 @@ describe.concurrent("codex resume scenarios", () => {
         clientRequestId: "creq_2222222224",
         threadId: firstThreadId,
         input: [
-          { type: "text", text: "Call the bb_test_ping tool right now." },
+          promptTextInput({ text: "Call the bb_test_ping tool right now." }),
         ],
         options,
       });
@@ -270,7 +269,7 @@ describe.concurrent("codex resume scenarios", () => {
         clientRequestId: "creq_2222222225",
         threadId,
         input: [
-          { type: "text", text: "Call the bb_test_ping tool again right now." },
+          promptTextInput({ text: "Call the bb_test_ping tool again right now." }),
         ],
         options,
       });
@@ -319,10 +318,9 @@ describe.concurrent("codex resume scenarios", () => {
         clientRequestId: "creq_2222222226",
         threadId: firstThreadId,
         input: [
-          {
-            type: "text",
+          promptTextInput({
             text: "Remember the word STRAWBERRY. Just confirm you will remember it.",
-          },
+          }),
         ],
         options,
       });
@@ -369,10 +367,9 @@ describe.concurrent("codex resume scenarios", () => {
         clientRequestId: "creq_2222222227",
         threadId,
         input: [
-          {
-            type: "text",
+          promptTextInput({
             text: "What was the word I asked you to remember? Reply with just the word.",
-          },
+          }),
         ],
         options,
       });
@@ -454,10 +451,9 @@ describe.concurrent("codex resume scenarios", () => {
           clientRequestId: "creq_2222222228",
           threadId: firstThreadId,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text: "PING_REQUIRED. Call the bb_test_ping tool now before any assistant text. After the tool returns, remember the word BANANA and reply with BANANA_STORED.",
-            },
+            }),
           ],
           options,
           instructions: CODEX_PING_REQUIRED_INSTRUCTIONS,
@@ -531,10 +527,9 @@ describe.concurrent("codex resume scenarios", () => {
           clientRequestId: "creq_2222222229",
           threadId,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text: "PING_REQUIRED. Call the bb_test_ping tool now before any assistant text. After the tool returns, answer with the word I asked you to remember.",
-            },
+            }),
           ],
           options,
           instructions: CODEX_PING_REQUIRED_INSTRUCTIONS,

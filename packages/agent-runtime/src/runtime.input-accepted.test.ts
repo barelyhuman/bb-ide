@@ -11,6 +11,7 @@ import {
   wait,
   waitForThreadTurnStarted,
 } from "./test/runtime-test-harness.js";
+import { promptTextInput } from "./test/prompt-input.js";
 
 describe("createAgentRuntime input accepted events", () => {
   let tmpDir: string;
@@ -47,7 +48,7 @@ describe("createAgentRuntime input accepted events", () => {
     await runtime.runTurn({
       clientRequestId: "creq_222222222s",
       threadId: "t1",
-      input: [{ type: "text", text: "delay:500 first input" }],
+      input: [promptTextInput({ text: "delay:500 first input" })],
       options: fullRuntimeOptions,
     });
     await waitForThreadTurnStarted({
@@ -62,7 +63,7 @@ describe("createAgentRuntime input accepted events", () => {
       clientRequestId: "creq_222222222t",
       threadId: "t1",
       expectedTurnId: "turn-1",
-      input: [{ type: "text", text: "steer input" }],
+      input: [promptTextInput({ text: "steer input" })],
       options: fullRuntimeOptions,
     });
     await wait(50);
@@ -171,7 +172,7 @@ rl.on("line", (line) => {
     await runtime.runTurn({
       clientRequestId: "creq_222222222u",
       threadId: "t1",
-      input: [{ type: "text", text: "active turn" }],
+      input: [promptTextInput({ text: "active turn" })],
       options: fullRuntimeOptions,
     });
     await waitForThreadTurnStarted({
@@ -185,7 +186,7 @@ rl.on("line", (line) => {
       threadId: "t1",
       expectedTurnId: "turn-1",
       clientRequestId: "creq_23456789ae",
-      input: [{ type: "text", text: "accepted steer" }],
+      input: [promptTextInput({ text: "accepted steer" })],
       options: fullRuntimeOptions,
     });
 
@@ -287,7 +288,7 @@ rl.on("line", (line) => {
     await runtime.runTurn({
       clientRequestId: "creq_222222222v",
       threadId: "t1",
-      input: [{ type: "text", text: "active turn" }],
+      input: [promptTextInput({ text: "active turn" })],
       options: fullRuntimeOptions,
     });
     await waitForThreadTurnStarted({
@@ -303,7 +304,7 @@ rl.on("line", (line) => {
         clientRequestId: "creq_222222222w",
         threadId: "t1",
         expectedTurnId: "turn-1",
-        input: [{ type: "text", text: "rejected steer" }],
+        input: [promptTextInput({ text: "rejected steer" })],
         options: fullRuntimeOptions,
       }),
     ).rejects.toThrow(/No active session/);

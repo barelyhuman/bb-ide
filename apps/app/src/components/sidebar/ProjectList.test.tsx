@@ -277,11 +277,11 @@ function ThreadPromptDraftSeeder({
   threadId,
   text,
 }: ThreadPromptDraftSeederProps) {
-  const promptDraft = usePromptDraftStorage({ projectId, threadId });
+  const { setTextAndMentions } = usePromptDraftStorage({ projectId, threadId });
 
   useEffect(() => {
-    promptDraft.setTextAndMentions(text, []);
-  }, [promptDraft.setTextAndMentions, text]);
+    setTextAndMentions(text, []);
+  }, [setTextAndMentions, text]);
 
   return null;
 }

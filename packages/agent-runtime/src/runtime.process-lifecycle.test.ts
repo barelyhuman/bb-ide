@@ -13,6 +13,7 @@ import {
   fullRuntimeOptions,
   waitForRuntimeState,
 } from "./test/runtime-test-harness.js";
+import { promptTextInput } from "./test/prompt-input.js";
 import type { AgentRuntimeOptions } from "./types.js";
 
 interface CreateProviderProcessManagerArgs {
@@ -134,7 +135,7 @@ describe("createAgentRuntime process lifecycle", () => {
       runtime2.runTurn({
         clientRequestId: "creq_222222224w",
         threadId: "t1",
-        input: [{ type: "text", text: "hi" }],
+        input: [promptTextInput({ text: "hi" })],
         options: fullRuntimeOptions,
       }),
     ).rejects.toThrow("Method not found");
@@ -581,7 +582,7 @@ describe("createAgentRuntime process lifecycle", () => {
       runtime.runTurn({
         clientRequestId: "creq_222222224x",
         threadId: "t1",
-        input: [{ type: "text", text: "hi" }],
+        input: [promptTextInput({ text: "hi" })],
         options: fullRuntimeOptions,
       }),
     ).rejects.toThrow(/exited|not running|no provider associated/i);
@@ -636,7 +637,7 @@ describe("createAgentRuntime process lifecycle", () => {
       runtime.runTurn({
         clientRequestId: "creq_222222224y",
         threadId: "t1",
-        input: [{ type: "text", text: "hi" }],
+        input: [promptTextInput({ text: "hi" })],
         options: fullRuntimeOptions,
       }),
     ).rejects.toThrow(/exited unexpectedly/i);

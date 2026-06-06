@@ -8,6 +8,7 @@ import type {
   ThreadEvent,
   ToolCallResponse,
 } from "@bb/domain";
+import { promptTextInput } from "./test/prompt-input.js";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import type { DecodedInteractiveRequest } from "./provider-adapter.js";
 import { createAgentRuntimeWithAdapters } from "./runtime.js";
@@ -203,7 +204,7 @@ rl.on("line", (line) => {
     await runtime.runTurn({
       clientRequestId: "creq_222222224i",
       threadId: "t1",
-      input: [{ type: "text", text: "trigger interactive request" }],
+      input: [promptTextInput({ text: "trigger interactive request" })],
       options: fullRuntimeOptions,
     });
     await waitForRuntimeState({
@@ -461,7 +462,7 @@ rl.on("line", (line) => {
     await runtime.runTurn({
       clientRequestId: "creq_222222224j",
       threadId: "t1",
-      input: [{ type: "text", text: "trigger denied interactive request" }],
+      input: [promptTextInput({ text: "trigger denied interactive request" })],
       options: {
         ...fullRuntimeOptions,
         permissionMode: "readonly",
@@ -824,7 +825,7 @@ rl.on("line", (line) => {
     await runtime.runTurn({
       clientRequestId: "creq_222222224k",
       threadId: "t1",
-      input: [{ type: "text", text: "trigger interactive request failure" }],
+      input: [promptTextInput({ text: "trigger interactive request failure" })],
       options: fullRuntimeOptions,
     });
     await waitForThreadAgentMessageText({
@@ -964,7 +965,7 @@ rl.on("line", (line) => {
       clientRequestId: "creq_222222224m",
       threadId: "t1",
       input: [
-        { type: "text", text: "trigger unsupported interactive request" },
+        promptTextInput({ text: "trigger unsupported interactive request" }),
       ],
       options: fullRuntimeOptions,
     });
@@ -1092,7 +1093,7 @@ rl.on("line", (line) => {
     await runtime.runTurn({
       clientRequestId: "creq_222222224n",
       threadId: "t1",
-      input: [{ type: "text", text: "trigger invalid interactive request" }],
+      input: [promptTextInput({ text: "trigger invalid interactive request" })],
       options: fullRuntimeOptions,
     });
     await waitForThreadAgentMessageText({

@@ -8,6 +8,7 @@ import type {
   UserQuestionPendingInteractionPayload,
   UserQuestionPendingInteractionResolution,
 } from "@bb/domain";
+import { promptTextInput } from "../test/prompt-input.js";
 import { createClaudeCodeProviderAdapter } from "./adapter.js";
 import {
   CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
@@ -181,7 +182,7 @@ describe("claude-code provider adapter", () => {
           providerThreadId: "provider-thread-1",
           expectedTurnId: "turn-1",
           clientRequestId: "creq_23456789ad",
-          input: [{ type: "text", text: "steer turn" }],
+          input: [promptTextInput({ text: "steer turn" })],
           options: fullProviderExecutionContext,
         },
       }),
@@ -213,7 +214,7 @@ describe("claude-code provider adapter", () => {
           threadId: "bb-thread-1",
           providerThreadId: "claude-session-1",
           clientRequestId: "creq_23456789ae",
-          input: [{ type: "text", text: "new turn" }],
+          input: [promptTextInput({ text: "new turn" })],
           options: fullProviderExecutionContext,
         },
       }),
@@ -290,7 +291,7 @@ describe("claude-code provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: fullProviderExecutionContext,
     });
@@ -308,7 +309,7 @@ describe("claude-code provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: { ...fullProviderExecutionContext, workflowsEnabled: true },
     });
@@ -332,7 +333,7 @@ describe("claude-code provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: {
         ...fullProviderExecutionContext,
@@ -372,7 +373,7 @@ describe("claude-code provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: workspaceWriteProviderExecutionContext,
     });
@@ -393,7 +394,7 @@ describe("claude-code provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: workspaceWriteProviderExecutionContext,
     });
@@ -412,7 +413,7 @@ describe("claude-code provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-readonly",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: {
         workflowsEnabled: false,
@@ -424,7 +425,7 @@ describe("claude-code provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-full",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: fullProviderExecutionContext,
     });
@@ -441,7 +442,7 @@ describe("claude-code provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: {
         workflowsEnabled: false,
@@ -537,7 +538,7 @@ describe("claude-code provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: {
         workflowsEnabled: false,
@@ -557,7 +558,7 @@ describe("claude-code provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: {
         workflowsEnabled: false,
@@ -767,7 +768,7 @@ describe("claude-code provider adapter", () => {
       clientRequestId: "creq_2222222296",
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
-      input: [{ type: "text", text: "follow up" }],
+      input: [promptTextInput({ text: "follow up" })],
       options: fullProviderExecutionContext,
     });
     expect(cmd?.params).toMatchObject({
@@ -784,7 +785,7 @@ describe("claude-code provider adapter", () => {
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
       expectedTurnId: "turn-1",
-      input: [{ type: "text", text: "steer" }],
+      input: [promptTextInput({ text: "steer" })],
       options: fullProviderExecutionContext,
     });
     expect(cmd?.params).toMatchObject({
@@ -4390,7 +4391,7 @@ describe("claude-code provider adapter", () => {
       type: "thread/start",
       threadId: "bb-thread-1",
       cwd: "/tmp/worktree",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: {
         ...fullProviderExecutionContext,
@@ -4487,7 +4488,7 @@ describe("claude-code provider adapter", () => {
       type: "thread/start",
       threadId: "bb-thread-default",
       cwd: "/tmp/worktree",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: {
         ...fullProviderExecutionContext,

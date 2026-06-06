@@ -13,6 +13,7 @@ import {
   turnCompletedCountForThread,
   waitForRuntimeCondition,
 } from "./test/runtime-integration-harness.js";
+import { promptTextInput } from "./test/prompt-input.js";
 
 interface ThreadEnvCapture {
   fileName: string;
@@ -101,12 +102,11 @@ for (const providerId of providers) {
             clientRequestId: "creq_23456789ab",
             options,
             input: [
-              {
-                type: "text",
+              promptTextInput({
                 text: createCapturePrompt(
                   createCaptureCommand(firstCapture.fileName),
                 ),
-              },
+              }),
             ],
           }),
           ctx.runtime.runTurn({
@@ -114,12 +114,11 @@ for (const providerId of providers) {
             clientRequestId: "creq_23456789ab",
             options,
             input: [
-              {
-                type: "text",
+              promptTextInput({
                 text: createCapturePrompt(
                   createCaptureCommand(secondCapture.fileName),
                 ),
-              },
+              }),
             ],
           }),
         ]);

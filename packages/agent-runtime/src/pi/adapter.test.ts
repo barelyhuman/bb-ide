@@ -7,6 +7,7 @@ import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import { createPiProviderAdapter } from "./adapter.js";
 import { buildPiAvailableModels } from "./model-list.js";
 import type { ProviderExecutionContext } from "../provider-adapter.js";
+import { promptTextInput } from "../test/prompt-input.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(__dirname, "../__fixtures__/pi");
@@ -183,7 +184,7 @@ describe("pi provider adapter", () => {
           providerThreadId: "provider-thread-1",
           expectedTurnId: "turn-1",
           clientRequestId: "creq_23456789ad",
-          input: [{ type: "text", text: "steer turn" }],
+          input: [promptTextInput({ text: "steer turn" })],
           options: fullProviderExecutionContext,
         },
       }),
@@ -213,7 +214,7 @@ describe("pi provider adapter", () => {
           threadId: "t1",
           providerThreadId: "pi-1",
           clientRequestId: "creq_23456789ae",
-          input: [{ type: "text", text: "new turn" }],
+          input: [promptTextInput({ text: "new turn" })],
           options: fullProviderExecutionContext,
         },
       }),
@@ -286,7 +287,7 @@ describe("pi provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "t1",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: fullProviderExecutionContext,
     });
@@ -315,7 +316,7 @@ describe("pi provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "t1",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: {
         ...fullProviderExecutionContext,
@@ -348,7 +349,7 @@ describe("pi provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: {
         ...fullProviderExecutionContext,
@@ -423,7 +424,7 @@ describe("pi provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-replace",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "replace",
       options: {
         ...fullProviderExecutionContext,
@@ -515,7 +516,7 @@ describe("pi provider adapter", () => {
       clientRequestId: "creq_222222228c",
       threadId: "t1",
       providerThreadId: "pi-1",
-      input: [{ type: "text", text: "do it" }],
+      input: [promptTextInput({ text: "do it" })],
       options: fullProviderExecutionContext,
     });
     expect(cmd).toMatchObject({
@@ -532,7 +533,7 @@ describe("pi provider adapter", () => {
       threadId: "t1",
       providerThreadId: "pi-1",
       expectedTurnId: "turn-1",
-      input: [{ type: "text", text: "steer" }],
+      input: [promptTextInput({ text: "steer" })],
       options: fullProviderExecutionContext,
     });
     expect(cmd).toMatchObject({
@@ -1499,7 +1500,7 @@ describe("pi provider adapter", () => {
           type: "thread/start",
           cwd: "/tmp/worktree",
           threadId: "bb-thread-1",
-          input: [{ type: "text", text: "hello" }],
+          input: [promptTextInput({ text: "hello" })],
           instructionMode: "append",
           options: fullProviderExecutionContext,
         });

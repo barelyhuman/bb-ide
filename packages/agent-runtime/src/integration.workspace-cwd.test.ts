@@ -15,6 +15,7 @@ import {
   turnCompletedCountForThread,
   waitForRuntimeCondition,
 } from "./test/runtime-integration-harness.js";
+import { promptTextInput } from "./test/prompt-input.js";
 
 const providers = ["codex", "claude-code", "pi"];
 
@@ -60,13 +61,12 @@ for (const providerId of providers) {
           threadId,
           options,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 `Run these two shell commands exactly as written, in order, from the current working directory: ` +
                 `\`pwd && cat ${workspaceMarkerName}\` and \`cd .. && pwd && cat ${parentMarkerName}\`. ` +
                 "Do not use absolute paths. After both commands finish, reply with exactly DONE.",
-            },
+            }),
           ],
         });
 

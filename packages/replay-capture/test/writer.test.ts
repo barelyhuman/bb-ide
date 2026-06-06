@@ -15,6 +15,7 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime/capture";
 import {
+  type PromptInput,
   turnScope,
   type ResolvedThreadExecutionOptions,
   type ThreadEvent,
@@ -79,6 +80,14 @@ function agentMessageDeltaEvent(threadId: string): ThreadEvent {
     itemId: "item-1",
     delta: "late usage",
   };
+}
+
+interface TextInputArgs {
+  text: string;
+}
+
+function textInput(args: TextInputArgs): PromptInput {
+  return { type: "text", text: args.text, mentions: [] };
 }
 
 function replayRoot(dataDir: string): string {
@@ -179,7 +188,7 @@ function replayFixtureManifest(captureId: string): ReplayCaptureManifest {
     turns: [
       {
         turnId: "turn-1",
-        userInput: [{ type: "text", text: "Fixture prompt" }],
+        userInput: [textInput({ text: "Fixture prompt" })],
         createdAt: 1_000,
       },
     ],
@@ -247,7 +256,7 @@ function recordStarted(
   service.recordTurnRequest({
     threadId,
     kind: "thread-start",
-    input: [{ type: "text", text: `Hello from ${threadId}` }],
+    input: [textInput({ text: `Hello from ${threadId}` })],
     execution: DEFAULT_TEST_EXECUTION,
   });
   service.recordThreadEvent({
@@ -615,7 +624,7 @@ describe("createReplayCaptureService", () => {
     service.recordTurnRequest({
       threadId: "thr-1",
       kind: "thread-start",
-      input: [{ type: "text", text: "Original prompt text" }],
+      input: [textInput({ text: "Original prompt text" })],
       execution: DEFAULT_TEST_EXECUTION,
     });
 
@@ -680,7 +689,7 @@ describe("createReplayCaptureService", () => {
       turns: [
         {
           turnId: "turn-1",
-          userInput: [{ type: "text", text: "Original prompt text" }],
+          userInput: [textInput({ text: "Original prompt text" })],
           createdAt: 1_000,
         },
       ],
@@ -706,7 +715,7 @@ describe("createReplayCaptureService", () => {
     expect(manifest.turns).toEqual([
       {
         turnId: "turn-1",
-        userInput: [{ type: "text", text: "Original prompt text" }],
+        userInput: [textInput({ text: "Original prompt text" })],
         createdAt: 1_000,
       },
     ]);
@@ -808,7 +817,7 @@ describe("createReplayCaptureService", () => {
       threadId: "thr-follow-up",
       kind: "turn-start",
       input: [
-        { type: "text", text: "Follow-up question" },
+        textInput({ text: "Follow-up question" }),
         { type: "localFile", path: "/tmp/notes.md", name: "notes.md" },
       ],
       execution: DEFAULT_TEST_EXECUTION,
@@ -830,7 +839,7 @@ describe("createReplayCaptureService", () => {
       {
         turnId: "turn-1",
         userInput: [
-          { type: "text", text: "Follow-up question" },
+          textInput({ text: "Follow-up question" }),
           { type: "localFile", path: "/tmp/notes.md", name: "notes.md" },
         ],
         createdAt: 1_000,
@@ -898,7 +907,7 @@ describe("createReplayCaptureService", () => {
       service.recordTurnRequest({
         threadId,
         kind: "thread-start",
-        input: [{ type: "text", text: `prompt ${threadId}` }],
+        input: [textInput({ text: `prompt ${threadId}` })],
         execution: DEFAULT_TEST_EXECUTION,
       });
       service.recordRuntimeCaptureEntry({
@@ -1120,7 +1129,7 @@ describe("createReplayCaptureService", () => {
     service.recordTurnRequest({
       threadId: "thr-pending-raw",
       kind: "turn-start",
-      input: [{ type: "text", text: "second-turn" }],
+      input: [textInput({ text: "second-turn" })],
       execution: DEFAULT_TEST_EXECUTION,
     });
     const started = turnStartedEvent("thr-pending-raw");
@@ -1178,7 +1187,7 @@ describe("createReplayCaptureService", () => {
     service.recordTurnRequest({
       threadId: "thr-capped",
       kind: "thread-start",
-      input: [{ type: "text", text: "capped prompt" }],
+      input: [textInput({ text: "capped prompt" })],
       execution: DEFAULT_TEST_EXECUTION,
     });
     recordRawTranslatedThreadEvent({

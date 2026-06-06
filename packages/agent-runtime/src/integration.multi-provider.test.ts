@@ -11,6 +11,7 @@ import {
   waitForThreadTurnCompleted,
   waitForTurnCompletedCount,
 } from "./test/runtime-integration-harness.js";
+import { promptTextInput } from "./test/prompt-input.js";
 
 const CODEX_CONCURRENT_TURN_TIMEOUT_MS = 60_000;
 
@@ -49,13 +50,13 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
           ctx.runtime.runTurn({
             clientRequestId: "creq_2222222245",
             threadId: threadA,
-            input: [{ type: "text", text: "Reply with exactly: THREAD_A_OK" }],
+            input: [promptTextInput({ text: "Reply with exactly: THREAD_A_OK" })],
             options,
           }),
           ctx.runtime.runTurn({
             clientRequestId: "creq_2222222246",
             threadId: threadB,
-            input: [{ type: "text", text: "Reply with exactly: THREAD_B_OK" }],
+            input: [promptTextInput({ text: "Reply with exactly: THREAD_B_OK" })],
             options,
           }),
         ]);
@@ -124,13 +125,13 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
           ctx.runtime.runTurn({
             clientRequestId: "creq_2222222247",
             threadId: codexThread,
-            input: [{ type: "text", text: "Reply with exactly: CODEX_OK" }],
+            input: [promptTextInput({ text: "Reply with exactly: CODEX_OK" })],
             options: codexOptions,
           }),
           ctx.runtime.runTurn({
             clientRequestId: "creq_2222222248",
             threadId: claudeThread,
-            input: [{ type: "text", text: "Reply with exactly: CLAUDE_OK" }],
+            input: [promptTextInput({ text: "Reply with exactly: CLAUDE_OK" })],
             options: claudeOptions,
           }),
         ]);
@@ -207,10 +208,9 @@ describe.concurrent("multi-provider resume scenarios", () => {
           clientRequestId: "creq_2222222249",
           threadId: codexThreadId1,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text: "Remember the fruit APPLE. Just confirm you will remember it.",
-            },
+            }),
           ],
           options: codexOptions,
         }),
@@ -218,10 +218,9 @@ describe.concurrent("multi-provider resume scenarios", () => {
           clientRequestId: "creq_222222224a",
           threadId: claudeThreadId1,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text: "Remember the fruit ORANGE. Just confirm you will remember it.",
-            },
+            }),
           ],
           options: claudeOptions,
         }),
@@ -289,10 +288,9 @@ describe.concurrent("multi-provider resume scenarios", () => {
             clientRequestId: "creq_222222224b",
             threadId: codexThreadId2,
             input: [
-              {
-                type: "text",
+              promptTextInput({
                 text: "What fruit did I ask you to remember? Reply with just the fruit name.",
-              },
+              }),
             ],
             options: codexOptions,
           }),
@@ -300,10 +298,9 @@ describe.concurrent("multi-provider resume scenarios", () => {
             clientRequestId: "creq_222222224c",
             threadId: claudeThreadId2,
             input: [
-              {
-                type: "text",
+              promptTextInput({
                 text: "What fruit did I ask you to remember? Reply with just the fruit name.",
-              },
+              }),
             ],
             options: claudeOptions,
           }),

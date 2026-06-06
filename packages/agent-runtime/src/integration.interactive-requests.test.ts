@@ -7,6 +7,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { promptTextInput } from "./test/prompt-input.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -94,10 +95,9 @@ describe("interactive request scenarios", () => {
           clientRequestId: "creq_222222222x",
           threadId,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text: "What is the repo validation phrase? Reply with only that phrase.",
-            },
+            }),
           ],
           options,
         });
@@ -168,12 +168,11 @@ describe("interactive request scenarios", () => {
           clientRequestId: "creq_222222222y",
           threadId,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 `Use the Read tool to read ${filePath}, ` +
                 "then reply with exactly the first line from the file and nothing else.",
-            },
+            }),
           ],
           options,
         });
@@ -242,13 +241,12 @@ describe("interactive request scenarios", () => {
           threadId,
           options,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 `Use the Write tool to create exactly this file: ${filePath}. ` +
                 `The file content must be exactly ${token} with no trailing newline. ` +
                 "Do not use Bash. After the file is written, reply with exactly DONE.",
-            },
+            }),
           ],
         });
 
@@ -299,12 +297,11 @@ describe("interactive request scenarios", () => {
           threadId,
           options,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 `Use Bash to run exactly: printf '${token}' > ${fileName}. ` +
                 "Do not use the Write tool. After the command finishes, reply with exactly DONE.",
-            },
+            }),
           ],
         });
 
@@ -358,12 +355,11 @@ describe("interactive request scenarios", () => {
           threadId,
           options,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 `Use Bash to run exactly: printf '${token}' > '${filePath}'. ` +
                 "If it is denied or blocked, say DENIED.",
-            },
+            }),
           ],
         });
 
@@ -415,12 +411,11 @@ describe("interactive request scenarios", () => {
           threadId,
           options,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 `Run this exact shell command: printf '${token}' > ${fileName}. ` +
                 "After the command finishes, reply with exactly DONE.",
-            },
+            }),
           ],
         });
 
@@ -476,12 +471,11 @@ describe("interactive request scenarios", () => {
           threadId,
           options,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 `Run this exact shell command: printf '${token}' > '${filePath}'. ` +
                 "If approval is needed, request approval. If it is denied or blocked, report the exact error. Otherwise reply DONE.",
-            },
+            }),
           ],
         });
 
@@ -542,12 +536,11 @@ describe("interactive request scenarios", () => {
           threadId,
           options,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 `Run this exact shell command: printf '${token}' > ${fileName}. ` +
                 "If approval is needed, request approval. After the command finishes, reply with exactly DONE.",
-            },
+            }),
           ],
         });
 
@@ -607,13 +600,12 @@ describe("interactive request scenarios", () => {
           threadId,
           options,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 `Create a file named ${fileName} in the current workspace. ` +
                 `The file content must be exactly ${token} with no trailing newline. ` +
                 "Do not run shell commands. After the file is written, reply with exactly DONE.",
-            },
+            }),
           ],
         });
 
@@ -724,12 +716,11 @@ describe("interactive request scenarios", () => {
           threadId,
           options,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 `Run this exact shell command: printf '${token}' > ${fileName}. ` +
                 "If approval is denied, reply with exactly DENIED.",
-            },
+            }),
           ],
         });
 
@@ -792,12 +783,11 @@ describe("interactive request scenarios", () => {
           threadId,
           options,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 `Run this exact shell command: printf '${token}' > ${fileName}. ` +
                 "If it is denied, say DENIED.",
-            },
+            }),
           ],
         });
 
@@ -847,12 +837,11 @@ describe("interactive request scenarios", () => {
           threadId,
           options,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 "Run this exact shell command: curl -L --max-time 10 https://example.com >/dev/null. " +
                 "If approval is needed, request approval. After the command finishes, reply with exactly DONE.",
-            },
+            }),
           ],
         });
 
@@ -929,12 +918,11 @@ describe("interactive request scenarios", () => {
           threadId,
           options,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 `Use Bash to run exactly: printf '${token}' > ${fileName}. ` +
                 "After the command finishes, reply with exactly DONE.",
-            },
+            }),
           ],
         });
 
@@ -1012,13 +1000,12 @@ describe("interactive request scenarios", () => {
           threadId,
           options,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 `Use the Write tool to create exactly this file: ${filePath}. ` +
                 `The file content must be exactly ${token} with no trailing newline. ` +
                 "Do not use Bash. After the file is written, reply with exactly DONE.",
-            },
+            }),
           ],
         });
 
@@ -1093,12 +1080,11 @@ describe("interactive request scenarios", () => {
           threadId,
           options,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 `Use WebFetch to fetch ${fetchUrl}. ` +
                 "After the fetch finishes, reply with exactly FIRST_DONE.",
-            },
+            }),
           ],
         });
 
@@ -1144,12 +1130,11 @@ describe("interactive request scenarios", () => {
           threadId,
           options,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 `Use WebFetch to fetch ${fetchUrl} again. ` +
                 "After the fetch finishes, reply with exactly SECOND_DONE.",
-            },
+            }),
           ],
         });
 
@@ -1211,13 +1196,12 @@ describe("interactive request scenarios", () => {
           threadId,
           options,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 "This is a local integration test in an empty temporary workspace. " +
                 `Use Bash to run exactly: printf '${token}' > ${fileName}. ` +
                 "If permission is denied by the harness, reply with exactly DENIED.",
-            },
+            }),
           ],
         });
 
@@ -1279,12 +1263,11 @@ describe("interactive request scenarios", () => {
           threadId,
           options,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 `Use Bash to run exactly: printf '${token}' > ${fileName}. ` +
                 "If it is denied, say DENIED.",
-            },
+            }),
           ],
         });
 

@@ -12,6 +12,7 @@ import {
   type JsonRpcMessage,
   type ProviderInboundRequest,
 } from "./runtime-json-rpc.js";
+import { promptTextInput } from "./test/prompt-input.js";
 import { fakeProviderScriptPath } from "./test/index.js";
 import {
   createFakeAdapter,
@@ -82,7 +83,7 @@ describe("createAgentRuntime tool calls", () => {
     await runtime.runTurn({
       clientRequestId: "creq_222222223z",
       threadId: "t1",
-      input: [{ type: "text", text: "call_tool:my_test_tool" }],
+      input: [promptTextInput({ text: "call_tool:my_test_tool" })],
       options: fullRuntimeOptions,
     });
     await waitForRuntimeState({
@@ -149,7 +150,7 @@ describe("createAgentRuntime tool calls", () => {
     await runtime.runTurn({
       clientRequestId: "creq_222222223y",
       threadId: "t1",
-      input: [{ type: "text", text: "call_tool:my_test_tool" }],
+      input: [promptTextInput({ text: "call_tool:my_test_tool" })],
       options: fullRuntimeOptions,
     });
     await waitForRuntimeState({
@@ -342,7 +343,7 @@ describe("createAgentRuntime tool calls", () => {
     await runtime.runTurn({
       clientRequestId: "creq_2222222242",
       threadId: "t1",
-      input: [{ type: "text", text: "call_tool:my_test_tool" }],
+      input: [promptTextInput({ text: "call_tool:my_test_tool" })],
       options: fullRuntimeOptions,
     });
     await waitForThreadTurnCompleted({
@@ -378,7 +379,7 @@ describe("createAgentRuntime tool calls", () => {
     await runtime.runTurn({
       clientRequestId: "creq_2222222243",
       threadId: "t1",
-      input: [{ type: "text", text: "call_tool:failing_tool" }],
+      input: [promptTextInput({ text: "call_tool:failing_tool" })],
       options: fullRuntimeOptions,
     });
     await waitForThreadTurnCompleted({
@@ -414,7 +415,7 @@ describe("createAgentRuntime tool calls", () => {
     await runtime.runTurn({
       clientRequestId: "creq_2222222244",
       threadId: "t1",
-      input: [{ type: "text", text: "call_tool:my_test_tool" }],
+      input: [promptTextInput({ text: "call_tool:my_test_tool" })],
       options: fullRuntimeOptions,
     });
     await waitForRuntimeState({

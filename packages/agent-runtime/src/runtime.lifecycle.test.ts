@@ -9,6 +9,7 @@ import type {
   ProviderCommandPlan,
   ProviderCommandProcessEffect,
 } from "./provider-adapter.js";
+import { promptTextInput } from "./test/prompt-input.js";
 import { createAgentRuntimeWithAdapters } from "./runtime.js";
 import { fakeProviderScriptPath } from "./test/index.js";
 import {
@@ -470,7 +471,7 @@ rl.on("line", (line) => {
       await runtime.runTurn({
         clientRequestId: "creq_222222223h",
         threadId: "t1",
-        input: [{ type: "text", text: "follow up" }],
+        input: [promptTextInput({ text: "follow up" })],
         instructions: "Updated instructions",
         options: fullRuntimeOptions,
       });
@@ -572,7 +573,7 @@ rl.on("line", (line) => {
       await runtime.runTurn({
         clientRequestId: "creq_222222223i",
         threadId: "t1",
-        input: [{ type: "text", text: "follow up" }],
+        input: [promptTextInput({ text: "follow up" })],
         options: fullRuntimeOptions,
       });
 
@@ -633,7 +634,7 @@ rl.on("line", (line) => {
       await runtime.runTurn({
         clientRequestId: "creq_222222223j",
         threadId: "t1",
-        input: [{ type: "text", text: "follow up" }],
+        input: [promptTextInput({ text: "follow up" })],
         options: {
           ...fullRuntimeOptions,
           permissionEscalation: "deny",
@@ -692,7 +693,7 @@ rl.on("line", (line) => {
       await runtime.runTurn({
         clientRequestId: "creq_222222223k",
         threadId: "t1",
-        input: [{ type: "text", text: "hello" }],
+        input: [promptTextInput({ text: "hello" })],
         options: fullRuntimeOptions,
       });
       await waitForThreadTurnCompleted({
@@ -776,7 +777,7 @@ rl.on("line", (line) => {
       await runtime.runTurn({
         clientRequestId: "creq_222222223m",
         threadId: "t1",
-        input: [{ type: "text", text: "hello" }],
+        input: [promptTextInput({ text: "hello" })],
         options: fullRuntimeOptions,
       });
       await waitForThreadTurnCompleted({
@@ -809,7 +810,7 @@ rl.on("line", (line) => {
         projectId: "p1",
         providerId: "fake",
         clientRequestId: "creq_222222223n",
-        input: [{ type: "text", text: "hello from start" }],
+        input: [promptTextInput({ text: "hello from start" })],
         options: fullRuntimeOptions,
       });
       await waitForThreadTurnCompleted({
@@ -856,7 +857,7 @@ rl.on("line", (line) => {
       await runtime.runTurn({
         clientRequestId: "creq_222222223n",
         threadId: "t1",
-        input: [{ type: "text", text: "hello after start" }],
+        input: [promptTextInput({ text: "hello after start" })],
         options: fullRuntimeOptions,
       });
       await waitForThreadTurnCompleted({
@@ -898,7 +899,7 @@ rl.on("line", (line) => {
       await runtime.runTurn({
         clientRequestId: "creq_222222223p",
         threadId: "t1",
-        input: [{ type: "text", text: "after resume" }],
+        input: [promptTextInput({ text: "after resume" })],
         options: fullRuntimeOptions,
       });
       await waitForThreadTurnCompleted({
@@ -987,7 +988,7 @@ rl.on("line", (line) => {
       await runtime.runTurn({
         clientRequestId: "creq_222222223q",
         threadId: "t1",
-        input: [{ type: "text", text: "delay:500" }],
+        input: [promptTextInput({ text: "delay:500" })],
         options: fullRuntimeOptions,
       });
       await waitForThreadTurnStarted({
@@ -1006,7 +1007,7 @@ rl.on("line", (line) => {
         clientRequestId: "creq_222222223r",
         threadId: "t1",
         expectedTurnId: "turn-1",
-        input: [{ type: "text", text: "still active" }],
+        input: [promptTextInput({ text: "still active" })],
         options: fullRuntimeOptions,
       });
 
@@ -1064,7 +1065,7 @@ rl.on("line", (line) => {
       await runtime.runTurn({
         clientRequestId: "creq_222222223s",
         threadId: "t1",
-        input: [{ type: "text", text: "after restart" }],
+        input: [promptTextInput({ text: "after restart" })],
         options: fullRuntimeOptions,
       });
       await waitForThreadAgentMessageText({
@@ -1287,7 +1288,7 @@ rl.on("line", (line) => {
       await runtime.runTurn({
         clientRequestId: "creq_222222223t",
         threadId: "t1",
-        input: [{ type: "text", text: "delay:500" }],
+        input: [promptTextInput({ text: "delay:500" })],
         options: fullRuntimeOptions,
       });
       await waitForThreadTurnStarted({
@@ -1301,7 +1302,7 @@ rl.on("line", (line) => {
         clientRequestId: "creq_222222223u",
         threadId: "t1",
         expectedTurnId: "turn-1",
-        input: [{ type: "text", text: "steer input" }],
+        input: [promptTextInput({ text: "steer input" })],
         options: fullRuntimeOptions,
       });
       await runtime.shutdown();
@@ -1339,7 +1340,7 @@ rl.on("line", (line) => {
       await runtime.runTurn({
         clientRequestId: "creq_222222223v",
         threadId: "t1",
-        input: [{ type: "text", text: "use a different setup" }],
+        input: [promptTextInput({ text: "use a different setup" })],
         options: { ...fullRuntimeOptions, model: "fake-model-2" },
         instructions: "Updated instructions",
       });
@@ -1394,7 +1395,7 @@ rl.on("line", (line) => {
       await runtime.runTurn({
         clientRequestId: "creq_222222223w",
         threadId: "t1",
-        input: [{ type: "text", text: "delay:500" }],
+        input: [promptTextInput({ text: "delay:500" })],
         options: { ...fullRuntimeOptions, model: "fake-model" },
         instructions: "Initial instructions",
       });
@@ -1411,7 +1412,7 @@ rl.on("line", (line) => {
         clientRequestId: "creq_222222223x",
         threadId: "t1",
         expectedTurnId: "turn-1",
-        input: [{ type: "text", text: "apply a new setup now" }],
+        input: [promptTextInput({ text: "apply a new setup now" })],
         options: { ...fullRuntimeOptions, model: "fake-model-2" },
         instructions: "Updated instructions",
       });
@@ -1473,7 +1474,7 @@ rl.on("line", (line) => {
         runtime.runTurn({
           clientRequestId: "creq_222222223y",
           threadId: "nonexistent",
-          input: [{ type: "text", text: "hi" }],
+          input: [promptTextInput({ text: "hi" })],
           options: fullRuntimeOptions,
         }),
       ).rejects.toThrow('No provider associated with thread "nonexistent"');

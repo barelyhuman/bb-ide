@@ -4,6 +4,7 @@ import type {
   ThreadEventWebFetchItem,
   ThreadEventWebSearchItem,
 } from "@bb/domain";
+import { promptTextInput } from "./test/prompt-input.js";
 import {
   cleanup,
   createTestRuntime,
@@ -107,7 +108,7 @@ describe("web normalization integration", () => {
       await ctx.runtime.runTurn({
         threadId,
         clientRequestId: "creq_23456789ab",
-        input: [{ type: "text", text: buildCodexSearchPrompt() }],
+        input: [promptTextInput({ text: buildCodexSearchPrompt() })],
         options,
       });
 
@@ -160,7 +161,7 @@ describe("web normalization integration", () => {
       await ctx.runtime.runTurn({
         threadId,
         clientRequestId: "creq_23456789ab",
-        input: [{ type: "text", text: buildCodexOpenPagePrompt() }],
+        input: [promptTextInput({ text: buildCodexOpenPagePrompt() })],
         options,
       });
 
@@ -223,7 +224,7 @@ describe("web normalization integration", () => {
       await ctx.runtime.runTurn({
         threadId,
         clientRequestId: "creq_23456789ab",
-        input: [{ type: "text", text: buildClaudeWebPrompt() }],
+        input: [promptTextInput({ text: buildClaudeWebPrompt() })],
         options,
       });
 

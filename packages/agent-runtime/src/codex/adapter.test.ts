@@ -6,6 +6,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { promptTextInput } from "../test/prompt-input.js";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -219,7 +220,7 @@ function buildLinkedWorktreeThreadStartCommand(
     type: "thread/start",
     cwd: args.fixture.workspacePath,
     threadId: args.threadId ?? "bb-thread-1",
-    input: [{ type: "text", text: "hello" }],
+    input: [promptTextInput({ text: "hello" })],
     instructionMode: "append",
     options: workspaceWriteAskProviderExecutionContext,
   };
@@ -294,7 +295,7 @@ describe("codex provider adapter", () => {
           clientRequestId: "creq_222222228e",
           threadId: "thread-1",
           providerThreadId: "provider-thread-1",
-          input: [{ type: "text", text: "normal turn" }],
+          input: [promptTextInput({ text: "normal turn" })],
           options: fullProviderExecutionContext,
         },
       }),
@@ -308,7 +309,7 @@ describe("codex provider adapter", () => {
           providerThreadId: "provider-thread-1",
           expectedTurnId: "turn-1",
           clientRequestId: "creq_23456789af",
-          input: [{ type: "text", text: "steer turn" }],
+          input: [promptTextInput({ text: "steer turn" })],
           options: fullProviderExecutionContext,
         },
       }),
@@ -351,7 +352,7 @@ describe("codex provider adapter", () => {
           providerThreadId: "provider-thread-1",
           expectedTurnId: "turn-1",
           clientRequestId: "creq_23456789ah",
-          input: [{ type: "text", text: "" }],
+          input: [promptTextInput({ text: "" })],
           options: fullProviderExecutionContext,
         },
       }),
@@ -374,7 +375,7 @@ describe("codex provider adapter", () => {
       threadId: "thread-1",
       providerThreadId: "provider-thread-1",
       clientRequestId: "creq_23456789ag",
-      input: [{ type: "text", text: "normal turn" }],
+      input: [promptTextInput({ text: "normal turn" })],
       options: fullProviderExecutionContext,
     });
 
@@ -425,7 +426,7 @@ describe("codex provider adapter", () => {
       threadId: "thread-1",
       providerThreadId: "provider-thread-1",
       clientRequestId: "creq_23456789ag",
-      input: [{ type: "text", text: "normal turn" }],
+      input: [promptTextInput({ text: "normal turn" })],
       options: fullProviderExecutionContext,
     });
     expect(prepared).not.toBeNull();
@@ -528,7 +529,7 @@ describe("codex provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "t1",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: fullProviderExecutionContext,
     });
@@ -551,7 +552,7 @@ describe("codex provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "t1",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: workspaceWriteAskProviderExecutionContext,
     });
@@ -594,7 +595,7 @@ describe("codex provider adapter", () => {
         clientRequestId: "creq_222222228f",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
-        input: [{ type: "text", text: "edit it" }],
+        input: [promptTextInput({ text: "edit it" })],
         options: workspaceWriteAskProviderExecutionContext,
       });
 
@@ -674,7 +675,7 @@ describe("codex provider adapter", () => {
         clientRequestId: "creq_222222228g",
         threadId: "bb-thread-start",
         providerThreadId: "codex-thread-start",
-        input: [{ type: "text", text: "commit it" }],
+        input: [promptTextInput({ text: "commit it" })],
         options: workspaceWriteAskProviderExecutionContext,
       });
       const resumeTurnCmd = adapter.buildCommandPlan({
@@ -682,7 +683,7 @@ describe("codex provider adapter", () => {
         clientRequestId: "creq_222222228h",
         threadId: "bb-thread-resume",
         providerThreadId: "codex-thread-resume",
-        input: [{ type: "text", text: "commit it" }],
+        input: [promptTextInput({ text: "commit it" })],
         options: workspaceWriteAskProviderExecutionContext,
       });
 
@@ -731,7 +732,7 @@ describe("codex provider adapter", () => {
         clientRequestId: "creq_222222228i",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
-        input: [{ type: "text", text: "edit it" }],
+        input: [promptTextInput({ text: "edit it" })],
         options: workspaceWriteAskProviderExecutionContext,
       });
 
@@ -787,7 +788,7 @@ describe("codex provider adapter", () => {
         clientRequestId: "creq_222222228j",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
-        input: [{ type: "text", text: "edit it" }],
+        input: [promptTextInput({ text: "edit it" })],
         options: workspaceWriteAskProviderExecutionContext,
       });
       const secondTurnCmd = adapter.buildCommandPlan({
@@ -795,7 +796,7 @@ describe("codex provider adapter", () => {
         clientRequestId: "creq_222222228k",
         threadId: "bb-thread-2",
         providerThreadId: "codex-thread-2",
-        input: [{ type: "text", text: "edit it" }],
+        input: [promptTextInput({ text: "edit it" })],
         options: workspaceWriteAskProviderExecutionContext,
       });
 
@@ -833,7 +834,7 @@ describe("codex provider adapter", () => {
         type: "thread/start",
         cwd: fixture.workspacePath,
         threadId: "bb-thread-1",
-        input: [{ type: "text", text: "hello" }],
+        input: [promptTextInput({ text: "hello" })],
         instructionMode: "append",
         options: workspaceWriteAskProviderExecutionContext,
       });
@@ -851,7 +852,7 @@ describe("codex provider adapter", () => {
         clientRequestId: "creq_222222228m",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
-        input: [{ type: "text", text: "edit it" }],
+        input: [promptTextInput({ text: "edit it" })],
         options: workspaceWriteAskProviderExecutionContext,
       });
 
@@ -883,7 +884,7 @@ describe("codex provider adapter", () => {
         type: "thread/start",
         cwd: fixture.workspacePath,
         threadId: "bb-thread-1",
-        input: [{ type: "text", text: "hello" }],
+        input: [promptTextInput({ text: "hello" })],
         instructionMode: "append",
         options: workspaceWriteAskProviderExecutionContext,
       });
@@ -901,7 +902,7 @@ describe("codex provider adapter", () => {
         clientRequestId: "creq_222222228n",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
-        input: [{ type: "text", text: "edit it" }],
+        input: [promptTextInput({ text: "edit it" })],
         options: workspaceWriteAskProviderExecutionContext,
       });
 
@@ -946,7 +947,7 @@ describe("codex provider adapter", () => {
         clientRequestId: "creq_222222228p",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
-        input: [{ type: "text", text: "edit it" }],
+        input: [promptTextInput({ text: "edit it" })],
         options: workspaceWriteAskProviderExecutionContext,
       });
 
@@ -986,7 +987,7 @@ describe("codex provider adapter", () => {
         type: "thread/start",
         cwd: fixture.workspacePath,
         threadId: "bb-thread-1",
-        input: [{ type: "text", text: "hello" }],
+        input: [promptTextInput({ text: "hello" })],
         instructionMode: "append",
         options: workspaceWriteAskProviderExecutionContext,
       });
@@ -1020,7 +1021,7 @@ describe("codex provider adapter", () => {
           type: "thread/start",
           cwd: fixture.workspacePath,
           threadId: "bb-thread-1",
-          input: [{ type: "text", text: "hello" }],
+          input: [promptTextInput({ text: "hello" })],
           instructionMode: "append",
           options: workspaceWriteAskProviderExecutionContext,
         });
@@ -1076,7 +1077,7 @@ describe("codex provider adapter", () => {
         clientRequestId: "creq_222222228q",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
-        input: [{ type: "text", text: "edit it" }],
+        input: [promptTextInput({ text: "edit it" })],
         options: workspaceWriteAskProviderExecutionContext,
       });
 
@@ -1106,7 +1107,7 @@ describe("codex provider adapter", () => {
           type: "thread/start",
           cwd: fixture.workspacePath,
           threadId: "bb-thread-1",
-          input: [{ type: "text", text: "hello" }],
+          input: [promptTextInput({ text: "hello" })],
           instructionMode: "append",
           options: workspaceWriteAskProviderExecutionContext,
         });
@@ -1118,7 +1119,7 @@ describe("codex provider adapter", () => {
           clientRequestId: "creq_222222228r",
           threadId: "bb-thread-1",
           providerThreadId: "codex-thread-1",
-          input: [{ type: "text", text: "edit it" }],
+          input: [promptTextInput({ text: "edit it" })],
           options: workspaceWriteAskProviderExecutionContext,
         });
 
@@ -1158,7 +1159,7 @@ describe("codex provider adapter", () => {
         type: "thread/start",
         cwd: fixture.workspacePath,
         threadId: "bb-thread-1",
-        input: [{ type: "text", text: "hello" }],
+        input: [promptTextInput({ text: "hello" })],
         instructionMode: "append",
         options: workspaceWriteAskProviderExecutionContext,
       });
@@ -1172,7 +1173,7 @@ describe("codex provider adapter", () => {
         clientRequestId: "creq_222222228s",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
-        input: [{ type: "text", text: "edit it" }],
+        input: [promptTextInput({ text: "edit it" })],
         options: workspaceWriteAskProviderExecutionContext,
       });
 
@@ -1227,7 +1228,7 @@ describe("codex provider adapter", () => {
         type: "thread/start",
         cwd: fixture.workspacePath,
         threadId: "bb-thread-1",
-        input: [{ type: "text", text: "hello" }],
+        input: [promptTextInput({ text: "hello" })],
         instructionMode: "append",
         options: workspaceWriteAskProviderExecutionContext,
       });
@@ -1241,7 +1242,7 @@ describe("codex provider adapter", () => {
         clientRequestId: "creq_222222228t",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
-        input: [{ type: "text", text: "edit it" }],
+        input: [promptTextInput({ text: "edit it" })],
         options: workspaceWriteAskProviderExecutionContext,
       });
 
@@ -1283,7 +1284,7 @@ describe("codex provider adapter", () => {
           type: "thread/start",
           cwd: fixture.workspacePath,
           threadId: "bb-thread-1",
-          input: [{ type: "text", text: "hello" }],
+          input: [promptTextInput({ text: "hello" })],
           instructionMode: "append",
           options: workspaceWriteAskProviderExecutionContext,
         });
@@ -1297,7 +1298,7 @@ describe("codex provider adapter", () => {
           clientRequestId: "creq_222222228u",
           threadId: "bb-thread-1",
           providerThreadId: "codex-thread-1",
-          input: [{ type: "text", text: "edit it" }],
+          input: [promptTextInput({ text: "edit it" })],
           options: workspaceWriteAskProviderExecutionContext,
         });
 
@@ -1347,7 +1348,7 @@ describe("codex provider adapter", () => {
         clientRequestId: "creq_222222228v",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
-        input: [{ type: "text", text: "edit it" }],
+        input: [promptTextInput({ text: "edit it" })],
         options: workspaceWriteAskProviderExecutionContext,
       });
 
@@ -1387,7 +1388,7 @@ describe("codex provider adapter", () => {
         clientRequestId: "creq_222222228w",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
-        input: [{ type: "text", text: "edit it" }],
+        input: [promptTextInput({ text: "edit it" })],
         options: workspaceWriteAskProviderExecutionContext,
       });
 
@@ -1411,7 +1412,7 @@ describe("codex provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "t1",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: {
         workflowsEnabled: false,
@@ -1435,7 +1436,7 @@ describe("codex provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "t1",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: {
         workflowsEnabled: false,
@@ -1459,7 +1460,7 @@ describe("codex provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: fullProviderExecutionContext,
     });
@@ -1481,7 +1482,7 @@ describe("codex provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "append",
       options: {
         ...fullProviderExecutionContext,
@@ -1561,7 +1562,7 @@ describe("codex provider adapter", () => {
         type: "thread/start",
         cwd: "/tmp/worktree",
         threadId: "bb-thread-1",
-        input: [{ type: "text", text: "hello" }],
+        input: [promptTextInput({ text: "hello" })],
         instructionMode: "append",
         options: {
           ...fullProviderExecutionContext,
@@ -1578,7 +1579,7 @@ describe("codex provider adapter", () => {
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
-      input: [{ type: "text", text: "hello" }],
+      input: [promptTextInput({ text: "hello" })],
       instructionMode: "replace",
       options: {
         ...fullProviderExecutionContext,
@@ -1686,7 +1687,7 @@ describe("codex provider adapter", () => {
       clientRequestId: "creq_222222228x",
       threadId: "t1",
       providerThreadId: "codex-1",
-      input: [{ type: "text", text: "do it" }],
+      input: [promptTextInput({ text: "do it" })],
       options: fullProviderExecutionContext,
     });
     expect(cmd).toMatchObject({
@@ -1706,7 +1707,7 @@ describe("codex provider adapter", () => {
       clientRequestId: "creq_222222228y",
       threadId: "t1",
       providerThreadId: "codex-1",
-      input: [{ type: "text", text: "do it" }],
+      input: [promptTextInput({ text: "do it" })],
       options: workspaceWriteAskProviderExecutionContext,
     });
 
@@ -1725,7 +1726,7 @@ describe("codex provider adapter", () => {
       clientRequestId: "creq_222222228z",
       threadId: "t1",
       providerThreadId: "codex-1",
-      input: [{ type: "text", text: "edit it" }],
+      input: [promptTextInput({ text: "edit it" })],
       options: workspaceWriteAskProviderExecutionContext,
     });
     expect(cmd).toMatchObject({
@@ -1756,7 +1757,7 @@ describe("codex provider adapter", () => {
       clientRequestId: "creq_2222222292",
       threadId: "t1",
       providerThreadId: "codex-1",
-      input: [{ type: "text", text: "commit it" }],
+      input: [promptTextInput({ text: "commit it" })],
       options: workspaceWriteAskProviderExecutionContext,
     });
     expect(cmd).toMatchObject({
@@ -1782,7 +1783,7 @@ describe("codex provider adapter", () => {
       clientRequestId: "creq_2222222293",
       threadId: "t1",
       providerThreadId: "codex-1",
-      input: [{ type: "text", text: "inspect it" }],
+      input: [promptTextInput({ text: "inspect it" })],
       options: {
         workflowsEnabled: false,
         permissionMode: "readonly",
@@ -1808,7 +1809,7 @@ describe("codex provider adapter", () => {
       clientRequestId: "creq_2222222294",
       threadId: "t1",
       providerThreadId: "codex-1",
-      input: [{ type: "text", text: "inspect it" }],
+      input: [promptTextInput({ text: "inspect it" })],
       options: {
         workflowsEnabled: false,
         permissionMode: "readonly",
@@ -1834,7 +1835,7 @@ describe("codex provider adapter", () => {
       threadId: "t1",
       providerThreadId: "codex-1",
       expectedTurnId: "turn-3",
-      input: [{ type: "text", text: "steer it" }],
+      input: [promptTextInput({ text: "steer it" })],
       options: fullProviderExecutionContext,
     });
     expect(cmd).toMatchObject({

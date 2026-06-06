@@ -27,6 +27,7 @@ import {
   waitForThreadTurnStarted,
   waitForToolCallBeforeTurnCompletion,
 } from "./test/runtime-integration-harness.js";
+import { promptTextInput } from "./test/prompt-input.js";
 
 const providers = ["codex", "claude-code", "pi"];
 
@@ -73,7 +74,7 @@ for (const providerId of providers) {
           threadId,
           clientRequestId: "creq_23456789ab",
           options,
-          input: [{ type: "text", text: "Reply with exactly: PONG" }],
+          input: [promptTextInput({ text: "Reply with exactly: PONG" })],
         });
 
         await waitForThreadTurnCompleted({
@@ -118,7 +119,7 @@ for (const providerId of providers) {
         await ctx.runtime.runTurn({
           threadId,
           clientRequestId: "creq_23456789ab",
-          input: [{ type: "text", text: "Say hello in one word." }],
+          input: [promptTextInput({ text: "Say hello in one word." })],
           options,
         });
 
@@ -134,7 +135,7 @@ for (const providerId of providers) {
         await ctx.runtime.runTurn({
           threadId,
           clientRequestId: "creq_23456789ac",
-          input: [{ type: "text", text: "Now say goodbye in one word." }],
+          input: [promptTextInput({ text: "Now say goodbye in one word." })],
           options,
         });
 
@@ -179,12 +180,11 @@ for (const providerId of providers) {
           threadId,
           clientRequestId: "creq_23456789ab",
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 "Write a detailed 20 section essay about the history of computing " +
                 "with four sentences per section.",
-            },
+            }),
           ],
           options,
         });
@@ -209,7 +209,7 @@ for (const providerId of providers) {
           threadId,
           expectedTurnId: activeTurnId,
           clientRequestId: "creq_23456789ac",
-          input: [{ type: "text", text: steerText }],
+          input: [promptTextInput({ text: steerText })],
           options,
         });
 
@@ -267,12 +267,11 @@ for (const providerId of providers) {
           threadId,
           clientRequestId: "creq_23456789ab",
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text:
                 "Write a detailed 20 section essay about the history of computing " +
                 "with four sentences per section.",
-            },
+            }),
           ],
           options,
         });
@@ -315,10 +314,9 @@ for (const providerId of providers) {
           threadId,
           clientRequestId: "creq_23456789ac",
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text: "Reply with a short confirmation that you are ready for the next task.",
-            },
+            }),
           ],
           options,
         });
@@ -375,7 +373,7 @@ for (const providerId of providers) {
         await ctx.runtime.runTurn({
           clientRequestId: "creq_222222224d",
           threadId,
-          input: [{ type: "text", text: "What is 2+2?" }],
+          input: [promptTextInput({ text: "What is 2+2?" })],
           options,
         });
 
@@ -416,7 +414,7 @@ for (const providerId of providers) {
         await ctx.runtime.runTurn({
           clientRequestId: "creq_222222224e",
           threadId,
-          input: [{ type: "text", text: "Say hello in one word." }],
+          input: [promptTextInput({ text: "Say hello in one word." })],
           options,
         });
 
@@ -434,7 +432,7 @@ for (const providerId of providers) {
           await ctx.runtime.runTurn({
             clientRequestId: "creq_222222224f",
             threadId: badThreadId,
-            input: [{ type: "text", text: "This should fail." }],
+            input: [promptTextInput({ text: "This should fail." })],
             options,
           });
         } catch {
@@ -446,7 +444,7 @@ for (const providerId of providers) {
         await ctx.runtime.runTurn({
           clientRequestId: "creq_222222224g",
           threadId,
-          input: [{ type: "text", text: "Say goodbye in one word." }],
+          input: [promptTextInput({ text: "Say goodbye in one word." })],
           options,
         });
 
@@ -518,10 +516,9 @@ for (const providerId of providers) {
           clientRequestId: "creq_222222224h",
           threadId,
           input: [
-            {
-              type: "text",
+            promptTextInput({
               text: "Call the bb_test_ping tool right now and report what it returns.",
-            },
+            }),
           ],
           options,
         });
