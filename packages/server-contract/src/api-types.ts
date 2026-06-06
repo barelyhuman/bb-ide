@@ -1015,48 +1015,6 @@ export type ReorderPinnedThreadRequest = z.infer<
   typeof reorderPinnedThreadRequestSchema
 >;
 
-const persistentHostJoinRequestSchema = z
-  .object({
-    hostId: z.string().min(1).optional(),
-    hostType: z.literal("persistent").optional(),
-  })
-  .strict();
-
-const localHostJoinRequestSchema = z
-  .object({
-    hostId: z.string().min(1).optional(),
-    hostType: z.literal("persistent"),
-    joinMode: z.literal("local"),
-  })
-  .strict();
-
-export const createHostJoinRequestSchema = z.union([
-  localHostJoinRequestSchema,
-  persistentHostJoinRequestSchema,
-]);
-export type CreateHostJoinRequest = z.infer<typeof createHostJoinRequestSchema>;
-
-export const createHostJoinResponseSchema = z.object({
-  expiresAt: z.number().int().positive(),
-  hostId: z.string().min(1),
-  joinCode: z.string().min(1),
-  joinCommand: z.string().min(1),
-});
-export type CreateHostJoinResponse = z.infer<
-  typeof createHostJoinResponseSchema
->;
-
-export const updateHostRequestSchema = z
-  .object({
-    name: z.string().min(1),
-  })
-  .partial()
-  .refine(
-    (value) => value.name !== undefined,
-    "At least one field must be provided",
-  );
-export type UpdateHostRequest = z.infer<typeof updateHostRequestSchema>;
-
 export const managerHostEnvironmentSchema = z.object({
   type: z.literal("host"),
   hostId: z.string().min(1),

@@ -35,8 +35,6 @@ import type {
   CreateAppRequest,
   SyncAppSourceRequest,
   CreateAutomationRequest,
-  CreateHostJoinRequest,
-  CreateHostJoinResponse,
   CreateQueuedMessageRequest,
   CreateManagerThreadRequest,
   CreateProjectRequest,
@@ -112,7 +110,6 @@ import type {
   TimelineTurnSummaryDetailsResponse,
   UpdateAutomationRequest,
   UpdateEnvironmentRequest,
-  UpdateHostRequest,
   UpdateProjectRequest,
   UpdateProjectSourceRequest,
   UpdateThreadScheduleRequest,
@@ -389,21 +386,8 @@ export type PublicApiSchema = {
   "/hosts": {
     $get: Endpoint<EmptyInput, Host[]>;
   };
-  "/hosts/join": {
-    $post: Endpoint<
-      { json: CreateHostJoinRequest },
-      CreateHostJoinResponse,
-      201
-    >;
-  };
-  "/hosts/:id/join": {
-    /** Cancels pending join material and deletes the host row only when the host has never opened a session. */
-    $delete: Endpoint<PathId, { ok: true }>;
-  };
   "/hosts/:id": {
     $get: Endpoint<PathId, Host>;
-    $patch: Endpoint<PathId & { json: UpdateHostRequest }, Host>;
-    $delete: Endpoint<PathId, { ok: true }>;
   };
 
   // ─── Environments ────────────────────────────────────────────────────

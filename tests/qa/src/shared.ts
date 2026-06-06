@@ -10,17 +10,16 @@ import { fileURLToPath } from "node:url";
 import { hostSchema } from "@bb/domain";
 import type { Host } from "@bb/domain";
 import {
-  createHostJoinResponseSchema,
-  createLocalPersistentHostJoinRequest,
-  projectResponseSchema,
-  type CreateHostJoinRequest,
-  type CreateHostJoinResponse,
   type CreateProjectRequest,
   type ProjectResponse,
+  projectResponseSchema,
 } from "@bb/server-contract";
+import {
+  hostDaemonEnrollKeyResponseSchema,
+  type HostDaemonEnrollKeyRequest,
+  type HostDaemonEnrollKeyResponse,
+} from "@bb/host-daemon-contract";
 import { z } from "zod";
-
-export { createLocalPersistentHostJoinRequest };
 
 const execFile = promisify(execFileCallback);
 
@@ -315,11 +314,11 @@ export async function createProject(
   return projectResponseSchema.parse(await response.json());
 }
 
-export async function createHostJoin(
+export async function createHostEnrollKey(
   serverUrl: string,
-  body: CreateHostJoinRequest = { hostType: "persistent" },
-): Promise<CreateHostJoinResponse> {
-  const response = await fetch(`${serverUrl}/api/v1/hosts/join`, {
+  body: HostDaemonEnrollKeyRequest = {},
+): Promise<HostDaemonEnrollKeyResponse> {
+  const response = await fetch(`${serverUrl}/internal/hosts/enroll-key`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -328,19 +327,16 @@ export async function createHostJoin(
   });
   if (!response.ok) {
     throw new Error(
-      `Failed to create host join material: ${response.status} ${await response.text()}`,
+      `Failed to create host enroll key: ${response.status} ${await response.text()}`,
     );
   }
-  return createHostJoinResponseSchema.parse(await response.json());
+  return hostDaemonEnrollKeyResponseSchema.parse(await response.json());
 }
 
-export async function createStandaloneHostJoin(
+export async function createStandaloneHostEnrollKey(
   serverUrl: string,
-): Promise<CreateHostJoinResponse> {
-  return createHostJoin(
-    serverUrl,
-    createLocalPersistentHostJoinRequest({ hostId: null }),
-  );
+): Promise<HostDaemonEnrollKeyResponse> {
+  return createHostEnrollKey(serverUrl);
 }
 
 export async function killProcess(

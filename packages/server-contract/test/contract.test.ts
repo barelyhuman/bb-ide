@@ -16,10 +16,6 @@ import {
   automationSchema,
   createAutomationRequestSchema,
   createThreadTerminalRequestSchema,
-  createHostJoinRequestSchema,
-  createHostJoinResponseSchema,
-  createLocalPersistentHostJoinRequest,
-  createPersistentHostJoinRequest,
   createQueuedMessageRequestSchema,
   createManagerThreadRequestSchema,
   createProjectSourceRequestSchema,
@@ -74,10 +70,6 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Automation creation may omit autoArchive and use the server default.",
   "createAutomationRequestSchema.enabled":
     "Automation creation may omit enabled and use the server default.",
-  "createHostJoinRequestSchema.hostId":
-    "Host join initiation may omit hostId when the server should generate a new persistent host id.",
-  "createHostJoinRequestSchema.hostType":
-    "Host join initiation may omit hostType and let the server choose the default persistent host policy.",
   "createQueuedMessageRequestSchema.model":
     "Queued messages may inherit the thread's default model.",
   "createQueuedMessageRequestSchema.reasoningLevel":
@@ -903,67 +895,6 @@ describe("server-contract canonical schemas", () => {
     });
 
     expect(
-      createHostJoinRequestSchema.parse({
-        hostType: "persistent",
-      }),
-    ).toMatchObject({
-      hostType: "persistent",
-    });
-
-    expect(createHostJoinRequestSchema.parse({})).toEqual({});
-
-    expect(
-      createHostJoinRequestSchema.parse({
-        hostId: "host_local",
-        hostType: "persistent",
-        joinMode: "local",
-      }),
-    ).toMatchObject({
-      hostId: "host_local",
-      hostType: "persistent",
-      joinMode: "local",
-    });
-
-    expect(() =>
-      createHostJoinRequestSchema.parse({
-        joinMode: "local",
-      }),
-    ).toThrow();
-
-    expect(
-      createPersistentHostJoinRequest({ hostId: "host_persistent" }),
-    ).toEqual({
-      hostId: "host_persistent",
-      hostType: "persistent",
-    });
-    expect(createPersistentHostJoinRequest({ hostId: null })).toEqual({
-      hostType: "persistent",
-    });
-    expect(
-      createLocalPersistentHostJoinRequest({ hostId: "host_local" }),
-    ).toEqual({
-      hostId: "host_local",
-      hostType: "persistent",
-      joinMode: "local",
-    });
-    expect(createLocalPersistentHostJoinRequest({ hostId: null })).toEqual({
-      hostType: "persistent",
-      joinMode: "local",
-    });
-
-    expect(
-      createHostJoinResponseSchema.parse({
-        expiresAt: 123456789,
-        hostId: "host_123",
-        joinCode: "bbde_example",
-        joinCommand:
-          "npx bb-app --server-url http://localhost:3334 --enroll-key bbde_example host-daemon",
-      }),
-    ).toMatchObject({
-      hostId: "host_123",
-    });
-
-    expect(
       createThreadRequestSchema.parse({
         projectId: "proj_123",
         providerId: "codex",
@@ -1606,7 +1537,6 @@ describe("server-contract clients", () => {
       createQueuedMessageRequestSchema:
         contract.createQueuedMessageRequestSchema,
       createAutomationRequestSchema: contract.createAutomationRequestSchema,
-      createHostJoinRequestSchema: contract.createHostJoinRequestSchema,
       createManagerThreadRequestSchema:
         contract.createManagerThreadRequestSchema,
       createThreadScheduleRequestSchema:

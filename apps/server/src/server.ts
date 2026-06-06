@@ -224,6 +224,9 @@ export function createApp(
   });
   app.use("/internal/*", async (context, next) => {
     const normalizedPath = normalizeInternalAuthPath(context.req.path);
+    if (normalizedPath === "/internal/hosts/enroll-key") {
+      return next();
+    }
     if (normalizedPath === "/internal/hosts/enroll") {
       return next();
     }

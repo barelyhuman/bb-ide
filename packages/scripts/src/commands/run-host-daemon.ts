@@ -2,7 +2,6 @@ import { access, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isLoopbackHostname } from "@bb/config/loopback";
 import {
   BB_PROD_HOST_DAEMON_PORT,
   resolveCurrentDevInstanceConfig,
@@ -14,14 +13,9 @@ import { loadServerUrlValue } from "@bb/config/server-url";
 import {
   HOST_AUTH_FILE_NAME,
   HOST_ID_FILE_NAME,
+  hostDaemonEnrollKeyResponseSchema,
+  type HostDaemonEnrollKeyRequest,
 } from "@bb/host-daemon-contract";
-import {
-  type CreateHostJoinRequest,
-  createLocalPersistentHostJoinRequest,
-  createPersistentHostJoinRequest,
-  createHostJoinResponseSchema,
-  createPublicApiClient,
-} from "@bb/server-contract";
 import { loadHostDaemonEntrypointConfig } from "@bb/config/host-daemon-entrypoint";
 import type { HostDaemonRuntimeEnvironment } from "../lib/host-daemon-runtime.js";
 import { toHostDaemonProcessEnv } from "../lib/host-daemon-runtime.js";
@@ -43,7 +37,6 @@ interface HostDaemonProcessCommand {
 
 interface CreateAutoJoinRequestArgs {
   requestedHostId: string | null;
-  serverUrl: string;
 }
 
 interface ResolveHostDaemonPortArgs {
@@ -129,10 +122,6 @@ export function resolveHostDaemonRuntimeEnvironment(
   };
 }
 
-function isLoopbackServerUrl(serverUrl: string): boolean {
-  return isLoopbackHostname(new URL(serverUrl).hostname);
-}
-
 export function resolveHostDaemonProcessCommand(
   mode: BbRuntimeMode,
 ): HostDaemonProcessCommand {
@@ -182,15 +171,12 @@ async function readPersistedHostId(dataDir: string): Promise<string | null> {
 
 function createAutoJoinRequest(
   args: CreateAutoJoinRequestArgs,
-): CreateHostJoinRequest {
-  const requestArgs = {
-    hostId: args.requestedHostId,
-  };
-  if (isLoopbackServerUrl(args.serverUrl)) {
-    return createLocalPersistentHostJoinRequest(requestArgs);
+): HostDaemonEnrollKeyRequest {
+  const request: HostDaemonEnrollKeyRequest = {};
+  if (args.requestedHostId !== null) {
+    request.hostId = args.requestedHostId;
   }
-
-  return createPersistentHostJoinRequest(requestArgs);
+  return request;
 }
 
 export async function maybeAddAutoJoinEnv(
@@ -209,34 +195,37 @@ export async function maybeAddAutoJoinEnv(
   const requestedHostId =
     env.BB_HOST_ID?.trim() || (await readPersistedHostId(env.BB_DATA_DIR));
 
-  const client = createPublicApiClient(env.BB_SERVER_URL);
-  const response = await client.hosts.join.$post({
-    json: createAutoJoinRequest({
-      requestedHostId,
-      serverUrl: env.BB_SERVER_URL,
-    }),
-  });
+  const response = await fetch(
+    `${env.BB_SERVER_URL}/internal/hosts/enroll-key`,
+    {
+      body: JSON.stringify(createAutoJoinRequest({ requestedHostId })),
+      headers: {
+        "content-type": "application/json",
+      },
+      method: "POST",
+    },
+  );
 
   if (response.status !== 201) {
     const detail = await response.text();
     throw new Error(
-      `Failed to request host join material: ${response.status} ${response.statusText}${detail ? ` - ${detail}` : ""}`,
+      `Failed to request host enroll key: ${response.status} ${response.statusText}${detail ? ` - ${detail}` : ""}`,
     );
   }
 
-  const joinResponse = createHostJoinResponseSchema.parse(
+  const enrollKeyResponse = hostDaemonEnrollKeyResponseSchema.parse(
     await response.json(),
   );
-  if (requestedHostId && joinResponse.hostId !== requestedHostId) {
+  if (requestedHostId && enrollKeyResponse.hostId !== requestedHostId) {
     throw new Error(
-      `Join response host ID ${joinResponse.hostId} does not match persisted host ID ${requestedHostId}`,
+      `Enroll key response host ID ${enrollKeyResponse.hostId} does not match persisted host ID ${requestedHostId}`,
     );
   }
 
   return {
     ...env,
-    BB_HOST_ENROLL_KEY: joinResponse.joinCode,
-    BB_HOST_ID: joinResponse.hostId,
+    BB_HOST_ENROLL_KEY: enrollKeyResponse.enrollKey,
+    BB_HOST_ID: enrollKeyResponse.hostId,
   };
 }
 

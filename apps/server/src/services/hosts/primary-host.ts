@@ -106,21 +106,3 @@ export function requireConnectedPrimaryHostId(deps: PrimaryHostDeps): string {
   requireConnectedHostSession(deps, hostId);
   return hostId;
 }
-
-export function assertPrimaryHostNotDeleted(
-  deps: PrimaryHostDeps,
-  hostId: string,
-): void {
-  const primaryHostId = resolvePrimaryHostId(deps);
-  if (primaryHostId === hostId) {
-    throw new ApiError(
-      409,
-      "invalid_request",
-      "Cannot delete the local host daemon",
-    );
-  }
-}
-
-export function rejectAdditionalHostJoin(): never {
-  throw unsupportedHostError();
-}

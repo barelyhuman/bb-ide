@@ -165,9 +165,6 @@ export {
   bbDesktopVersionFeedSchema,
   commitActionResponseSchema,
   createAutomationRequestSchema,
-  createHostJoinRequestSchema,
-  createHostJoinResponseSchema,
-  updateHostRequestSchema,
   createQueuedMessageRequestSchema,
   createManagerThreadRequestSchema,
   createManagerExecutionInputSourcesSchema,
@@ -374,8 +371,6 @@ export type {
   CreateAutomationRequest,
   CreateExecutionInputSources,
   CreateManagerExecutionInputSources,
-  CreateHostJoinRequest,
-  CreateHostJoinResponse,
   CreateQueuedMessageRequest,
   ManagerEnvironmentArgs,
   CreateManagerThreadRequest,
@@ -520,7 +515,6 @@ export type {
   UpdateAutomationRequest,
   UpdateAutomationConfigRequest,
   UpdateAutomationEnabledRequest,
-  UpdateHostRequest,
   UpdateProjectRequest,
   UpdateProjectSourceRequest,
   UpdateThreadScheduleConfigRequest,
@@ -572,11 +566,6 @@ export {
   THREAD_CHANGE_KINDS,
 } from "@bb/domain";
 
-export {
-  createLocalPersistentHostJoinRequest,
-  createPersistentHostJoinRequest,
-} from "./host-join-request.js";
-export type { CreatePersistentHostJoinRequestArgs } from "./host-join-request.js";
 export type {
   AppChangedMessage,
   AppChangeKind,

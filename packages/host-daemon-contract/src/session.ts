@@ -99,6 +99,26 @@ export type HostDaemonEnrollResponse = z.infer<
   typeof hostDaemonEnrollResponseSchema
 >;
 
+export const hostDaemonEnrollKeyRequestSchema = z
+  .object({
+    hostId: z.string().min(1).optional(),
+  })
+  .strict();
+export type HostDaemonEnrollKeyRequest = z.infer<
+  typeof hostDaemonEnrollKeyRequestSchema
+>;
+
+export const hostDaemonEnrollKeyResponseSchema = z
+  .object({
+    enrollKey: z.string().min(1),
+    expiresAt: z.number().int().positive(),
+    hostId: z.string().min(1),
+  })
+  .strict();
+export type HostDaemonEnrollKeyResponse = z.infer<
+  typeof hostDaemonEnrollKeyResponseSchema
+>;
+
 export const hostDaemonSessionOpenResponseSchema = z
   .object({
     sessionId: z.string().min(1),
@@ -620,6 +640,14 @@ export type HostDaemonInteractiveInterruptResponse = z.infer<
 >;
 
 export type HostDaemonInternalSchema = {
+  "/hosts/enroll-key": {
+    /** Used by the local launcher to request one-time bootstrap material for the primary host daemon. */
+    $post: Endpoint<
+      { json: HostDaemonEnrollKeyRequest },
+      HostDaemonEnrollKeyResponse,
+      201
+    >;
+  };
   "/hosts/enroll": {
     /** Used by the daemon to exchange bootstrap material for its long-lived host credential. */
     $post: Endpoint<

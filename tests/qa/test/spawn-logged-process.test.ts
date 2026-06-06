@@ -117,7 +117,7 @@ vi.mock("node:child_process", async (importOriginal) => {
 import {
   buildStandaloneRuntimeEnv,
   cleanupStandaloneOrphans,
-  createStandaloneHostJoin,
+  createStandaloneHostEnrollKey,
   spawnLoggedProcess,
   startQaServer,
 } from "../src/shared.js";
@@ -223,7 +223,7 @@ describe("spawnLoggedProcess", () => {
     });
   });
 
-  it("requests a local host join for standalone host bootstrap", async () => {
+  it("requests a local host enroll key for standalone host bootstrap", async () => {
     let capturedBody: string | null = null;
     vi.stubGlobal(
       "fetch",
@@ -231,10 +231,9 @@ describe("spawnLoggedProcess", () => {
         capturedBody = typeof init?.body === "string" ? init.body : null;
         return new Response(
           JSON.stringify({
+            enrollKey: "bbde_standalone",
             expiresAt: Date.now() + 60_000,
             hostId: "host_standalone",
-            joinCode: "bbde_standalone",
-            joinCommand: "npx bb-app host-daemon",
           }),
           {
             headers: {
@@ -247,17 +246,12 @@ describe("spawnLoggedProcess", () => {
     );
 
     await expect(
-      createStandaloneHostJoin("http://127.0.0.1:4567"),
+      createStandaloneHostEnrollKey("http://127.0.0.1:4567"),
     ).resolves.toMatchObject({
+      enrollKey: "bbde_standalone",
       hostId: "host_standalone",
-      joinCode: "bbde_standalone",
     });
-    expect(capturedBody).toBe(
-      JSON.stringify({
-        hostType: "persistent",
-        joinMode: "local",
-      }),
-    );
+    expect(capturedBody).toBe(JSON.stringify({}));
   });
 });
 

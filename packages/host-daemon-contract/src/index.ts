@@ -150,6 +150,8 @@ export {
   buildHostDaemonWebSocketProtocols,
   createHostDaemonClient,
   hasHostDaemonWebSocketProtocol,
+  hostDaemonEnrollKeyRequestSchema,
+  hostDaemonEnrollKeyResponseSchema,
   hostDaemonEnrollRequestSchema,
   hostDaemonEnrollResponseSchema,
   hostDaemonActiveThreadSchema,
@@ -185,6 +187,8 @@ export {
 } from "./session.js";
 export type {
   HostDaemonActiveThread,
+  HostDaemonEnrollKeyRequest,
+  HostDaemonEnrollKeyResponse,
   HostDaemonEnrollRequest,
   HostDaemonEnrollResponse,
   HostDaemonAppDataChangePayload,

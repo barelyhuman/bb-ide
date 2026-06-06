@@ -1,15 +1,17 @@
-import { authApiKeys, closeSession, getHost } from "@bb/db";
+import { authApiKeys, getHost } from "@bb/db";
 import { eq } from "drizzle-orm";
-import { hostDaemonEnrollResponseSchema } from "@bb/host-daemon-contract";
-import { createHostJoinResponseSchema } from "@bb/server-contract";
+import {
+  hostDaemonEnrollKeyResponseSchema,
+  hostDaemonEnrollResponseSchema,
+  type HostDaemonEnrollKeyResponse,
+} from "@bb/host-daemon-contract";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { errorToResponse } from "../src/errors.js";
 import { TRUSTED_REMOTE_ADDRESS_CONTEXT_KEY } from "../src/request-context.js";
-import { registerHostRoutes } from "../src/routes/hosts.js";
+import { registerInternalHostRoutes } from "../src/internal/hosts.js";
 import type { AppDeps } from "../src/types.js";
 import { readJson } from "./helpers/json.js";
-import { seedSession } from "./helpers/seed.js";
 import { createTestAppHarness, testLogger, withTestHarness } from "./helpers/test-app.js";
 
 interface CreateHostRouteAppArgs {
@@ -17,73 +19,66 @@ interface CreateHostRouteAppArgs {
   trustedRemoteAddress: string | undefined;
 }
 
-async function parseHostJoinResponse(response: Response) {
-  return createHostJoinResponseSchema.parse(await readJson(response));
+async function parseHostEnrollKeyResponse(response: Response) {
+  return hostDaemonEnrollKeyResponseSchema.parse(await readJson(response));
 }
 
-function createHostRouteApp(args: CreateHostRouteAppArgs): Hono {
+function createInternalHostRouteApp(args: CreateHostRouteAppArgs): Hono {
   const app = new Hono();
   app.onError((error) => errorToResponse(error, testLogger));
   app.use("*", async (context, next) => {
     context.set(TRUSTED_REMOTE_ADDRESS_CONTEXT_KEY, args.trustedRemoteAddress);
     await next();
   });
-  registerHostRoutes(app, args.deps);
+  registerInternalHostRoutes(app, args.deps);
   return app;
 }
 
-describe("host join and enroll routes", () => {
-  it("rejects non-local host join requests", async () => {
-    await withTestHarness(async (harness) => {
-      const response = await harness.app.request("/api/v1/hosts/join", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          hostType: "persistent",
-        }),
-      });
-
-      expect(response.status).toBe(400);
-      expect(await readJson(response)).toMatchObject({
-        code: "unsupported_host",
-      });
-    });
+async function requestHostEnrollKey(
+  deps: AppDeps,
+  hostId: string,
+): Promise<HostDaemonEnrollKeyResponse> {
+  const app = createInternalHostRouteApp({
+    deps,
+    trustedRemoteAddress: "127.0.0.1",
+  });
+  const response = await app.request("/hosts/enroll-key", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ hostId }),
   });
 
-  it("creates local auto-join material without BB_APP_URL", async () => {
+  expect(response.status).toBe(201);
+  return parseHostEnrollKeyResponse(response);
+}
+
+describe("host enroll routes", () => {
+  it("creates local enroll-key material without BB_APP_URL", async () => {
     const harness = await createTestAppHarness({ appUrl: undefined });
-    const app = createHostRouteApp({
+    const app = createInternalHostRouteApp({
       deps: harness.deps,
       trustedRemoteAddress: "127.0.0.1",
     });
 
     try {
-      const response = await app.request(
-        "http://spoofed.example.test/hosts/join",
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            hostId: "host_local_auto_join",
-            hostType: "persistent",
-            joinMode: "local",
-          }),
+      const response = await app.request("/hosts/enroll-key", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
         },
-      );
+        body: JSON.stringify({
+          hostId: "host_local_enroll_key",
+        }),
+      });
 
       expect(response.status).toBe(201);
-      const body = await parseHostJoinResponse(response);
-      expect(body.hostId).toBe("host_local_auto_join");
-      expect(body.joinCode).toMatch(/^bbde_/u);
-      expect(body.joinCommand).toContain(
-        "--server-url 'http://127.0.0.1:3334'",
-      );
-      expect(getHost(harness.db, "host_local_auto_join")).toMatchObject({
-        id: "host_local_auto_join",
+      const body = await parseHostEnrollKeyResponse(response);
+      expect(body.hostId).toBe("host_local_enroll_key");
+      expect(body.enrollKey).toMatch(/^bbde_/u);
+      expect(getHost(harness.db, "host_local_enroll_key")).toMatchObject({
+        id: "host_local_enroll_key",
         type: "persistent",
       });
     } finally {
@@ -91,16 +86,21 @@ describe("host join and enroll routes", () => {
     }
   });
 
-  it("rejects non-local join without app url side effects", async () => {
-    await withTestHarness({ appUrl: undefined }, async (harness) => {
-      const response = await harness.app.request("/api/v1/hosts/join", {
+  it("rejects non-loopback enroll-key requests without side effects", async () => {
+    const harness = await createTestAppHarness({ appUrl: undefined });
+    const app = createInternalHostRouteApp({
+      deps: harness.deps,
+      trustedRemoteAddress: "192.168.1.50",
+    });
+
+    try {
+      const response = await app.request("/hosts/enroll-key", {
         method: "POST",
         headers: {
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          hostId: "host_app_url_required",
-          hostType: "persistent",
+          hostId: "host_remote_enroll_key",
         }),
       });
 
@@ -108,246 +108,29 @@ describe("host join and enroll routes", () => {
       expect(await readJson(response)).toMatchObject({
         code: "unsupported_host",
       });
-      expect(getHost(harness.db, "host_app_url_required")).toBeNull();
-    });
-  });
-
-  it("rejects spoofed Host loopback for local join without BB_APP_URL", async () => {
-    const harness = await createTestAppHarness({ appUrl: undefined });
-    const app = createHostRouteApp({
-      deps: harness.deps,
-      trustedRemoteAddress: "192.168.1.50",
-    });
-
-    try {
-      const response = await app.request("http://127.0.0.1:3334/hosts/join", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          host: "127.0.0.1:3334",
-        },
-        body: JSON.stringify({
-          hostId: "host_spoofed_local_join",
-          hostType: "persistent",
-          joinMode: "local",
-        }),
-      });
-
-      expect(response.status).toBe(422);
-      expect(await readJson(response)).toMatchObject({
-        code: "app_url_required",
-      });
-      expect(getHost(harness.db, "host_spoofed_local_join")).toBeNull();
+      expect(getHost(harness.db, "host_remote_enroll_key")).toBeNull();
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("uses BB_APP_URL for non-loopback local join requests when configured", async () => {
-    const harness = await createTestAppHarness();
-    const app = createHostRouteApp({
-      deps: harness.deps,
-      trustedRemoteAddress: "192.168.1.50",
-    });
-
-    try {
-      const response = await app.request("http://127.0.0.1:3334/hosts/join", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          host: "127.0.0.1:3334",
-        },
-        body: JSON.stringify({
-          hostId: "host_remote_local_join",
-          hostType: "persistent",
-          joinMode: "local",
-        }),
-      });
-
-      expect(response.status).toBe(201);
-      const body = await parseHostJoinResponse(response);
-      expect(body.joinCommand).toContain(
-        "--server-url 'https://bb.example.test'",
-      );
-      expect(getHost(harness.db, "host_remote_local_join")).toMatchObject({
-        id: "host_remote_local_join",
-        type: "persistent",
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("cancels pending host joins by revoking the enroll key and deleting the unconnected stub", async () => {
+  it("exchanges enroll-key material for a daemon host key exactly once", async () => {
     await withTestHarness(async (harness) => {
-      const joinResponse = await harness.app.request("/api/v1/hosts/join", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          hostId: "host_cancel_pending_join",
-          hostType: "persistent",
-          joinMode: "local",
-        }),
-      });
-      const joinBody = await parseHostJoinResponse(joinResponse);
-
-      const cancelResponse = await harness.app.request(
-        `/api/v1/hosts/${joinBody.hostId}/join`,
-        {
-          method: "DELETE",
-        },
+      const enrollKeyBody = await requestHostEnrollKey(
+        harness.deps,
+        "host_enroll_once",
       );
-
-      expect(cancelResponse.status).toBe(200);
-      expect(await readJson(cancelResponse)).toEqual({ ok: true });
-      expect(getHost(harness.db, joinBody.hostId)).toBeNull();
 
       const enrollResponse = await harness.app.request(
         "/internal/hosts/enroll",
         {
           method: "POST",
           headers: {
-            authorization: `Bearer ${joinBody.joinCode}`,
+            authorization: `Bearer ${enrollKeyBody.enrollKey}`,
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            hostId: joinBody.hostId,
-            hostName: "canceled-host",
-            hostType: "persistent",
-          }),
-        },
-      );
-
-      expect(enrollResponse.status).toBe(401);
-    });
-  });
-
-  it("keeps hosts that have connected when canceling outstanding join material", async () => {
-    await withTestHarness(async (harness) => {
-      const joinResponse = await harness.app.request("/api/v1/hosts/join", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          hostId: "host_cancel_connected_join",
-          hostType: "persistent",
-          joinMode: "local",
-        }),
-      });
-      const joinBody = await parseHostJoinResponse(joinResponse);
-      const session = seedSession(harness.deps, joinBody.hostId);
-      closeSession(harness.db, harness.hub, session.id, "test-disconnect");
-
-      const cancelResponse = await harness.app.request(
-        `/api/v1/hosts/${joinBody.hostId}/join`,
-        {
-          method: "DELETE",
-        },
-      );
-
-      expect(cancelResponse.status).toBe(200);
-      expect(getHost(harness.db, joinBody.hostId)).toMatchObject({
-        id: joinBody.hostId,
-        type: "persistent",
-      });
-
-      const enrollResponse = await harness.app.request(
-        "/internal/hosts/enroll",
-        {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${joinBody.joinCode}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            hostId: joinBody.hostId,
-            hostName: "canceled-connected-host",
-            hostType: "persistent",
-          }),
-        },
-      );
-
-      expect(enrollResponse.status).toBe(401);
-    });
-  });
-
-  it("keeps active hosts when canceling outstanding join material", async () => {
-    await withTestHarness(async (harness) => {
-      const joinResponse = await harness.app.request("/api/v1/hosts/join", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          hostId: "host_cancel_active_join",
-          hostType: "persistent",
-          joinMode: "local",
-        }),
-      });
-      const joinBody = await parseHostJoinResponse(joinResponse);
-      seedSession(harness.deps, joinBody.hostId);
-
-      const cancelResponse = await harness.app.request(
-        `/api/v1/hosts/${joinBody.hostId}/join`,
-        {
-          method: "DELETE",
-        },
-      );
-
-      expect(cancelResponse.status).toBe(200);
-      expect(getHost(harness.db, joinBody.hostId)).toMatchObject({
-        id: joinBody.hostId,
-        type: "persistent",
-      });
-
-      const enrollResponse = await harness.app.request(
-        "/internal/hosts/enroll",
-        {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${joinBody.joinCode}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            hostId: joinBody.hostId,
-            hostName: "canceled-active-host",
-            hostType: "persistent",
-          }),
-        },
-      );
-
-      expect(enrollResponse.status).toBe(401);
-    });
-  });
-
-  it("exchanges join material for a daemon host key exactly once", async () => {
-    await withTestHarness(async (harness) => {
-      const joinResponse = await harness.app.request("/api/v1/hosts/join", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          hostId: "host_join_once",
-          hostType: "persistent",
-          joinMode: "local",
-        }),
-      });
-      const joinBody = await parseHostJoinResponse(joinResponse);
-
-      const enrollResponse = await harness.app.request(
-        "/internal/hosts/enroll",
-        {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${joinBody.joinCode}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            hostId: joinBody.hostId,
+            hostId: enrollKeyBody.hostId,
             hostName: "real-host-name",
             hostType: "persistent",
           }),
@@ -359,11 +142,11 @@ describe("host join and enroll routes", () => {
         await readJson(enrollResponse),
       );
       expect(enrollBody).toMatchObject({
-        hostId: joinBody.hostId,
+        hostId: enrollKeyBody.hostId,
       });
       expect(enrollBody.hostKey).toMatch(/^bbdh_/u);
-      expect(getHost(harness.db, joinBody.hostId)).toMatchObject({
-        id: joinBody.hostId,
+      expect(getHost(harness.db, enrollKeyBody.hostId)).toMatchObject({
+        id: enrollKeyBody.hostId,
         name: "real-host-name",
       });
 
@@ -372,11 +155,11 @@ describe("host join and enroll routes", () => {
         {
           method: "POST",
           headers: {
-            authorization: `Bearer ${joinBody.joinCode}`,
+            authorization: `Bearer ${enrollKeyBody.enrollKey}`,
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            hostId: joinBody.hostId,
+            hostId: enrollKeyBody.hostId,
             hostName: "real-host-name",
             hostType: "persistent",
           }),
@@ -387,25 +170,17 @@ describe("host join and enroll routes", () => {
     });
   });
 
-  it("rejects enrollment when the join material is presented for a different host", async () => {
+  it("rejects enrollment when the enroll key is presented for a different host", async () => {
     await withTestHarness(async (harness) => {
-      const joinResponse = await harness.app.request("/api/v1/hosts/join", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          hostId: "host_expected",
-          hostType: "persistent",
-          joinMode: "local",
-        }),
-      });
-      const joinBody = await parseHostJoinResponse(joinResponse);
+      const enrollKeyBody = await requestHostEnrollKey(
+        harness.deps,
+        "host_expected",
+      );
 
       const response = await harness.app.request("/internal/hosts/enroll", {
         method: "POST",
         headers: {
-          authorization: `Bearer ${joinBody.joinCode}`,
+          authorization: `Bearer ${enrollKeyBody.enrollKey}`,
           "content-type": "application/json",
         },
         body: JSON.stringify({
@@ -419,53 +194,32 @@ describe("host join and enroll routes", () => {
     });
   });
 
-  it("invalidates older join material when the same host requests a new join code", async () => {
+  it("invalidates older enroll keys when the same host requests a new one", async () => {
     await withTestHarness(async (harness) => {
-      const firstJoinResponse = await harness.app.request(
-        "/api/v1/hosts/join",
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            hostId: "host_reissue_join",
-            hostType: "persistent",
-            joinMode: "local",
-          }),
-        },
+      const firstEnrollKeyBody = await requestHostEnrollKey(
+        harness.deps,
+        "host_reissue_enroll_key",
       );
-      const firstJoinBody = await parseHostJoinResponse(firstJoinResponse);
-
-      const secondJoinResponse = await harness.app.request(
-        "/api/v1/hosts/join",
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            hostId: "host_reissue_join",
-            hostType: "persistent",
-            joinMode: "local",
-          }),
-        },
+      const secondEnrollKeyBody = await requestHostEnrollKey(
+        harness.deps,
+        "host_reissue_enroll_key",
       );
-      const secondJoinBody = await parseHostJoinResponse(secondJoinResponse);
 
-      expect(secondJoinBody.joinCode).not.toBe(firstJoinBody.joinCode);
+      expect(secondEnrollKeyBody.enrollKey).not.toBe(
+        firstEnrollKeyBody.enrollKey,
+      );
 
       const firstEnrollResponse = await harness.app.request(
         "/internal/hosts/enroll",
         {
           method: "POST",
           headers: {
-            authorization: `Bearer ${firstJoinBody.joinCode}`,
+            authorization: `Bearer ${firstEnrollKeyBody.enrollKey}`,
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            hostId: firstJoinBody.hostId,
-            hostName: "stale-join-host",
+            hostId: firstEnrollKeyBody.hostId,
+            hostName: "stale-enroll-key-host",
             hostType: "persistent",
           }),
         },
@@ -478,12 +232,12 @@ describe("host join and enroll routes", () => {
         {
           method: "POST",
           headers: {
-            authorization: `Bearer ${secondJoinBody.joinCode}`,
+            authorization: `Bearer ${secondEnrollKeyBody.enrollKey}`,
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            hostId: secondJoinBody.hostId,
-            hostName: "fresh-join-host",
+            hostId: secondEnrollKeyBody.hostId,
+            hostName: "fresh-enroll-key-host",
             hostType: "persistent",
           }),
         },
@@ -493,20 +247,12 @@ describe("host join and enroll routes", () => {
     });
   });
 
-  it("rejects enrollment after the join material expires", async () => {
+  it("rejects enrollment after the enroll key expires", async () => {
     await withTestHarness(async (harness) => {
-      const joinResponse = await harness.app.request("/api/v1/hosts/join", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          hostId: "host_expired_join",
-          hostType: "persistent",
-          joinMode: "local",
-        }),
-      });
-      const joinBody = await parseHostJoinResponse(joinResponse);
+      const enrollKeyBody = await requestHostEnrollKey(
+        harness.deps,
+        "host_expired_enroll_key",
+      );
 
       const issuedKey = harness.db
         .select({
@@ -533,11 +279,11 @@ describe("host join and enroll routes", () => {
         {
           method: "POST",
           headers: {
-            authorization: `Bearer ${joinBody.joinCode}`,
+            authorization: `Bearer ${enrollKeyBody.enrollKey}`,
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            hostId: joinBody.hostId,
+            hostId: enrollKeyBody.hostId,
             hostName: "expired-host",
             hostType: "persistent",
           }),

@@ -190,7 +190,7 @@ describe("run-host-daemon auto join", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("reuses a persisted host ID when requesting join material", async () => {
+  it("reuses a persisted host ID when requesting an enroll key", async () => {
     const dataDir = await makeTempDir("bb-run-host-daemon-");
     const persistedHostId = "host_persisted";
     await fs.writeFile(
@@ -219,10 +219,9 @@ describe("run-host-daemon auto join", () => {
 
         return new Response(
           JSON.stringify({
+            enrollKey: "bbde_test_enroll_key",
             expiresAt: Date.now() + 60_000,
             hostId: persistedHostId,
-            joinCode: "bbde_test_join",
-            joinCommand: "npx bb-app host-daemon",
           }),
           {
             headers: {
@@ -240,20 +239,20 @@ describe("run-host-daemon auto join", () => {
     );
 
     expect(env.BB_HOST_ID).toBe(persistedHostId);
-    expect(env.BB_HOST_ENROLL_KEY).toBe("bbde_test_join");
+    expect(env.BB_HOST_ENROLL_KEY).toBe("bbde_test_enroll_key");
     expect(env.BB_HOST_TYPE).toBeUndefined();
     expect(requests).toHaveLength(2);
-    expect(requests[1]?.url).toBe("http://127.0.0.1:3334/api/v1/hosts/join");
+    expect(requests[1]?.url).toBe(
+      "http://127.0.0.1:3334/internal/hosts/enroll-key",
+    );
     expect(requests[1]?.body).toBe(
       JSON.stringify({
         hostId: persistedHostId,
-        hostType: "persistent",
-        joinMode: "local",
       }),
     );
   });
 
-  it("requests fresh join material when no host ID is persisted", async () => {
+  it("requests a fresh enroll key when no host ID is persisted", async () => {
     const dataDir = await makeTempDir("bb-run-host-daemon-");
 
     const requests: RecordedFetchRequest[] = [];
@@ -277,10 +276,9 @@ describe("run-host-daemon auto join", () => {
 
         return new Response(
           JSON.stringify({
+            enrollKey: "bbde_generated_enroll_key",
             expiresAt: Date.now() + 60_000,
             hostId: "host_generated",
-            joinCode: "bbde_generated_join",
-            joinCommand: "npx bb-app host-daemon",
           }),
           {
             headers: {
@@ -298,74 +296,12 @@ describe("run-host-daemon auto join", () => {
     );
 
     expect(env.BB_HOST_ID).toBe("host_generated");
-    expect(env.BB_HOST_ENROLL_KEY).toBe("bbde_generated_join");
+    expect(env.BB_HOST_ENROLL_KEY).toBe("bbde_generated_enroll_key");
     expect(env.BB_HOST_TYPE).toBeUndefined();
-    expect(requests[1]?.body).toBe(
-      JSON.stringify({
-        hostType: "persistent",
-        joinMode: "local",
-      }),
-    );
+    expect(requests[1]?.body).toBe(JSON.stringify({}));
   });
 
-  it("requests normal persistent join material for non-loopback server URLs", async () => {
-    const dataDir = await makeTempDir("bb-run-host-daemon-");
-
-    const requests: RecordedFetchRequest[] = [];
-    vi.stubGlobal(
-      "fetch",
-      async (input: TestFetchInput, init?: RequestInit): Promise<Response> => {
-        const url =
-          input instanceof Request
-            ? input.url
-            : input instanceof URL
-              ? input.toString()
-              : input;
-        requests.push({
-          body: typeof init?.body === "string" ? init.body : null,
-          url,
-        });
-
-        if (url.endsWith("/health")) {
-          return new Response("", { status: 200 });
-        }
-
-        return new Response(
-          JSON.stringify({
-            expiresAt: Date.now() + 60_000,
-            hostId: "host_remote_generated",
-            joinCode: "bbde_remote_join",
-            joinCommand: "npx bb-app host-daemon",
-          }),
-          {
-            headers: {
-              "content-type": "application/json",
-            },
-            status: 201,
-          },
-        );
-      },
-    );
-
-    const env = await runHostDaemon.maybeAddAutoJoinEnv(
-      createTestRuntimeEnv({
-        dataDir,
-        serverUrl: "https://bb.example.test",
-      }),
-      true,
-    );
-
-    expect(env.BB_HOST_ID).toBe("host_remote_generated");
-    expect(env.BB_HOST_ENROLL_KEY).toBe("bbde_remote_join");
-    expect(requests[1]?.url).toBe("https://bb.example.test/api/v1/hosts/join");
-    expect(requests[1]?.body).toBe(
-      JSON.stringify({
-        hostType: "persistent",
-      }),
-    );
-  });
-
-  it("surfaces join request failures", async () => {
+  it("surfaces enroll-key request failures", async () => {
     const dataDir = await makeTempDir("bb-run-host-daemon-");
 
     vi.stubGlobal("fetch", async (input: TestFetchInput): Promise<Response> => {
@@ -391,7 +327,7 @@ describe("run-host-daemon auto join", () => {
         true,
       ),
     ).rejects.toThrow(
-      "Failed to request host join material: 500 Internal Server Error - nope",
+      "Failed to request host enroll key: 500 Internal Server Error - nope",
     );
   });
 });

@@ -18,7 +18,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
-  createHostJoinRequestBody,
+  createHostEnrollKeyRequestBody,
   isMainModule,
   parseLauncherArgs,
   resolveBbAppRuntimeContext,
@@ -433,39 +433,16 @@ describe("bb-app launcher", () => {
     ).toBe(48887);
   });
 
-  it("creates the same local persistent join request as pnpm start", () => {
+  it("creates host enroll-key request bodies", () => {
     expect(
-      createHostJoinRequestBody({ localJoin: true, requestedHostId: null }),
-    ).toEqual({
-      hostType: "persistent",
-      joinMode: "local",
-    });
+      createHostEnrollKeyRequestBody({ requestedHostId: null }),
+    ).toEqual({});
     expect(
-      createHostJoinRequestBody({
-        localJoin: true,
+      createHostEnrollKeyRequestBody({
         requestedHostId: "host_local",
       }),
     ).toEqual({
       hostId: "host_local",
-      hostType: "persistent",
-      joinMode: "local",
-    });
-  });
-
-  it("creates persistent remote join requests without local mode", () => {
-    expect(
-      createHostJoinRequestBody({ localJoin: false, requestedHostId: null }),
-    ).toEqual({
-      hostType: "persistent",
-    });
-    expect(
-      createHostJoinRequestBody({
-        localJoin: false,
-        requestedHostId: "host_remote",
-      }),
-    ).toEqual({
-      hostId: "host_remote",
-      hostType: "persistent",
     });
   });
 

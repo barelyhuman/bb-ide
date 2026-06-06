@@ -8,7 +8,7 @@ import {
   buildStandaloneRuntimeEnv,
   cleanupStandaloneOrphans,
   createProject,
-  createStandaloneHostJoin,
+  createStandaloneHostEnrollKey,
   createTestGitRepo,
   killProcess,
   loadDotEnv,
@@ -97,7 +97,7 @@ async function main() {
       );
     }
 
-    const join = await createStandaloneHostJoin(serverUrl);
+    const enrollKey = await createStandaloneHostEnrollKey(serverUrl);
 
     daemonProcess = spawnLoggedProcess({
       command: "node",
@@ -108,8 +108,8 @@ async function main() {
         overrides: {
           BB_DATA_DIR: bbRoot,
           BB_HOST_DAEMON_PORT: String(daemonPort),
-          BB_HOST_ENROLL_KEY: join.joinCode,
-          BB_HOST_ID: join.hostId,
+          BB_HOST_ENROLL_KEY: enrollKey.enrollKey,
+          BB_HOST_ID: enrollKey.hostId,
           BB_SERVER_URL: serverUrl,
           [STANDALONE_INSTANCE_ENV]: instanceId,
           [STANDALONE_PARENT_PID_ENV]: String(parentPid),

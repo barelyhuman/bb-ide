@@ -76,10 +76,10 @@ const bbAppPackageJsonSchema = z
   })
   .passthrough();
 
-const hostJoinResponseSchema = z
+const hostEnrollKeyResponseSchema = z
   .object({
+    enrollKey: z.string().min(1),
     hostId: z.string().min(1),
-    joinCode: z.string().min(1),
   })
   .passthrough();
 
@@ -87,29 +87,19 @@ const apiErrorResponseSchema = z.object({
   message: z.string(),
 });
 
-export type HostJoinResponse = z.infer<typeof hostJoinResponseSchema>;
+export type HostEnrollKeyResponse = z.infer<
+  typeof hostEnrollKeyResponseSchema
+>;
 export type ManagedConfigValues = BbAppManagedConfigValues;
 export type ManagedEnvConfig = BbAppManagedEnvConfig;
 export type ManagedEnvFile = BbAppManagedEnvFile;
 export type ManagedConfig = BbAppManagedConfig;
 
-export interface PersistentHostJoinRequestBody {
+export interface HostEnrollKeyRequestBody {
   hostId?: string;
-  hostType?: "persistent";
 }
 
-export interface LocalHostJoinRequestBody {
-  hostId?: string;
-  hostType: "persistent";
-  joinMode: "local";
-}
-
-export type HostJoinRequestBody =
-  | LocalHostJoinRequestBody
-  | PersistentHostJoinRequestBody;
-
-export interface CreateHostJoinRequestBodyArgs {
-  localJoin: boolean;
+export interface CreateHostEnrollKeyRequestBodyArgs {
   requestedHostId: string | null;
 }
 
@@ -349,8 +339,7 @@ interface WaitForHealthArgs {
   url: string;
 }
 
-interface RequestHostJoinArgs {
-  localJoin: boolean;
+interface RequestHostEnrollKeyArgs {
   requestedHostId: string | null;
   serverUrl: string;
 }
@@ -1065,23 +1054,10 @@ export async function resolveBbAppRuntimeContext(
   return (await resolveBbAppRuntimeState(args)).context;
 }
 
-export function createHostJoinRequestBody(
-  args: CreateHostJoinRequestBodyArgs,
-): HostJoinRequestBody {
-  if (args.localJoin) {
-    const requestBody: LocalHostJoinRequestBody = {
-      hostType: "persistent",
-      joinMode: "local",
-    };
-    if (args.requestedHostId !== null) {
-      requestBody.hostId = args.requestedHostId;
-    }
-    return requestBody;
-  }
-
-  const requestBody: PersistentHostJoinRequestBody = {
-    hostType: "persistent",
-  };
+export function createHostEnrollKeyRequestBody(
+  args: CreateHostEnrollKeyRequestBodyArgs,
+): HostEnrollKeyRequestBody {
+  const requestBody: HostEnrollKeyRequestBody = {};
   if (args.requestedHostId !== null) {
     requestBody.hostId = args.requestedHostId;
   }
@@ -1484,13 +1460,12 @@ async function readPersistedHostId(dataDir: string): Promise<string | null> {
   }
 }
 
-export async function requestHostJoin(
-  args: RequestHostJoinArgs,
-): Promise<HostJoinResponse> {
-  const response = await fetch(`${args.serverUrl}/api/v1/hosts/join`, {
+export async function requestHostEnrollKey(
+  args: RequestHostEnrollKeyArgs,
+): Promise<HostEnrollKeyResponse> {
+  const response = await fetch(`${args.serverUrl}/internal/hosts/enroll-key`, {
     body: JSON.stringify(
-      createHostJoinRequestBody({
-        localJoin: args.localJoin,
+      createHostEnrollKeyRequestBody({
         requestedHostId: args.requestedHostId,
       }),
     ),
@@ -1503,11 +1478,11 @@ export async function requestHostJoin(
   if (response.status !== 201) {
     const detail = await response.text();
     throw new Error(
-      `Failed to request host join material: ${response.status} ${response.statusText}${detail ? ` - ${detail}` : ""}`,
+      `Failed to request host enroll key: ${response.status} ${response.statusText}${detail ? ` - ${detail}` : ""}`,
     );
   }
 
-  return hostJoinResponseSchema.parse(await response.json());
+  return hostEnrollKeyResponseSchema.parse(await response.json());
 }
 
 export async function maybeAddAutoJoinEnv(
@@ -1523,22 +1498,24 @@ export async function maybeAddAutoJoinEnv(
   const requestedHostId =
     trimToUndefined(args.env.BB_HOST_ID) ??
     (await readPersistedHostId(args.dataDir));
-  const joinResponse = await requestHostJoin({
-    localJoin: true,
+  const enrollKeyResponse = await requestHostEnrollKey({
     requestedHostId,
     serverUrl: args.serverUrl,
   });
 
-  if (requestedHostId !== null && joinResponse.hostId !== requestedHostId) {
+  if (
+    requestedHostId !== null &&
+    enrollKeyResponse.hostId !== requestedHostId
+  ) {
     throw new Error(
-      `Join response host ID ${joinResponse.hostId} does not match persisted host ID ${requestedHostId}`,
+      `Enroll key response host ID ${enrollKeyResponse.hostId} does not match persisted host ID ${requestedHostId}`,
     );
   }
 
   return {
     ...args.env,
-    BB_HOST_ENROLL_KEY: joinResponse.joinCode,
-    BB_HOST_ID: joinResponse.hostId,
+    BB_HOST_ENROLL_KEY: enrollKeyResponse.enrollKey,
+    BB_HOST_ID: enrollKeyResponse.hostId,
   };
 }
 
@@ -1849,28 +1826,23 @@ function resolveHostDaemonCommand(
   );
 }
 
-function isLoopbackServerUrl(serverUrl: string): boolean {
-  const { hostname } = new URL(serverUrl);
-  return (
-    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
-  );
-}
-
 async function createHostDaemonJoinEnv(
   args: CreateHostDaemonJoinEnvArgs,
 ): Promise<NodeJS.ProcessEnv> {
   const requestedHostId =
     trimToUndefined(args.env.BB_HOST_ID) ??
     (await readPersistedHostId(args.context.dataDir));
-  const joinResponse = await requestHostJoin({
-    localJoin: isLoopbackServerUrl(args.serverUrl),
+  const enrollKeyResponse = await requestHostEnrollKey({
     requestedHostId,
     serverUrl: args.serverUrl,
   });
 
-  if (requestedHostId !== null && joinResponse.hostId !== requestedHostId) {
+  if (
+    requestedHostId !== null &&
+    enrollKeyResponse.hostId !== requestedHostId
+  ) {
     throw new Error(
-      `Join response host ID ${joinResponse.hostId} does not match persisted host ID ${requestedHostId}`,
+      `Enroll key response host ID ${enrollKeyResponse.hostId} does not match persisted host ID ${requestedHostId}`,
     );
   }
 
@@ -1881,8 +1853,8 @@ async function createHostDaemonJoinEnv(
 
   return {
     ...args.env,
-    BB_HOST_ENROLL_KEY: joinResponse.joinCode,
-    BB_HOST_ID: joinResponse.hostId,
+    BB_HOST_ENROLL_KEY: enrollKeyResponse.enrollKey,
+    BB_HOST_ID: enrollKeyResponse.hostId,
   };
 }
 
