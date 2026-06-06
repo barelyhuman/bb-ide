@@ -56,7 +56,7 @@ import {
 import { MentionMenu } from "./mentions/MentionMenu";
 
 const PROMPTBOX_MIN_HEIGHT = 68;
-const PROMPTBOX_MAX_HEIGHT = 158;
+const PROMPTBOX_SELECTION_REVEAL_MARGIN = 12;
 const RICH_PASTE_BLOCK_TAGS = new Set([
   "ADDRESS",
   "ARTICLE",
@@ -110,6 +110,11 @@ const ZEN_MODE_STORAGE_KEY: Record<ZenModeLayout, string> = {
 const ZEN_MODE_HEIGHT_CLASS: Record<ZenModeLayout, string> = {
   thread: "h-[50dvh]",
   "root-compose": "h-[70dvh]",
+};
+
+const PROMPTBOX_MAX_HEIGHT_BY_LAYOUT: Record<ZenModeLayout, string> = {
+  thread: "50dvh",
+  "root-compose": "70dvh",
 };
 
 export interface PromptBoxSubmissionConfig {
@@ -242,6 +247,11 @@ interface PromptEditorValueKey {
 }
 
 const EDITOR_MENTION_PATTERN = /(^|[\s([{])@([^\s@]*)$/u;
+
+interface PromptEditorSelectionRevealArgs {
+  editor: Editor;
+  scrollContainer: HTMLElement;
+}
 
 type ZenModeUpdate =
   | boolean
@@ -412,6 +422,41 @@ function findActiveEditorMention(editor: Editor): ActiveEditorMention | null {
   };
 }
 
+function revealPromptEditorSelection({
+  editor,
+  scrollContainer,
+}: PromptEditorSelectionRevealArgs): void {
+  const scrollContainerRect = scrollContainer.getBoundingClientRect();
+  if (scrollContainerRect.height <= 0) return;
+
+  let selectionRect: ReturnType<Editor["view"]["coordsAtPos"]>;
+  try {
+    selectionRect = editor.view.coordsAtPos(editor.state.selection.to);
+  } catch {
+    return;
+  }
+
+  const topOverflow =
+    selectionRect.top -
+    scrollContainerRect.top -
+    PROMPTBOX_SELECTION_REVEAL_MARGIN;
+  if (topOverflow < 0) {
+    scrollContainer.scrollTop = Math.max(
+      0,
+      scrollContainer.scrollTop + topOverflow,
+    );
+    return;
+  }
+
+  const bottomOverflow =
+    selectionRect.bottom -
+    scrollContainerRect.bottom +
+    PROMPTBOX_SELECTION_REVEAL_MARGIN;
+  if (bottomOverflow > 0) {
+    scrollContainer.scrollTop += bottomOverflow;
+  }
+}
+
 export function PromptBoxInternal({
   id,
   value,
@@ -466,6 +511,8 @@ export function PromptBoxInternal({
   const formRef = useRef<HTMLFormElement>(null);
   const heightAnimationFromRef = useRef<number | null>(null);
   const editorRef = useRef<Editor | null>(null);
+  const editorScrollContainerRef = useRef<HTMLDivElement>(null);
+  const revealSelectionFrameRef = useRef<number | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const valueRef = useRef(value);
   const mentionRangesRef = useRef<readonly PromptTextMention[]>(mentionRanges);
@@ -518,6 +565,40 @@ export function PromptBoxInternal({
   useEffect(() => {
     onAttachFilesRef.current = onAttachFiles;
   }, [onAttachFiles]);
+
+  const revealEditorSelection = useCallback(() => {
+    const currentEditor = editorRef.current;
+    const scrollContainer = editorScrollContainerRef.current;
+    if (!currentEditor || currentEditor.isDestroyed || !scrollContainer) return;
+
+    revealPromptEditorSelection({
+      editor: currentEditor,
+      scrollContainer,
+    });
+  }, []);
+
+  const scheduleRevealEditorSelection = useCallback(() => {
+    if (typeof requestAnimationFrame !== "function") {
+      revealEditorSelection();
+      return;
+    }
+
+    if (revealSelectionFrameRef.current !== null) {
+      cancelAnimationFrame(revealSelectionFrameRef.current);
+    }
+
+    revealSelectionFrameRef.current = requestAnimationFrame(() => {
+      revealSelectionFrameRef.current = null;
+      revealEditorSelection();
+    });
+  }, [revealEditorSelection]);
+
+  useEffect(() => {
+    return () => {
+      if (revealSelectionFrameRef.current === null) return;
+      cancelAnimationFrame(revealSelectionFrameRef.current);
+    };
+  }, []);
 
   const syncMentionState = useCallback(
     (editor: Editor) => {
@@ -669,6 +750,7 @@ export function PromptBoxInternal({
     },
     onSelectionUpdate({ editor: updatedEditor }) {
       syncMentionState(updatedEditor);
+      scheduleRevealEditorSelection();
     },
     onUpdate({ editor: updatedEditor }) {
       if (skipEditorChangeRef.current) return;
@@ -676,6 +758,7 @@ export function PromptBoxInternal({
       editorValueKeyRef.current = promptEditorValueKey(nextValue);
       onChangeRef.current(nextValue.text, nextValue.mentions);
       syncMentionState(updatedEditor);
+      scheduleRevealEditorSelection();
     },
   });
 
@@ -688,7 +771,8 @@ export function PromptBoxInternal({
     if (!editor) return;
 
     editor.commands.focus("end");
-  }, [autoFocus, autoFocusScopeKey, editor]);
+    scheduleRevealEditorSelection();
+  }, [autoFocus, autoFocusScopeKey, editor, scheduleRevealEditorSelection]);
 
   useEffect(() => {
     mentionRangesRef.current = mentionRanges;
@@ -717,7 +801,14 @@ export function PromptBoxInternal({
       skipEditorChangeRef.current = false;
     }
     syncMentionState(editor);
-  }, [editor, mentionRanges, syncMentionState, value]);
+    scheduleRevealEditorSelection();
+  }, [
+    editor,
+    mentionRanges,
+    scheduleRevealEditorSelection,
+    syncMentionState,
+    value,
+  ]);
 
   useEffect(() => {
     if (zenModeResetKey === undefined) return;
@@ -727,6 +818,10 @@ export function PromptBoxInternal({
     }
     setIsZenMode(false);
   }, [resolvedZenModeStorageKey, setIsZenMode, zenModeResetKey]);
+
+  useLayoutEffect(() => {
+    scheduleRevealEditorSelection();
+  }, [isZenMode, minHeight, scheduleRevealEditorSelection]);
 
   const resetHistorySession = useCallback(() => {
     setActiveHistoryIndex(null);
@@ -896,52 +991,63 @@ export function PromptBoxInternal({
         }
         nextEditor.commands.focus();
         syncMentionState(nextEditor);
+        scheduleRevealEditorSelection();
         isRestoringAppliedMentionRef.current = false;
       });
     },
-    [activeMention, onMentionQueryChange, syncMentionState],
+    [
+      activeMention,
+      onMentionQueryChange,
+      scheduleRevealEditorSelection,
+      syncMentionState,
+    ],
   );
 
   const focusEnd = useCallback(() => {
     const currentEditor = editorRef.current;
     if (!currentEditor || currentEditor.isDestroyed) return;
     currentEditor.commands.focus("end");
-  }, []);
+    scheduleRevealEditorSelection();
+  }, [scheduleRevealEditorSelection]);
 
-  const insertTextAtCursor = useCallback((rawText: string) => {
-    const normalizedText = rawText.replace(/\s+/g, " ").trim();
-    if (normalizedText.length === 0) return;
+  const insertTextAtCursor = useCallback(
+    (rawText: string) => {
+      const normalizedText = rawText.replace(/\s+/g, " ").trim();
+      if (normalizedText.length === 0) return;
 
-    const currentEditor = editorRef.current;
-    const currentValue = valueRef.current;
-    if (!currentEditor) {
-      const nextValue =
-        currentValue.length === 0 || /\s$/.test(currentValue)
-          ? `${currentValue}${normalizedText}`
-          : `${currentValue} ${normalizedText}`;
-      onChangeRef.current(nextValue, [...mentionRangesRef.current]);
-      return;
-    }
+      const currentEditor = editorRef.current;
+      const currentValue = valueRef.current;
+      if (!currentEditor) {
+        const nextValue =
+          currentValue.length === 0 || /\s$/.test(currentValue)
+            ? `${currentValue}${normalizedText}`
+            : `${currentValue} ${normalizedText}`;
+        onChangeRef.current(nextValue, [...mentionRangesRef.current]);
+        return;
+      }
 
-    const selection = currentEditor.state.selection;
-    const before = currentEditor.state.doc.textBetween(
-      0,
-      selection.from,
-      "\n",
-      "\n",
-    );
-    const after = currentEditor.state.doc.textBetween(
-      selection.to,
-      currentEditor.state.doc.content.size,
-      "\n",
-      "\n",
-    );
-    const needsLeadingWhitespace = before.length > 0 && !/\s$/.test(before);
-    const needsTrailingWhitespace = after.length > 0 && !/^\s/.test(after);
-    const insertedText = `${needsLeadingWhitespace ? " " : ""}${normalizedText}${needsTrailingWhitespace ? " " : ""}`;
+      const selection = currentEditor.state.selection;
+      const before = currentEditor.state.doc.textBetween(
+        0,
+        selection.from,
+        "\n",
+        "\n",
+      );
+      const after = currentEditor.state.doc.textBetween(
+        selection.to,
+        currentEditor.state.doc.content.size,
+        "\n",
+        "\n",
+      );
+      const needsLeadingWhitespace = before.length > 0 && !/\s$/.test(before);
+      const needsTrailingWhitespace = after.length > 0 && !/^\s/.test(after);
+      const insertedText = `${needsLeadingWhitespace ? " " : ""}${normalizedText}${needsTrailingWhitespace ? " " : ""}`;
 
-    currentEditor.chain().focus().insertContent(insertedText).run();
-  }, []);
+      currentEditor.chain().focus().insertContent(insertedText).run();
+      scheduleRevealEditorSelection();
+    },
+    [scheduleRevealEditorSelection],
+  );
 
   const getTextBeforeCursor = useCallback((): string | undefined => {
     const currentValue = valueRef.current;
@@ -1040,9 +1146,10 @@ export function PromptBoxInternal({
 
         currentEditor.commands.focus("end");
         syncMentionState(currentEditor);
+        scheduleRevealEditorSelection();
       });
     },
-    [history, syncMentionState],
+    [history, scheduleRevealEditorSelection, syncMentionState],
   );
 
   const toggleZenMode = useCallback(() => {
@@ -1054,8 +1161,9 @@ export function PromptBoxInternal({
 
     requestAnimationFrame(() => {
       editorRef.current?.commands.focus();
+      scheduleRevealEditorSelection();
     });
-  }, [setIsZenMode]);
+  }, [scheduleRevealEditorSelection, setIsZenMode]);
 
   const handleAttachmentInputChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
@@ -1308,6 +1416,8 @@ export function PromptBoxInternal({
           )}
         </Button>
         <div
+          ref={editorScrollContainerRef}
+          data-promptbox-editor-scroll=""
           className={cn(
             "w-full overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 leading-relaxed outline-none",
             COARSE_POINTER_TEXT_BASE_CLASS,
@@ -1320,7 +1430,9 @@ export function PromptBoxInternal({
           style={{
             minHeight: isZenMode ? "0px" : `${minHeight}px`,
             height: isZenMode ? "100%" : undefined,
-            maxHeight: isZenMode ? "none" : `${PROMPTBOX_MAX_HEIGHT}px`,
+            maxHeight: isZenMode
+              ? "none"
+              : PROMPTBOX_MAX_HEIGHT_BY_LAYOUT[zenModeLayout],
           }}
         >
           <PromptMentionLinkContext.Provider value={mentionResolveLink ?? null}>

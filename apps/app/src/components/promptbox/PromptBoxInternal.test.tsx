@@ -12,7 +12,10 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { PromptDraftState } from "@/lib/prompt-draft";
 import type { PromptMentionSuggestion } from "@/components/promptbox/mentions/types";
 import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/prompt-mention-link";
-import { PromptBoxInternal } from "./PromptBoxInternal";
+import {
+  PromptBoxInternal,
+  type PromptBoxZenModeConfig,
+} from "./PromptBoxInternal";
 
 beforeAll(() => {
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
@@ -30,6 +33,7 @@ interface PromptBoxHarnessProps {
   onAttachFiles?: (files: File[]) => void | Promise<void>;
   resolveMentionLink?: PromptMentionLinkResolver;
   resetKey?: string | number;
+  zenModeLayout?: PromptBoxZenModeConfig["layout"];
 }
 
 type PromptBoxHarnessDraft = Omit<PromptDraftState, "mentions"> & {
@@ -105,6 +109,10 @@ function PromptBoxHarness(args: PromptBoxHarnessProps) {
           resolveLink: args.resolveMentionLink,
         }}
         mentionMenuPlacement="bottom"
+        zenMode={{
+          layout: args.zenModeLayout,
+          storageKey: null,
+        }}
         history={{
           currentDraft: draft,
           entries: historyEntries,
@@ -157,6 +165,14 @@ function pressIgnoredHistoryArrow({
 
 function getEditor(): HTMLElement {
   return screen.getByRole("textbox");
+}
+
+function getPromptEditorScrollContainer(container: HTMLElement): HTMLElement {
+  const element = container.querySelector("[data-promptbox-editor-scroll]");
+  if (!(element instanceof HTMLElement)) {
+    throw new Error("Expected prompt editor scroll container");
+  }
+  return element;
 }
 
 function getDraftText(): string {
@@ -246,6 +262,77 @@ function waitForAnimationFrame(): Promise<void> {
 }
 
 describe("PromptBoxInternal rich paste", () => {
+  it("caps normal thread prompt scrolling at the thread zen-mode height", () => {
+    const { container } = render(
+      <PromptBoxHarness
+        initialDraft={{
+          text: "",
+          attachments: [],
+        }}
+        historyEntries={[]}
+      />,
+    );
+
+    expect(getPromptEditorScrollContainer(container).style.maxHeight).toBe(
+      "50dvh",
+    );
+  });
+
+  it("caps normal root compose prompt scrolling at the root zen-mode height", () => {
+    const { container } = render(
+      <PromptBoxHarness
+        initialDraft={{
+          text: "",
+          attachments: [],
+        }}
+        historyEntries={[]}
+        zenModeLayout="root-compose"
+      />,
+    );
+
+    expect(getPromptEditorScrollContainer(container).style.maxHeight).toBe(
+      "70dvh",
+    );
+  });
+
+  it("reveals the caret inside the prompt editor scroll container after content changes", async () => {
+    const { container } = render(
+      <PromptBoxHarness
+        initialDraft={{
+          text: "First line",
+          attachments: [],
+        }}
+        historyEntries={[]}
+      />,
+    );
+    const scrollContainer = getPromptEditorScrollContainer(container);
+    vi.spyOn(scrollContainer, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 320, 100),
+    );
+    const caretRect = new DOMRect(0, 140, 0, 18);
+    const rangeRectSpy = vi
+      .spyOn(Range.prototype, "getBoundingClientRect")
+      .mockReturnValue(caretRect);
+
+    try {
+      const editor = getEditor();
+      setEditorSelection(editor, getDraftText().length);
+      const wasNotCanceled = pasteIntoEditor(editor, {
+        text: "\nSecond line",
+      });
+
+      expect(wasNotCanceled).toBe(false);
+      await waitFor(() => {
+        expect(getDraftText()).toBe("First line\nSecond line");
+      });
+      await waitForAnimationFrame();
+
+      expect(scrollContainer.scrollTop).toBe(70);
+    } finally {
+      rangeRectSpy.mockRestore();
+    }
+  });
+
   it("pastes multiline plain text as text and hard breaks", async () => {
     render(
       <PromptBoxHarness
