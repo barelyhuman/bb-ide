@@ -48,7 +48,7 @@ import { queueAsyncMdMigrationReminderIfPresent } from "../services/scheduling/a
 import { queueManagedThreadTurnNotificationBestEffort } from "../services/threads/managed-thread-notifications.js";
 import { runQueuedMessageAutoSendForThread } from "../services/threads/queued-messages.js";
 import { dispatchSettledArchivedThreadProviderArchiveCommand } from "../services/threads/thread-lifecycle.js";
-import { scheduleAfterDaemonIngressResponse } from "../services/hosts/daemon-ingress-scheduler.js";
+import { deferAfterResponse } from "../services/lib/response-deferral.js";
 import {
   isCommandTimeoutError,
   runtimeErrorLogFields,
@@ -456,7 +456,7 @@ function deferEventFollowUpBatch(
     return;
   }
 
-  scheduleAfterDaemonIngressResponse({
+  deferAfterResponse({
     config: deps.config,
     logger: deps.logger,
     name: "Event follow-up scheduling",

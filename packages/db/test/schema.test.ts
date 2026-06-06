@@ -37,11 +37,31 @@ function closeConnection(db: ReturnType<typeof createConnection>): void {
   db.$client.close();
 }
 
+interface TableColumnRow {
+  name: string;
+}
+
 describe("db rebuild schema", () => {
   it("migrates the fresh schema into an in-memory database", () => {
     const db = createConnection(":memory:");
 
     expect(() => migrate(db)).not.toThrow();
+
+    closeConnection(db);
+  });
+
+  it("does not retain the derived host daemon heartbeat column", () => {
+    const db = createConnection(":memory:");
+    migrate(db);
+
+    const columnNames = db.$client
+      .prepare<[], TableColumnRow>(
+        "SELECT name FROM pragma_table_info('host_daemon_sessions')",
+      )
+      .all()
+      .map((column) => column.name);
+
+    expect(columnNames).not.toContain("last_heartbeat_at");
 
     closeConnection(db);
   });

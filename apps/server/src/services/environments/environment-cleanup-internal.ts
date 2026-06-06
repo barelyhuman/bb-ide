@@ -35,7 +35,7 @@ import {
   LIVE_DAEMON_COMMAND_TIMEOUT_MS,
   startLiveHostCommand,
 } from "../hosts/live-command.js";
-import { scheduleAfterDaemonIngressResponse } from "../hosts/daemon-ingress-scheduler.js";
+import { deferAfterResponse } from "../lib/response-deferral.js";
 import { NotificationBuffer } from "../lib/notification-buffer.js";
 import { appendSystemErrorEventInTransaction } from "../threads/thread-events.js";
 import { tryTransitionInTransaction } from "../threads/thread-transitions.js";
@@ -481,7 +481,7 @@ export function requestEnvironmentCleanupAdvance(
   }
   const environmentId = args.environmentId;
 
-  scheduleAfterDaemonIngressResponse({
+  deferAfterResponse({
     config: deps.config,
     context: {
       environmentId,

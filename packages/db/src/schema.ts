@@ -549,7 +549,6 @@ export const hostDaemonSessions = sqliteTable(
     leaseTimeoutMs: integer("lease_timeout_ms").notNull(),
     status: text("status").notNull(),
     leaseExpiresAt: integer("lease_expires_at").notNull(),
-    lastHeartbeatAt: integer("last_heartbeat_at"),
     closedAt: integer("closed_at"),
     closeReason: text("close_reason"),
     createdAt: integer("created_at").notNull(),

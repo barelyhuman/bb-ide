@@ -269,7 +269,6 @@ export function heartbeatSession(
     db
       .update(hostDaemonSessions)
       .set({
-        lastHeartbeatAt: now,
         leaseExpiresAt,
         updatedAt: now,
       })

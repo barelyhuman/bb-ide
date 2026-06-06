@@ -269,17 +269,6 @@ function runMigrationFile(args: RunMigrationFileArgs): void {
   }
 }
 
-function deleteAppliedMigration(db: DbConnection, createdAt: number): void {
-  db.$client
-    .prepare<DeleteMigrationParameters>(
-      `
-        DELETE FROM __drizzle_migrations
-        WHERE created_at = ?
-      `,
-    )
-    .run(createdAt);
-}
-
 function seedPre0017TerminalSessionMigration(
   args: SeedPre0017TerminalSessionMigrationArgs,
 ): void {
@@ -914,6 +903,11 @@ describe("migrate", () => {
           3000
         );
       `);
+      db.$client
+        .prepare(
+          "ALTER TABLE host_daemon_sessions ADD COLUMN last_heartbeat_at integer",
+        )
+        .run();
       db.$client.prepare("DELETE FROM __drizzle_migrations").run();
       db.$client
         .prepare<InsertMigrationParameters>(
@@ -1116,6 +1110,11 @@ describe("migrate", () => {
         );
       `);
       db.$client
+        .prepare(
+          "ALTER TABLE host_daemon_sessions ADD COLUMN last_heartbeat_at integer",
+        )
+        .run();
+      db.$client
         .prepare<DeleteMigrationParameters>(
           `
             DELETE FROM __drizzle_migrations
@@ -1299,7 +1298,19 @@ describe("migrate", () => {
     try {
       migrate(db);
       seedPre0017TerminalSessionMigration({ db });
-      deleteAppliedMigration(db, terminalSessionRuntimeStateHonestyWhen);
+      db.$client
+        .prepare(
+          "ALTER TABLE host_daemon_sessions ADD COLUMN last_heartbeat_at integer",
+        )
+        .run();
+      db.$client
+        .prepare<DeleteMigrationParameters>(
+          `
+            DELETE FROM __drizzle_migrations
+            WHERE created_at >= ?
+          `,
+        )
+        .run(terminalSessionRuntimeStateHonestyWhen);
 
       migrate(db);
 
@@ -1353,6 +1364,12 @@ describe("migrate", () => {
       expect(terminalSessionColumns).not.toContain("current_cwd");
       expect(terminalSessionColumns).not.toContain("last_connected_at");
       expect(terminalSessionColumns).not.toContain("exited_at");
+
+      const hostDaemonSessionColumns = db.$client
+        .prepare<[], TableInfoRow>("PRAGMA table_info(host_daemon_sessions)")
+        .all()
+        .map((column) => column.name);
+      expect(hostDaemonSessionColumns).not.toContain("last_heartbeat_at");
     } finally {
       closeConnection(db);
     }

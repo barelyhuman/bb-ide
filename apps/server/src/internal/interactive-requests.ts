@@ -8,7 +8,7 @@ import { getThread, hasStoredTurnStarted } from "@bb/db";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
-import { scheduleAfterDaemonIngressResponse } from "../services/hosts/daemon-ingress-scheduler.js";
+import { deferAfterResponse } from "../services/lib/response-deferral.js";
 import { requireThreadEnvironment } from "../services/lib/entity-lookup.js";
 import {
   queueManagedThreadNeedsAttentionNotificationBestEffort,
@@ -29,7 +29,7 @@ function requestManagedThreadNeedsAttentionNotification(
   }
   const managerThreadId = managedThread.parentThreadId;
 
-  scheduleAfterDaemonIngressResponse({
+  deferAfterResponse({
     config: deps.config,
     context: {
       managedThreadId: managedThread.id,

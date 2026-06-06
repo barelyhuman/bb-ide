@@ -1,7 +1,7 @@
 import type { ServerLogger, ServerRuntimeConfig } from "../../types.js";
-import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
+import { runtimeErrorLogFields } from "./error-log-fields.js";
 
-export interface ScheduleAfterDaemonIngressResponseArgs {
+export interface DeferAfterResponseArgs {
   config: Pick<ServerRuntimeConfig, "isDevelopment">;
   context?: Record<string, boolean | number | string | null | undefined>;
   logger: Pick<ServerLogger, "warn">;
@@ -9,9 +9,7 @@ export interface ScheduleAfterDaemonIngressResponseArgs {
   work: () => Promise<void>;
 }
 
-export function scheduleAfterDaemonIngressResponse(
-  args: ScheduleAfterDaemonIngressResponseArgs,
-): void {
+export function deferAfterResponse(args: DeferAfterResponseArgs): void {
   setImmediate(() => {
     void args.work().catch((error) => {
       args.logger.warn(

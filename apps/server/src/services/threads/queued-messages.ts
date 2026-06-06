@@ -19,7 +19,7 @@ import type {
   LoggedPendingInteractionWorkSessionDeps,
 } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import { scheduleAfterDaemonIngressResponse } from "../hosts/daemon-ingress-scheduler.js";
+import { deferAfterResponse } from "../lib/response-deferral.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import {
   LIVE_DAEMON_COMMAND_TIMEOUT_MS,
@@ -423,7 +423,7 @@ export function requestQueuedMessageAutoSendForThread(
   deps: LoggedPendingInteractionWorkSessionDeps,
   args: QueuedMessageAutoSendRequestArgs,
 ): void {
-  scheduleAfterDaemonIngressResponse({
+  deferAfterResponse({
     config: deps.config,
     context: {
       queuedMessageId: args.queuedMessageId,

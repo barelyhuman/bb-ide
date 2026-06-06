@@ -266,7 +266,7 @@ describe("sessions", () => {
     ).toEqual(["hses_a_active"]);
   });
 
-  it("updates heartbeat timestamps for an active session", () => {
+  it("extends the session lease on heartbeat", () => {
     const { db, host } = setup();
     const session = openSession(db, noopNotifier, {
       hostId: host.id,
@@ -280,7 +280,6 @@ describe("sessions", () => {
     });
 
     const updated = heartbeatSession(db, session.id, Date.now() + 45_000);
-    expect(updated?.lastHeartbeatAt).toBeTypeOf("number");
     expect(updated?.leaseExpiresAt).toBeGreaterThan(Date.now());
   });
 
