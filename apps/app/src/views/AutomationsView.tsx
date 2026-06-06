@@ -1,7 +1,5 @@
 import { Link } from "react-router-dom";
 import type {
-  Automation,
-  AutomationsOverviewAutomation,
   AutomationsOverviewProject,
   AutomationsOverviewThread,
   AutomationsOverviewThreadSchedule,
@@ -13,7 +11,6 @@ import { getThreadRoutePath } from "@/lib/app-route-paths";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import {
   formatCronCadence,
-  formatScheduleRunTime,
   formatScheduleStatusLabel,
 } from "@/lib/format-schedule";
 import { cn } from "@/lib/utils";
@@ -24,38 +21,12 @@ interface ThreadScheduleGroup {
   schedules: ThreadSchedule[];
 }
 
-interface SectionHeaderProps {
-  count: number;
-  title: string;
-}
-
-interface ProjectAutomationRowProps {
-  item: AutomationsOverviewAutomation;
-}
-
-interface ProjectAutomationsSectionProps {
-  automations: readonly AutomationsOverviewAutomation[];
-}
-
 interface ThreadScheduleGroupSectionProps {
   group: ThreadScheduleGroup;
 }
 
 interface ThreadSchedulesSectionProps {
   schedules: readonly AutomationsOverviewThreadSchedule[];
-}
-
-function automationStatus(automation: Automation): string {
-  if (!automation.isValid) {
-    return "Needs edit";
-  }
-  if (!automation.enabled) {
-    return "Paused";
-  }
-  if (automation.nextRunAt === null) {
-    return "Not scheduled";
-  }
-  return `Next ${formatScheduleRunTime(automation.nextRunAt)}`;
 }
 
 function groupSchedulesByThread(
@@ -75,67 +46,6 @@ function groupSchedulesByThread(
   return orderedGroups;
 }
 
-function SectionHeader({ count, title }: SectionHeaderProps) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <h2 className="text-xs font-medium uppercase tracking-normal text-muted-foreground">
-        {title}
-      </h2>
-      <span className="text-xs text-muted-foreground">{count}</span>
-    </div>
-  );
-}
-
-function ProjectAutomationRow({ item }: ProjectAutomationRowProps) {
-  const { automation, project } = item;
-
-  return (
-    <div
-      className={cn(
-        "flex items-baseline justify-between gap-4 text-xs",
-        (!automation.enabled || !automation.isValid) && "opacity-60",
-      )}
-    >
-      <div className="flex min-w-0 items-baseline gap-1.5">
-        <span aria-hidden="true" className="shrink-0 text-muted-foreground">
-          •
-        </span>
-        <p className="min-w-0 truncate">
-          <span className="text-foreground">{automation.name}</span>
-          <span className="ml-2 text-muted-foreground">
-            {formatCronCadence(automation.trigger.cron)}
-          </span>
-          <span className="ml-2 text-muted-foreground">{project.name}</span>
-        </p>
-      </div>
-      <span className="shrink-0 text-muted-foreground">
-        {automationStatus(automation)}
-      </span>
-    </div>
-  );
-}
-
-function ProjectAutomationsSection({
-  automations,
-}: ProjectAutomationsSectionProps) {
-  return (
-    <section className="space-y-2">
-      <SectionHeader count={automations.length} title="Project automations" />
-      {automations.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No project automations yet.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-1.5">
-          {automations.map((item) => (
-            <ProjectAutomationRow key={item.automation.id} item={item} />
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
 function ThreadScheduleGroupSection({
   group,
 }: ThreadScheduleGroupSectionProps) {
@@ -149,7 +59,7 @@ function ThreadScheduleGroupSection({
             projectId: thread.projectId,
             threadId: thread.id,
           })}
-          className="min-w-0 truncate text-sm font-medium text-foreground underline-offset-2 hover:underline"
+          className="min-w-0 truncate text-sm font-medium text-foreground underline underline-offset-2"
         >
           {getThreadDisplayTitle(thread)}
         </Link>
@@ -197,8 +107,7 @@ function ThreadSchedulesSection({ schedules }: ThreadSchedulesSectionProps) {
   const groups = groupSchedulesByThread(schedules);
 
   return (
-    <section className="space-y-2">
-      <SectionHeader count={schedules.length} title="Thread schedules" />
+    <section>
       {groups.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No thread schedules yet.
@@ -215,23 +124,18 @@ function ThreadSchedulesSection({ schedules }: ThreadSchedulesSectionProps) {
 }
 
 export interface AutomationsOverviewProps {
-  automations: readonly AutomationsOverviewAutomation[];
   hasInitialLoadError: boolean;
   schedules: readonly AutomationsOverviewThreadSchedule[];
   isLoading: boolean;
 }
 
 export function AutomationsOverview({
-  automations,
   hasInitialLoadError,
   schedules,
   isLoading,
 }: AutomationsOverviewProps) {
   const isEmpty =
-    !isLoading &&
-    !hasInitialLoadError &&
-    automations.length === 0 &&
-    schedules.length === 0;
+    !isLoading && !hasInitialLoadError && schedules.length === 0;
 
   return (
     <PageShell contentClassName="pt-4 md:pt-5">
@@ -244,11 +148,10 @@ export function AutomationsOverview({
           </p>
         ) : isEmpty ? (
           <p className="text-sm text-muted-foreground">
-            No automations or schedules yet.
+            No thread schedules yet.
           </p>
         ) : (
           <div className="space-y-6">
-            <ProjectAutomationsSection automations={automations} />
             <ThreadSchedulesSection schedules={schedules} />
           </div>
         )}
@@ -259,7 +162,6 @@ export function AutomationsOverview({
 
 export function AutomationsView() {
   const automationsOverviewQuery = useAutomationsOverview();
-  const automations = automationsOverviewQuery.data?.automations ?? [];
   const schedules = automationsOverviewQuery.data?.threadSchedules ?? [];
   const hasInitialLoadError =
     automationsOverviewQuery.isError &&
@@ -271,7 +173,6 @@ export function AutomationsView() {
 
   return (
     <AutomationsOverview
-      automations={automations}
       hasInitialLoadError={hasInitialLoadError}
       schedules={schedules}
       isLoading={isLoading}
