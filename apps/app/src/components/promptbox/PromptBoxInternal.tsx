@@ -516,6 +516,7 @@ export function PromptBoxInternal({
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const valueRef = useRef(value);
   const mentionRangesRef = useRef<readonly PromptTextMention[]>(mentionRanges);
+  const placeholderRef = useRef(placeholder);
   const skipEditorChangeRef = useRef(false);
   const editorValueKeyRef = useRef("");
   const mentionKeyRef = useRef("");
@@ -665,7 +666,7 @@ export function PromptBoxInternal({
         strike: false,
       }),
       Placeholder.configure({
-        placeholder,
+        placeholder: () => placeholderRef.current,
       }),
       PromptMentionExtension,
     ],
@@ -765,6 +766,15 @@ export function PromptBoxInternal({
   useEffect(() => {
     editorRef.current = editor;
   }, [editor]);
+
+  useLayoutEffect(() => {
+    placeholderRef.current = placeholder;
+    if (!editor) return;
+
+    editor.view.dom.setAttribute("aria-label", placeholder);
+    editor.view.dom.setAttribute("data-placeholder", placeholder);
+    editor.view.dispatch(editor.state.tr);
+  }, [editor, placeholder]);
 
   useLayoutEffect(() => {
     if (!autoFocus) return;

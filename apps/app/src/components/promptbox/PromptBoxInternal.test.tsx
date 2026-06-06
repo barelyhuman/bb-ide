@@ -31,6 +31,7 @@ interface PromptBoxHarnessProps {
   mentionSuggestions?: PromptMentionSuggestion[];
   onChangeSpy?: PromptBoxHarnessChangeSpy;
   onAttachFiles?: (files: File[]) => void | Promise<void>;
+  placeholder?: string;
   resolveMentionLink?: PromptMentionLinkResolver;
   resetKey?: string | number;
   zenModeLayout?: PromptBoxZenModeConfig["layout"];
@@ -96,6 +97,7 @@ function PromptBoxHarness(args: PromptBoxHarnessProps) {
         }}
         onSubmit={() => {}}
         autoFocus={args.autoFocus ?? false}
+        placeholder={args.placeholder}
         attachments={{
           items: draft.attachments,
           onAttachFiles: args.onAttachFiles,
@@ -262,6 +264,47 @@ function waitForAnimationFrame(): Promise<void> {
 }
 
 describe("PromptBoxInternal rich paste", () => {
+  it("updates the empty editor placeholder after rerender", async () => {
+    const { rerender } = render(
+      <PromptBoxHarness
+        initialDraft={{
+          text: "",
+          attachments: [],
+        }}
+        historyEntries={[]}
+        placeholder="Loading thread options..."
+      />,
+    );
+
+    await waitFor(() => {
+      expect(getEditor().getAttribute("data-placeholder")).toBe(
+        "Loading thread options...",
+      );
+    });
+
+    rerender(
+      <PromptBoxHarness
+        initialDraft={{
+          text: "",
+          attachments: [],
+        }}
+        historyEntries={[]}
+        placeholder="Ask for follow up..."
+      />,
+    );
+
+    await waitFor(() => {
+      expect(getEditor().getAttribute("data-placeholder")).toBe(
+        "Ask for follow up...",
+      );
+    });
+    expect(
+      getEditor()
+        .querySelector(".is-editor-empty")
+        ?.getAttribute("data-placeholder"),
+    ).toBe("Ask for follow up...");
+  });
+
   it("caps normal thread prompt scrolling at the thread zen-mode height", () => {
     const { container } = render(
       <PromptBoxHarness
