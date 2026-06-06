@@ -298,13 +298,32 @@ describe("ThreadTimelineRows", () => {
       ],
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /System Message/u }),
-    );
+    expect(
+      screen
+        .getByRole("button", { name: /System Message/u })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
     expect(
       screen.getByText("Scheduled nudge: daily-recap. Check ASYNC.md."),
     ).toBeTruthy();
     expect(screen.queryByText(/\[bb system/u)).toBeNull();
+  });
+
+  it("renders assistant rows auto-expanded", () => {
+    const view = renderTimelineRows({
+      timelineRows: [
+        conversationRow({
+          role: "assistant",
+          text: "Assistant reply",
+        }),
+      ],
+    });
+
+    const assistantButton = screen.getByRole("button", {
+      name: "Assistant",
+    });
+    expect(assistantButton.getAttribute("aria-expanded")).toBe("true");
+    expect(view.container.textContent ?? "").toContain("Assistant reply");
   });
 
   it("renders an unread divider before the first row newer than the frozen read cutoff", () => {

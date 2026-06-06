@@ -6,10 +6,32 @@ export function isTimelineTerminalMessage(
   return message.kind === "assistant-text" || message.kind === "error";
 }
 
+export function isTimelineSummaryGroupableSteerMessage(
+  message: EventProjectionMessage,
+): boolean {
+  return (
+    message.kind === "user" &&
+    message.turnRequest.kind === "steer" &&
+    (message.initiator === "agent" || message.initiator === "system")
+  );
+}
+
 export function isTimelineUngroupableMessage(
   message: EventProjectionMessage,
 ): boolean {
-  return message.kind === "user" || message.kind === "debug/raw-event";
+  if (message.kind === "user") {
+    return !isTimelineSummaryGroupableSteerMessage(message);
+  }
+  if (message.kind === "assistant-text") {
+    return message.isManagerUserMessage === true;
+  }
+  return message.kind === "debug/raw-event";
+}
+
+export function isTimelineSummaryCountedMessage(
+  message: EventProjectionMessage,
+): boolean {
+  return !isTimelineUngroupableMessage(message);
 }
 
 export function findLastTerminalTimelineMessage(

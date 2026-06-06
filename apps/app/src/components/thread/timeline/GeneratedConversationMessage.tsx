@@ -1,11 +1,8 @@
-import { memo, useCallback, useMemo } from "react";
-import type {
-  TimelineConversationTurnRequest,
-  TimelineUserConversationRow,
-} from "@bb/server-contract";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
+import type { TimelineUserConversationRow } from "@bb/server-contract";
 import type { PromptTextMention } from "@bb/domain";
 import type { TimelineTitle, TimelineTitleSegment } from "@bb/thread-view";
-import type { IconName } from "@/components/ui/icon.js";
+import { Icon, type IconName } from "@/components/ui/icon.js";
 import {
   ConversationAttachments,
   type ConversationAttachmentItems,
@@ -22,6 +19,12 @@ import type { TimelineTitleLinkResolver } from "./TimelineTitleView.js";
 import type { ThreadTimelineLocalFileLinkHandler } from "./types.js";
 import { USER_MESSAGE_CHAR_CAP } from "./conversation-message-limits.js";
 import { turnRequestLabel } from "./conversation-turn-request-label.js";
+import { cn } from "@/lib/utils";
+import {
+  ConversationMessageInlineOverflowToggle,
+  ConversationMessageOverflowToggle,
+  useIsOverflowing,
+} from "./conversation-message-overflow.js";
 
 interface GeneratedConversationMessageProps {
   attachmentItems: ConversationAttachmentItems;
@@ -60,7 +63,6 @@ interface GeneratedConversationTitleArgs {
   sourceKind: GeneratedConversationSourceKind;
   sourceName: string;
   sourceThreadId: string | null;
-  turnRequest: TimelineConversationTurnRequest;
 }
 
 export function generatedConversationBodySlice({
@@ -111,9 +113,7 @@ function generatedConversationTitle({
   sourceKind,
   sourceName,
   sourceThreadId,
-  turnRequest,
 }: GeneratedConversationTitleArgs): TimelineTitle {
-  const requestLabel = turnRequestLabel(turnRequest);
   const segments: TimelineTitleSegment[] =
     sourceKind === "agent"
       ? [
@@ -144,18 +144,6 @@ function generatedConversationTitle({
             truncate: true,
           }),
         ];
-
-  if (requestLabel !== null) {
-    segments.push(
-      timelineTitleSegment({
-        em: false,
-        link: null,
-        shimmer: false,
-        text: `(${requestLabel})`,
-        truncate: false,
-      }),
-    );
-  }
 
   return {
     action: null,
@@ -228,15 +216,26 @@ export const GeneratedConversationMessage = memo(
       [messageMentions, visibleText],
     );
     const isTruncated = messageText.length > USER_MESSAGE_CHAR_CAP;
+    const [isFullTextVisible, setIsFullTextVisible] = useState(false);
+    const textRef = useRef<HTMLParagraphElement>(null);
+    const isOverflowing = useIsOverflowing({
+      elementRef: textRef,
+      enabled: !isFullTextVisible && messageText.length > 0,
+      measurementKey: visibleText,
+    });
+    const showToggle = isFullTextVisible || isOverflowing;
+    const showInlineToggle = !isFullTextVisible && isOverflowing;
+    const requestLabel = turnRequestLabel(turnRequest);
+    const isPendingSteer =
+      turnRequest.kind === "steer" && turnRequest.status === "pending";
     const title = useMemo(
       () =>
         generatedConversationTitle({
           sourceKind,
           sourceName,
           sourceThreadId,
-          turnRequest,
         }),
-      [sourceKind, sourceName, sourceThreadId, turnRequest],
+      [sourceKind, sourceName, sourceThreadId],
     );
     const leadingIcon = generatedConversationIconName(sourceKind);
     const renderBody = useCallback(
@@ -244,7 +243,14 @@ export const GeneratedConversationMessage = memo(
         <div className={NESTED_TIMELINE_GROUP_LINE_CLASS_NAME}>
           <div className="pl-2 text-sm leading-relaxed text-foreground">
             {messageText ? (
-              <p className="whitespace-pre-wrap break-words">
+              <p
+                ref={textRef}
+                className={cn(
+                  "whitespace-pre-wrap break-words",
+                  !isFullTextVisible && "line-clamp-2",
+                  showInlineToggle && "relative",
+                )}
+              >
                 {renderMentionTextSegments({
                   mentions: visibleMessage.mentions,
                   text: visibleMessage.text,
@@ -252,12 +258,27 @@ export const GeneratedConversationMessage = memo(
                 {isTruncated ? (
                   <span className="text-muted-foreground"> [truncated]</span>
                 ) : null}
+                {showInlineToggle ? (
+                  <ConversationMessageInlineOverflowToggle
+                    buttonBackgroundClassName="bg-background"
+                    fadeFromClassName="from-background"
+                    label="Show more"
+                    onToggle={() => setIsFullTextVisible(true)}
+                  />
+                ) : null}
               </p>
             ) : (
               <p className="text-muted-foreground">
                 {generatedConversationEmptyText(sourceKind)}
               </p>
             )}
+            {isFullTextVisible && showToggle ? (
+              <ConversationMessageOverflowToggle
+                expanded={isFullTextVisible}
+                labels={{ collapsed: "Show more", expanded: "Show less" }}
+                onToggle={() => setIsFullTextVisible((prev) => !prev)}
+              />
+            ) : null}
             <ConversationAttachments
               align="start"
               filePaths={attachmentItems.filePaths}
@@ -265,6 +286,22 @@ export const GeneratedConversationMessage = memo(
               onOpenLocalFileLink={onOpenLocalFileLink}
               projectId={projectId}
             />
+            {requestLabel ? (
+              <div className="mt-1 flex items-center justify-start gap-2">
+                <span
+                  className={cn(
+                    "shrink-0 whitespace-nowrap text-xs leading-none text-muted-foreground",
+                    isPendingSteer && "animate-shine",
+                  )}
+                >
+                  <Icon
+                    name="CornerDownRight"
+                    className="mr-1 inline-block size-3 align-middle"
+                  />
+                  {requestLabel}
+                </span>
+              </div>
+            ) : null}
           </div>
         </div>
       ),
@@ -276,7 +313,12 @@ export const GeneratedConversationMessage = memo(
         onOpenLocalFileLink,
         projectId,
         sourceKind,
+        requestLabel,
+        isPendingSteer,
+        isFullTextVisible,
         visibleMessage,
+        showToggle,
+        showInlineToggle,
       ],
     );
 
@@ -284,6 +326,7 @@ export const GeneratedConversationMessage = memo(
       <ExpandableTimelineRow
         title={title}
         leadingIcon={leadingIcon}
+        autoExpanded={sourceKind === "system"}
         resolveSegmentLinkHref={resolveSegmentLinkHref}
         renderBody={renderBody}
       />

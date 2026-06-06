@@ -1467,8 +1467,12 @@ export function PromptBoxInternal({
           ref={editorScrollContainerRef}
           data-promptbox-editor-scroll=""
           className={cn(
-            "w-full overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 leading-relaxed outline-none",
+            "w-full overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 outline-none",
             COARSE_POINTER_TEXT_BASE_CLASS,
+            // Keep line-height after the text-size class. tailwind-merge treats
+            // text size utilities as owning line-height and would otherwise
+            // drop this, making composer rows tighter than timeline messages.
+            "leading-relaxed",
             // Zen mode only adds the flex-fill behavior so the editor
             // stretches to the dvh-sized form. Inset padding (px / pt / pb)
             // is identical between modes — toggling shouldn't shift the
@@ -1488,7 +1492,7 @@ export function PromptBoxInternal({
               editor={editor}
               className={cn(
                 "h-full min-h-full",
-                "[&_.ProseMirror]:min-h-full [&_.ProseMirror]:outline-none",
+                "[&_.ProseMirror]:min-h-full [&_.ProseMirror]:leading-relaxed [&_.ProseMirror]:outline-none",
                 "[&_.ProseMirror_p]:m-0",
                 "[&_.ProseMirror_p.is-editor-empty:first-child::before]:pointer-events-none",
                 "[&_.ProseMirror_p.is-editor-empty:first-child::before]:float-left",

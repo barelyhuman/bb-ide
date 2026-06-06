@@ -6,6 +6,7 @@ import type {
 } from "./event-projection-types.js";
 import {
   findLastTerminalTimelineMessage,
+  isTimelineSummaryCountedMessage,
   isTimelineTerminalMessage,
   isTimelineUngroupableMessage,
 } from "./timeline-message-helpers.js";
@@ -34,10 +35,9 @@ export function getProjectionSummaryCount(
     if (terminalMessage && message.id === terminalMessage.id) {
       break;
     }
-    if (isTimelineUngroupableMessage(message)) {
-      continue;
+    if (isTimelineSummaryCountedMessage(message)) {
+      count += getProjectionMessageSummaryCount(message);
     }
-    count += getProjectionMessageSummaryCount(message);
   }
   return count;
 }

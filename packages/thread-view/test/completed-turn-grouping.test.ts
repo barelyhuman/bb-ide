@@ -5,6 +5,7 @@ import type { CompletedTurnMessageGroups } from "../src/completed-turn-grouping.
 import type {
   EventProjectionAssistantTextMessage,
   EventProjectionMessage,
+  EventProjectionTurnRequest,
   EventProjectionTurn,
   EventProjectionUserMessage,
 } from "../src/event-projection-types.js";
@@ -37,13 +38,18 @@ function assistantMessage(
   };
 }
 
-function userMessage(args: MessageBaseArgs): EventProjectionUserMessage {
+interface UserMessageArgs extends MessageBaseArgs {
+  initiator?: EventProjectionUserMessage["initiator"];
+  turnRequest?: EventProjectionTurnRequest;
+}
+
+function userMessage(args: UserMessageArgs): EventProjectionUserMessage {
   return {
     ...messageBase(args),
     kind: "user",
-    initiator: "user",
+    initiator: args.initiator ?? "user",
     senderThreadId: null,
-    turnRequest: {
+    turnRequest: args.turnRequest ?? {
       kind: "message",
       status: "accepted",
     },
@@ -52,9 +58,19 @@ function userMessage(args: MessageBaseArgs): EventProjectionUserMessage {
   };
 }
 
+function managerUserMessage(
+  args: MessageBaseArgs,
+): EventProjectionAssistantTextMessage {
+  return {
+    ...assistantMessage(args),
+    isManagerUserMessage: true,
+  };
+}
+
 function completedTurn(
   messages: EventProjectionMessage[],
   terminalMessage: EventProjectionMessage | undefined,
+  summaryCount = messages.length,
 ): EventProjectionTurn {
   return {
     turnId: "turn-1",
@@ -65,7 +81,7 @@ function completedTurn(
     createdAt: messages.length,
     completedAt: messages.length,
     status: "completed",
-    summaryCount: messages.length,
+    summaryCount,
     messages,
     ...(terminalMessage ? { terminalMessage } : {}),
   };
@@ -128,6 +144,81 @@ describe("groupCompletedTurnMessages", () => {
         kind: "ungrouped-message",
         message: {
           id: "user",
+        },
+      },
+      {
+        kind: "summary",
+        startedAt: 3,
+        completedAt: null,
+        segmentIndex: 1,
+        summaryCount: 1,
+      },
+    ]);
+    expect(summarySourceMessageIds(groups)).toEqual([
+      ["assistant-before"],
+      ["assistant-after"],
+    ]);
+  });
+
+  it("does not segment summary groups around agent and system steers", () => {
+    const turn = completedTurn(
+      [
+        assistantMessage({ id: "assistant-before", seq: 1 }),
+        userMessage({
+          id: "agent-steer",
+          initiator: "agent",
+          seq: 2,
+          turnRequest: { kind: "steer", status: "accepted" },
+        }),
+        userMessage({
+          id: "system-steer",
+          initiator: "system",
+          seq: 3,
+          turnRequest: { kind: "steer", status: "accepted" },
+        }),
+        assistantMessage({ id: "assistant-after", seq: 4 }),
+      ],
+      undefined,
+    );
+    const groups = groupCompletedTurnMessages(turn);
+
+    expect(groups.summaryItems).toMatchObject([
+      {
+        kind: "summary",
+        startedAt: 1,
+        completedAt: 4,
+        segmentIndex: null,
+        summaryCount: 4,
+      },
+    ]);
+    expect(summarySourceMessageIds(groups)).toEqual([
+      ["assistant-before", "agent-steer", "system-steer", "assistant-after"],
+    ]);
+  });
+
+  it("segments summary groups around converted manager user messages", () => {
+    const turn = completedTurn(
+      [
+        assistantMessage({ id: "assistant-before", seq: 1 }),
+        managerUserMessage({ id: "manager-user-message", seq: 2 }),
+        assistantMessage({ id: "assistant-after", seq: 3 }),
+      ],
+      undefined,
+    );
+    const groups = groupCompletedTurnMessages(turn);
+
+    expect(groups.summaryItems).toMatchObject([
+      {
+        kind: "summary",
+        startedAt: 1,
+        completedAt: null,
+        segmentIndex: 0,
+        summaryCount: 1,
+      },
+      {
+        kind: "ungrouped-message",
+        message: {
+          id: "manager-user-message",
         },
       },
       {

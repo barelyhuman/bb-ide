@@ -5,6 +5,7 @@ import {
   renderTimelineFixture,
 } from "./timeline-test-harness.js";
 import type { TimelineEventFactory } from "./timeline-test-harness.js";
+import type { SystemClientRequestVisibility } from "../src/event-projection-types.js";
 
 type TimelineFixtureEvent = ReturnType<
   TimelineEventFactory[keyof TimelineEventFactory]
@@ -15,6 +16,7 @@ type TimelineWorkRow = Extract<TimelineRow, { kind: "work" }>;
 interface RenderCompletedTimelineArgs {
   events: TimelineFixtureEvent[];
   includeDebugRawEvents?: boolean;
+  systemClientRequestVisibility?: SystemClientRequestVisibility;
 }
 
 function renderCompletedTimeline(args: RenderCompletedTimelineArgs) {
@@ -22,7 +24,8 @@ function renderCompletedTimeline(args: RenderCompletedTimelineArgs) {
     events: args.events,
     projectionOptions: {
       includeDebugRawEvents: args.includeDebugRawEvents,
-      systemClientRequestVisibility: "hidden",
+      systemClientRequestVisibility:
+        args.systemClientRequestVisibility ?? "hidden",
       threadStatus: "idle",
       turnMessageDetail: "summary",
     },
@@ -246,6 +249,145 @@ describe("completed turn summary rendering", () => {
       "turn:2-2",
       "conversation:user",
       "turn:5-5",
+      "conversation:assistant",
+    ]);
+    expect(topLevelWorkRows(timeline.rows)).toHaveLength(0);
+    expect(turnRows(timeline.rows).map((row) => row.summaryCount)).toEqual([
+      1, 1,
+    ]);
+    expect(
+      turnRows(timeline.rows).map((row) => rowSignatures(row.children ?? [])),
+    ).toEqual([["work:command"], ["work:command"]]);
+  });
+
+  it("does not split completed turn summaries around accepted assistant steers", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const events: TimelineFixtureEvent[] = [
+      event.turnStarted(),
+      event.commandCompleted({
+        itemId: "tool-before-steer",
+        command: "pnpm test",
+      }),
+    ];
+    const steerRequest = event.clientTurnRequested({
+      initiator: "agent",
+      senderThreadId: "thr_manager",
+      target: { kind: "auto", expectedTurnId: "turn-1" },
+      text: "Please account for the restart",
+    });
+    events.push(
+      steerRequest,
+      event.inputAccepted({
+        clientRequestId: steerRequest.data.requestId,
+      }),
+      event.commandCompleted({
+        itemId: "tool-after-steer",
+        command: "sqlite3 ~/.bb-dev/bb.db '.tables'",
+      }),
+      event.assistantCompleted({
+        itemId: "assistant-1",
+        text: "Done.",
+      }),
+      event.turnCompleted(),
+    );
+
+    const timeline = renderCompletedTimeline({ events });
+
+    expect(rowSignatures(timeline.rows)).toEqual([
+      "turn:1-7",
+      "conversation:assistant",
+    ]);
+    expect(topLevelWorkRows(timeline.rows)).toHaveLength(0);
+
+    const turnRow = requireOnlyTurnRow(timeline.rows);
+    expect(turnRow.summaryCount).toBe(3);
+    expect(rowSignatures(turnRow.children ?? [])).toEqual([
+      "work:command",
+      "conversation:user",
+      "work:command",
+    ]);
+  });
+
+  it("does not split completed turn summaries around accepted system steers", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const events: TimelineFixtureEvent[] = [
+      event.turnStarted(),
+      event.commandCompleted({
+        itemId: "tool-before-steer",
+        command: "pnpm test",
+      }),
+    ];
+    const steerRequest = event.clientTurnRequested({
+      initiator: "system",
+      senderThreadId: null,
+      target: { kind: "auto", expectedTurnId: "turn-1" },
+      text: "[bb system] Continue after reconnect.",
+    });
+    events.push(
+      steerRequest,
+      event.inputAccepted({
+        clientRequestId: steerRequest.data.requestId,
+      }),
+      event.commandCompleted({
+        itemId: "tool-after-steer",
+        command: "sqlite3 ~/.bb-dev/bb.db '.tables'",
+      }),
+      event.assistantCompleted({
+        itemId: "assistant-1",
+        text: "Done.",
+      }),
+      event.turnCompleted(),
+    );
+
+    const timeline = renderCompletedTimeline({
+      events,
+      systemClientRequestVisibility: "visible",
+    });
+
+    expect(rowSignatures(timeline.rows)).toEqual([
+      "turn:1-7",
+      "conversation:assistant",
+    ]);
+    expect(topLevelWorkRows(timeline.rows)).toHaveLength(0);
+
+    const turnRow = requireOnlyTurnRow(timeline.rows);
+    expect(turnRow.summaryCount).toBe(3);
+    expect(rowSignatures(turnRow.children ?? [])).toEqual([
+      "work:command",
+      "conversation:user",
+      "work:command",
+    ]);
+  });
+
+  it("splits completed turn summaries around converted manager user messages", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+
+    const timeline = renderCompletedTimeline({
+      events: [
+        event.turnStarted(),
+        event.commandCompleted({
+          itemId: "tool-before-message",
+          command: "pnpm test",
+        }),
+        event.managerUserMessage({
+          text: "Visible manager update",
+        }),
+        event.commandCompleted({
+          itemId: "tool-after-message",
+          command: "git status --short",
+        }),
+        event.assistantCompleted({
+          itemId: "assistant-1",
+          text: "Done.",
+        }),
+        event.turnCompleted(),
+      ],
+    });
+
+    expect(rowSignatures(timeline.rows)).toEqual([
+      "turn:2-2",
+      "conversation:assistant",
+      "turn:4-4",
       "conversation:assistant",
     ]);
     expect(topLevelWorkRows(timeline.rows)).toHaveLength(0);

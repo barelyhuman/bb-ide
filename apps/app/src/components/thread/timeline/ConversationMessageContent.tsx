@@ -1,9 +1,7 @@
 import {
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type RefObject,
 } from "react";
 import type {
   TimelineConversationAttachments,
@@ -38,6 +36,11 @@ import {
 } from "./ConversationMessageMentions.js";
 import { USER_MESSAGE_CHAR_CAP } from "./conversation-message-limits.js";
 import { turnRequestLabel } from "./conversation-turn-request-label.js";
+import {
+  ConversationMessageInlineOverflowToggle,
+  ConversationMessageOverflowToggle,
+  useIsOverflowing,
+} from "./conversation-message-overflow.js";
 
 interface ConversationMessageContentBaseProps {
   attachments: TimelineConversationAttachments | null;
@@ -110,48 +113,13 @@ interface CollapsibleMessageTextProps {
   mutePrefixLength?: number;
 }
 
-function splitPreWrappedLines(text: string): string[] {
-  return text.split(/\r\n|\r|\n/u);
+interface AssistantMessageTextProps {
+  linkRouting: MarkdownLinkRouting | undefined;
+  text: string;
 }
 
-function useIsOverflowing(
-  elementRef: RefObject<HTMLElement | null>,
-  enabled: boolean,
-  measurementKey: string,
-): boolean {
-  const [isOverflowing, setIsOverflowing] = useState(false);
-
-  // useLayoutEffect (not useEffect) so the first measurement runs before
-  // paint. Otherwise the first paint renders without the "Show more" toggle
-  // (isOverflowing starts at false), and the button appears on the next
-  // frame after the effect runs — visible as a flicker on page load for any
-  // user message long enough to overflow.
-  useLayoutEffect(() => {
-    if (!enabled) {
-      setIsOverflowing(false);
-      return;
-    }
-
-    const element = elementRef.current;
-    if (!element) {
-      return;
-    }
-
-    const measure = () => {
-      setIsOverflowing(element.scrollHeight > element.clientHeight + 1);
-    };
-    measure();
-
-    if (typeof ResizeObserver === "undefined") {
-      return;
-    }
-
-    const resizeObserver = new ResizeObserver(measure);
-    resizeObserver.observe(element);
-    return () => resizeObserver.disconnect();
-  }, [elementRef, enabled, measurementKey]);
-
-  return isOverflowing;
+function splitPreWrappedLines(text: string): string[] {
+  return text.split(/\r\n|\r|\n/u);
 }
 
 function CollapsibleMessageText({
@@ -185,7 +153,11 @@ function CollapsibleMessageText({
     isExpanded || !exceedsCollapsedLineCount
       ? cappedBody
       : lines.slice(0, 15).join("\n");
-  const isOverflowing = useIsOverflowing(textRef, !isExpanded, renderedBody);
+  const isOverflowing = useIsOverflowing({
+    elementRef: textRef,
+    enabled: !isExpanded,
+    measurementKey: renderedBody,
+  });
   const showToggle = isExpanded || exceedsCollapsedLineCount || isOverflowing;
   const safeRenderedBody = clipMentionTextToVisibleRange({
     mentions,
@@ -219,16 +191,55 @@ function CollapsibleMessageText({
         ) : null}
       </p>
       {showToggle ? (
-        <div className="mt-1 flex justify-end">
-          <button
-            type="button"
-            onClick={() => setIsExpanded((prev) => !prev)}
-            className="text-xs font-medium text-muted-foreground hover:text-foreground"
-            aria-expanded={isExpanded}
-          >
-            {isExpanded ? "Show less" : "Show more"}
-          </button>
-        </div>
+        <ConversationMessageOverflowToggle
+          expanded={isExpanded}
+          labels={{ collapsed: "Show more", expanded: "Show less" }}
+          onToggle={() => setIsExpanded((prev) => !prev)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function AssistantMessageText({
+  linkRouting,
+  text,
+}: AssistantMessageTextProps) {
+  const [isFullTextVisible, setIsFullTextVisible] = useState(false);
+  const textRef = useRef<HTMLDivElement>(null);
+  const isOverflowing = useIsOverflowing({
+    elementRef: textRef,
+    enabled: !isFullTextVisible,
+    measurementKey: text,
+  });
+  const showToggle = isFullTextVisible || isOverflowing;
+  const showInlineToggle = !isFullTextVisible && isOverflowing;
+
+  return (
+    <>
+      <div
+        ref={textRef}
+        className={cn(
+          !isFullTextVisible && "line-clamp-2",
+          showInlineToggle && "relative",
+        )}
+      >
+        <MarkdownPreview content={text} linkRouting={linkRouting} />
+        {showInlineToggle ? (
+          <ConversationMessageInlineOverflowToggle
+            buttonBackgroundClassName="bg-background"
+            fadeFromClassName="from-background"
+            label="Show more"
+            onToggle={() => setIsFullTextVisible(true)}
+          />
+        ) : null}
+      </div>
+      {isFullTextVisible && showToggle ? (
+        <ConversationMessageOverflowToggle
+          expanded={isFullTextVisible}
+          labels={{ collapsed: "Show more", expanded: "Show less" }}
+          onToggle={() => setIsFullTextVisible((prev) => !prev)}
+        />
       ) : null}
     </>
   );
@@ -375,7 +386,7 @@ function AssistantConversationMessage({
 
   return (
     <div className="group w-full px-2 text-sm leading-relaxed">
-      <MarkdownPreview content={text} linkRouting={linkRouting} />
+      <AssistantMessageText text={text} linkRouting={linkRouting} />
       <ConversationAttachments
         filePaths={attachmentItems.filePaths}
         imageItems={attachmentItems.imageItems}

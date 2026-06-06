@@ -220,7 +220,7 @@ describe("ConversationMessageContent", () => {
     expect(screen.getByText(/Line 4/u)).toBeTruthy();
   });
 
-  it("renders system-originated messages as expandable timeline rows and hides the bb prefix", () => {
+  it("renders system-originated messages as auto-expanded timeline rows and hides the bb prefix", () => {
     render(
       <ConversationMessageContent
         role="user"
@@ -238,15 +238,67 @@ describe("ConversationMessageContent", () => {
       screen.getByRole("button", { name: /System Message/u }),
     ).toBeTruthy();
     expect(
-      screen.queryByText("Scheduled nudge: daily-recap. Check ASYNC.md."),
-    ).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: /System Message/u }));
+      screen
+        .getByRole("button", { name: /System Message/u })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
 
     expect(
       screen.getByText("Scheduled nudge: daily-recap. Check ASYNC.md."),
     ).toBeTruthy();
     expect(screen.queryByText(/\[bb system/u)).toBeNull();
+  });
+
+  it("renders generated system steer status inside the expanded body", () => {
+    render(
+      <ConversationMessageContent
+        role="user"
+        initiator="system"
+        senderThreadId={null}
+        senderThreadTitle={null}
+        attachments={null}
+        mentions={[]}
+        text={"[bb system]\n\nScheduled nudge: daily-recap. Check ASYNC.md."}
+        turnRequest={{ kind: "steer", status: "pending" }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "System Message" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: /steer pending/u }),
+    ).toBeNull();
+    expect(screen.getByText("steer pending")).toBeTruthy();
+  });
+
+  it("renders generated agent steer status inside the expanded body", () => {
+    render(
+      <ConversationMessageContent
+        role="user"
+        initiator="agent"
+        senderThreadId="thr_sender123"
+        senderThreadTitle="Frontend manager"
+        attachments={null}
+        mentions={[]}
+        text={
+          '[bb message from thread:thr_sender123; reply with `bb thread tell thr_sender123 "<your response>"`]\n\nAgent-to-agent status update.'
+        }
+        turnRequest={{ kind: "steer", status: "accepted" }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Message from Frontend manager" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /steer/u })).toBeNull();
+    expect(screen.queryByText("steer")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Message from Frontend manager" }),
+    );
+
+    expect(screen.getByText("steer")).toBeTruthy();
   });
 
   it("renders mention pills in expanded agent-originated rows with shifted offsets", () => {
@@ -385,8 +437,6 @@ describe("ConversationMessageContent", () => {
         />
       </MemoryRouter>,
     );
-
-    fireEvent.click(screen.getByRole("button", { name: /System Message/u }));
 
     const mention = screen.getByRole("link", { name: "System manager" });
     expect(mention.getAttribute("href")).toBe(
