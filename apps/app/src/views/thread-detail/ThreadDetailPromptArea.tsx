@@ -259,8 +259,6 @@ export function ThreadDetailPromptArea({
     initialEnvironmentSelectionValue: thread.environmentId ?? undefined,
   });
   const runtimeDisplayStatus = thread.runtime.displayStatus;
-  const isCreated = runtimeDisplayStatus === "created";
-  const isProvisioning = runtimeDisplayStatus === "provisioning";
   const isStopRequested =
     thread.stopRequestedAt !== null ||
     (stopThread.isPending && stopThread.variables === thread.id);
@@ -298,12 +296,10 @@ export function ThreadDetailPromptArea({
   ]);
   const promptPlaceholder = isStopRequested
     ? "Stopping thread..."
-    : isDefaultExecutionOptionsLoading && !isCreated && !isProvisioning
-      ? "Loading thread options..."
-      : getFollowUpPromptPlaceholder(
-          runtimeDisplayStatus,
-          thread.type === "manager",
-        );
+    : getFollowUpPromptPlaceholder(
+        runtimeDisplayStatus,
+        thread.type === "manager",
+      );
   const currentPromptDraft = useMemo(
     () => ({
       text: promptDraft.text,
