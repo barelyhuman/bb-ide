@@ -457,13 +457,6 @@ else
   echo "offline host send failed fast"
 fi
 
-if sqlite3 "$SERVER_DB_PATH" ".tables" \
-  | tr ' ' '\n' \
-  | rg '^(host_daemon_commands|host_daemon_command_attempts|client_turn_requests)$'; then
-  echo "unexpected durable command/request table"
-  false
-fi
-
 eval "$RESTART_DAEMON_COMMAND"
 DAEMON_PID=$!
 bb thread tell "$SMOKE_THREAD_ID" "Say exactly: offline retry ok"
@@ -474,8 +467,9 @@ bb thread output "$SMOKE_THREAD_ID"
 Expected result:
 
 - Sending while the host is offline fails fast.
-- No durable command/request row is inserted; the removed queue tables are not
-  present in the upgraded database.
+- No new durable command/request row is inserted. Upgraded large databases may
+  retain retired queue tables as inert migration debris, but the live-RPC path
+  must not write to them.
 - Retrying after the daemon reconnects works as a fresh live RPC request.
 
 Daemon hot-replace mid-RPC:

@@ -4,7 +4,10 @@ import { dirname, join, resolve } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { DbConnection } from "./connection.js";
-import { publishedMigrationWhensByTag } from "./migration-history.js";
+import {
+  acceptedHistoricalMigrationHashes,
+  publishedMigrationWhensByTag,
+} from "./migration-history.js";
 
 export interface ResolveMigrationsFolderForModuleDirArgs {
   moduleDir: string;
@@ -64,8 +67,15 @@ interface MigrationJournal {
 interface ExpectedAppliedMigration {
   createdAt: number;
   hash: string;
+  sql: string[];
   tag: string;
 }
+
+type DeferredDestructiveCleanupMigrationTag =
+  | "0015_good_lila_cheney"
+  | "0016_salty_arclight"
+  | "0017_terminal_session_runtime_state_honesty"
+  | "0018_natural_crusher_hogan";
 
 export interface FutureAppliedMigration {
   createdAt: number;
@@ -85,6 +95,13 @@ export interface MigrationWarningLogger {
 }
 
 export interface MigrateOptions {
+  /**
+   * Apply logical backfills for legacy lifecycle cleanup migrations while
+   * leaving large retired tables/columns in place. This keeps startup fast for
+   * already-created databases; strict migrations still physically remove those
+   * artifacts when this option is omitted.
+   */
+  deferDestructiveLegacyCleanup?: boolean;
   logger?: MigrationWarningLogger;
 }
 
@@ -93,9 +110,21 @@ interface AppliedMigrationRow {
   hash: string;
 }
 
+interface AppliedMigrationCreatedAtRow {
+  createdAt: number;
+}
+
 interface AppliedMigrationIdentityRow {
   createdAt: number | null;
   hash: string;
+}
+
+interface ExistingMigrationRow {
+  createdAt: number;
+}
+
+interface ExistingTableRow {
+  name: string;
 }
 
 interface PendingInteractionProviderRequestDuplicateRow {
@@ -117,6 +146,12 @@ interface AppliedMigrationHistoryViolation {
 const migrationModuleFilename = fileURLToPath(import.meta.url);
 const migrationModuleDirname = dirname(migrationModuleFilename);
 const migrationJournalPath = join("meta", "_journal.json");
+const deferredDestructiveCleanupMigrationTags = [
+  "0015_good_lila_cheney",
+  "0016_salty_arclight",
+  "0017_terminal_session_runtime_state_honesty",
+  "0018_natural_crusher_hogan",
+] as const satisfies readonly DeferredDestructiveCleanupMigrationTag[];
 const pendingInteractionColumns: ExpectedColumn[] = [
   { name: "id", type: "text", notNull: true, primaryKey: true },
   { name: "thread_id", type: "text", notNull: true, primaryKey: false },
@@ -340,6 +375,29 @@ function getTableInfo(
   return rows.map(parseTableInfoColumn);
 }
 
+function tableExists(db: DbConnection, tableName: string): boolean {
+  return (
+    db.$client
+      .prepare<[string], ExistingTableRow>(
+        `
+          SELECT name
+          FROM sqlite_master
+          WHERE type = 'table'
+            AND name = ?
+        `,
+      )
+      .get(tableName) !== undefined
+  );
+}
+
+function columnExists(
+  db: DbConnection,
+  tableName: string,
+  columnName: string,
+): boolean {
+  return getTableInfo(db, tableName).some((column) => column.name === columnName);
+}
+
 function getForeignKeys(
   db: DbConnection,
   tableName: string,
@@ -370,6 +428,14 @@ function getIndexColumnNames(db: DbConnection, indexName: string): string[] {
   return rows.map(parseIndexColumnName);
 }
 
+function indexExists(
+  db: DbConnection,
+  tableName: string,
+  indexName: string,
+): boolean {
+  return getIndexes(db, tableName).some((index) => index.name === indexName);
+}
+
 function readExpectedAppliedMigrations(
   migrationsFolder: string,
 ): ExpectedAppliedMigration[] {
@@ -393,9 +459,86 @@ function readExpectedAppliedMigrations(
     return {
       createdAt: migration.folderMillis,
       hash: migration.hash,
+      sql: migration.sql,
       tag: journalEntry.tag,
     };
   });
+}
+
+function readAppliedMigrationCreatedAts(db: DbConnection): Set<number> {
+  if (!tableExists(db, "__drizzle_migrations")) {
+    return new Set();
+  }
+
+  const rows = db.$client
+    .prepare<[], AppliedMigrationCreatedAtRow>(
+      `
+        SELECT created_at AS createdAt
+        FROM __drizzle_migrations
+        WHERE created_at IS NOT NULL
+      `,
+    )
+    .all();
+
+  return new Set(rows.map((row) => row.createdAt));
+}
+
+function requireExpectedAppliedMigration(
+  migrations: ExpectedAppliedMigration[],
+  tag: string,
+): ExpectedAppliedMigration {
+  const migration = migrations.find((candidate) => candidate.tag === tag);
+  if (migration === undefined) {
+    throw new Error(`Missing expected migration metadata for ${tag}`);
+  }
+
+  return migration;
+}
+
+function markMigrationApplied(
+  db: DbConnection,
+  migration: ExpectedAppliedMigration,
+): void {
+  const existingMigration = db.$client
+    .prepare<[number], ExistingMigrationRow>(
+      `
+        SELECT created_at AS createdAt
+        FROM __drizzle_migrations
+        WHERE created_at = ?
+      `,
+    )
+    .get(migration.createdAt);
+  if (existingMigration !== undefined) {
+    return;
+  }
+
+  db.$client
+    .prepare<[string, number]>(
+      `
+        INSERT INTO __drizzle_migrations (hash, created_at)
+        VALUES (?, ?)
+      `,
+    )
+    .run(migration.hash, migration.createdAt);
+}
+
+function runExpectedMigrationSql(
+  db: DbConnection,
+  migration: ExpectedAppliedMigration,
+): void {
+  for (const statement of migration.sql) {
+    db.$client.exec(statement);
+  }
+}
+
+function applyExpectedMigrationTransaction(
+  db: DbConnection,
+  migration: ExpectedAppliedMigration,
+): void {
+  db.$client.transaction(() => {
+    runExpectedMigrationSql(db, migration);
+    markMigrationApplied(db, migration);
+  })();
 }
 
 function hasPublishedTimestampFallback(
@@ -413,12 +556,43 @@ function hasPublishedTimestampFallback(
   return appliedCreatedAts.has(expectedMigration.createdAt);
 }
 
+function hasAppliedMigrationHash(
+  expectedMigration: ExpectedAppliedMigration,
+  appliedMigrations: AppliedMigrationIdentityRow[],
+): boolean {
+  return appliedMigrations.some(
+    (appliedMigration) =>
+      appliedMigration.createdAt === expectedMigration.createdAt &&
+      appliedMigration.hash === expectedMigration.hash,
+  );
+}
+
+function hasAcceptedHistoricalHash(
+  expectedMigration: ExpectedAppliedMigration,
+  appliedMigrations: AppliedMigrationIdentityRow[],
+): boolean {
+  return acceptedHistoricalMigrationHashes.some(
+    (acceptedMigrationHash) =>
+      acceptedMigrationHash.tag === expectedMigration.tag &&
+      acceptedMigrationHash.when === expectedMigration.createdAt &&
+      appliedMigrations.some(
+        (appliedMigration) =>
+          appliedMigration.createdAt === acceptedMigrationHash.when &&
+          appliedMigration.hash === acceptedMigrationHash.hash,
+      ),
+  );
+}
+
 function findAppliedMigrationHistoryViolation(
   expectedMigration: ExpectedAppliedMigration,
-  appliedHashes: Set<string>,
+  appliedMigrations: AppliedMigrationIdentityRow[],
   appliedCreatedAts: Set<number>,
 ): AppliedMigrationHistoryViolation | null {
-  if (appliedHashes.has(expectedMigration.hash)) {
+  if (hasAppliedMigrationHash(expectedMigration, appliedMigrations)) {
+    return null;
+  }
+
+  if (hasAcceptedHistoricalHash(expectedMigration, appliedMigrations)) {
     return null;
   }
 
@@ -603,6 +777,214 @@ function assertNoDuplicatePendingInteractionProviderRequests(
   );
 }
 
+function applyDeferredOperationStateBackfill(db: DbConnection): void {
+  if (!columnExists(db, "projects", "deleted_at")) {
+    db.$client.prepare("ALTER TABLE projects ADD deleted_at integer").run();
+  }
+
+  if (tableExists(db, "project_operations")) {
+    db.$client
+      .prepare(
+        `
+          UPDATE projects
+          SET deleted_at = (
+            SELECT project_operations.requested_at
+            FROM project_operations
+            WHERE project_operations.project_id = projects.id
+              AND project_operations.kind = 'delete'
+              AND project_operations.state IN ('requested', 'queued')
+            ORDER BY project_operations.requested_at ASC
+            LIMIT 1
+          )
+          WHERE EXISTS (
+            SELECT 1
+            FROM project_operations
+            WHERE project_operations.project_id = projects.id
+              AND project_operations.kind = 'delete'
+              AND project_operations.state IN ('requested', 'queued')
+          )
+        `,
+      )
+      .run();
+  }
+
+  if (tableExists(db, "thread_operations")) {
+    db.$client
+      .prepare(
+        `
+          UPDATE threads
+          SET status = 'error'
+          WHERE EXISTS (
+            SELECT 1
+            FROM thread_operations
+            WHERE thread_operations.thread_id = threads.id
+              AND thread_operations.kind = 'provision'
+              AND thread_operations.state IN ('requested', 'queued')
+          )
+            AND threads.status IN ('created', 'provisioning')
+        `,
+      )
+      .run();
+
+    db.$client
+      .prepare(
+        `
+          UPDATE threads
+          SET stop_requested_at = COALESCE(stop_requested_at, (
+            SELECT thread_operations.requested_at
+            FROM thread_operations
+            WHERE thread_operations.thread_id = threads.id
+              AND thread_operations.kind = 'stop'
+              AND thread_operations.state IN ('requested', 'queued')
+            ORDER BY thread_operations.requested_at DESC
+            LIMIT 1
+          ))
+          WHERE stop_requested_at IS NOT NULL
+            OR EXISTS (
+              SELECT 1
+              FROM thread_operations
+              WHERE thread_operations.thread_id = threads.id
+                AND thread_operations.kind = 'stop'
+                AND thread_operations.state IN ('requested', 'queued')
+            )
+        `,
+      )
+      .run();
+
+    db.$client
+      .prepare(
+        `
+          INSERT OR IGNORE INTO events (
+            id,
+            thread_id,
+            environment_id,
+            scope_kind,
+            turn_id,
+            provider_thread_id,
+            sequence,
+            type,
+            item_id,
+            item_kind,
+            data,
+            created_at
+          )
+          SELECT
+            'evt_' || thread_operations.id,
+            thread_operations.thread_id,
+            threads.environment_id,
+            'thread',
+            NULL,
+            NULL,
+            COALESCE((
+              SELECT MAX(existing_events.sequence)
+              FROM events AS existing_events
+              WHERE existing_events.thread_id = thread_operations.thread_id
+            ), 0) + 1,
+            'system/thread/interrupted',
+            NULL,
+            NULL,
+            json_object(
+              'reason',
+              COALESCE(
+                json_extract(thread_operations.payload, '$.interruptionReason'),
+                'manual-stop'
+              )
+            ),
+            thread_operations.requested_at
+          FROM thread_operations
+          INNER JOIN threads ON threads.id = thread_operations.thread_id
+          WHERE thread_operations.kind = 'stop'
+            AND thread_operations.state IN ('requested', 'queued')
+        `,
+      )
+      .run();
+  }
+
+  if (tableExists(db, "environment_operations")) {
+    db.$client
+      .prepare(
+        `
+          UPDATE environments
+          SET status = 'error'
+          WHERE environments.status = 'provisioning'
+            AND EXISTS (
+              SELECT 1
+              FROM environment_operations
+              WHERE environment_operations.environment_id = environments.id
+                AND environment_operations.kind IN ('provision', 'reprovision')
+                AND environment_operations.state IN ('requested', 'queued')
+            )
+        `,
+      )
+      .run();
+  }
+
+  if (!indexExists(db, "projects", "projects_deleted_idx")) {
+    db.$client
+      .prepare("CREATE INDEX projects_deleted_idx ON projects (deleted_at)")
+      .run();
+  }
+}
+
+function applyDeferredDestructiveLegacyCleanup(
+  db: DbConnection,
+  migrationsFolder: string,
+): void {
+  if (!tableExists(db, "__drizzle_migrations") || !tableExists(db, "projects")) {
+    return;
+  }
+
+  const expectedMigrations = readExpectedAppliedMigrations(migrationsFolder);
+  const appliedCreatedAts = readAppliedMigrationCreatedAts(db);
+  const threadSchedulesMigration = requireExpectedAppliedMigration(
+    expectedMigrations,
+    "0013_thread_schedules",
+  );
+  const threadScheduleKindDefaultMigration = requireExpectedAppliedMigration(
+    expectedMigrations,
+    "0014_thread_schedule_kind_default",
+  );
+
+  const cleanupMigrations = deferredDestructiveCleanupMigrationTags.map((tag) =>
+    requireExpectedAppliedMigration(expectedMigrations, tag),
+  );
+  const hasPendingCleanupMigration = cleanupMigrations.some(
+    (migration) => !appliedCreatedAts.has(migration.createdAt),
+  );
+  if (!hasPendingCleanupMigration) {
+    return;
+  }
+
+  if (!appliedCreatedAts.has(threadScheduleKindDefaultMigration.createdAt)) {
+    if (!appliedCreatedAts.has(threadSchedulesMigration.createdAt)) {
+      return;
+    }
+
+    applyExpectedMigrationTransaction(db, threadScheduleKindDefaultMigration);
+    db.$client.pragma("foreign_keys = OFF");
+    appliedCreatedAts.add(threadScheduleKindDefaultMigration.createdAt);
+  }
+
+  const operationBackfillMigration = requireExpectedAppliedMigration(
+    expectedMigrations,
+    "0015_good_lila_cheney",
+  );
+  if (!appliedCreatedAts.has(operationBackfillMigration.createdAt)) {
+    applyDeferredOperationStateBackfill(db);
+    markMigrationApplied(db, operationBackfillMigration);
+    appliedCreatedAts.add(operationBackfillMigration.createdAt);
+  }
+
+  for (const migration of cleanupMigrations) {
+    if (appliedCreatedAts.has(migration.createdAt)) {
+      continue;
+    }
+
+    markMigrationApplied(db, migration);
+    appliedCreatedAts.add(migration.createdAt);
+  }
+}
+
 function warnAboutFutureAppliedMigrations(
   db: DbConnection,
   options: MigrateOptions,
@@ -650,9 +1032,6 @@ function validateAppliedMigrationHistory(
       `,
     )
     .all();
-  const appliedHashes = new Set(
-    appliedMigrations.map((migration) => migration.hash),
-  );
   const appliedCreatedAts = new Set(
     appliedMigrations
       .map((migration) => migration.createdAt)
@@ -662,7 +1041,7 @@ function validateAppliedMigrationHistory(
     .map((migration) =>
       findAppliedMigrationHistoryViolation(
         migration,
-        appliedHashes,
+        appliedMigrations,
         appliedCreatedAts,
       ),
     )
@@ -718,6 +1097,9 @@ export function migrate(db: DbConnection, options: MigrateOptions = {}): void {
   sqlite.pragma("foreign_keys = OFF");
   try {
     assertNoDuplicatePendingInteractionProviderRequests(db);
+    if (options.deferDestructiveLegacyCleanup === true) {
+      applyDeferredDestructiveLegacyCleanup(db, migrationsFolder);
+    }
     drizzleMigrate(db, { migrationsFolder });
   } finally {
     sqlite.pragma("foreign_keys = ON");

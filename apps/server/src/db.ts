@@ -19,7 +19,10 @@ export function initDb(
   const db = createConnection(databasePath, {
     slowQueryLogger: options.logger,
   });
-  migrate(db, { logger: options.logger });
+  migrate(db, {
+    deferDestructiveLegacyCleanup: true,
+    logger: options.logger,
+  });
   ensurePersonalProjectBootstrap(db);
   return db;
 }

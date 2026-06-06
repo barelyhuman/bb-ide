@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { publishedMigrationWhensByTag } from "../src/migration-history.js";
+import {
+  acceptedHistoricalMigrationHashes,
+  publishedMigrationWhensByTag,
+} from "../src/migration-history.js";
 import {
   createConnection,
   migrate,
@@ -12,6 +15,7 @@ import {
 
 type InsertMigrationParameters = [string, number];
 type DeleteMigrationParameters = [number];
+type DeleteMigrationsParameters = [number, number, number, number, number];
 type TableNameParameters = [string];
 type QueuedMessageMigrationInsertParameters = [string, string, number, number];
 type ProjectSortKeyMigrationInsertParameters = [string, string, number, number];
@@ -40,6 +44,10 @@ interface TableNameRow {
 
 interface MigrationCreatedAtRow {
   createdAt: number;
+}
+
+interface MigrationCountRow {
+  count: number;
 }
 
 interface LatestMigrationCreatedAtRow {
@@ -109,9 +117,18 @@ interface OperationBackfillThreadRow {
   stopRequestedAt: number | null;
 }
 
-interface OperationBackfillInterruptedEventRow {
+interface MigratedEventRow {
+  createdAt: number;
   data: string;
+  environmentId: string | null;
+  id: string;
+  itemId: string | null;
+  itemKind: string | null;
+  providerThreadId: string | null;
+  scopeKind: string;
   sequence: number;
+  threadId: string;
+  turnId: string | null;
   type: string;
 }
 
@@ -169,6 +186,17 @@ function requirePublishedMigrationWhen(tag: string): number {
   return when;
 }
 
+function requireAcceptedHistoricalMigrationHash(tag: string): string {
+  const hash = acceptedHistoricalMigrationHashes.find(
+    (migrationHash) => migrationHash.tag === tag,
+  )?.hash;
+  if (hash === undefined) {
+    throw new Error(`No accepted historical migration hash for ${tag}`);
+  }
+
+  return hash;
+}
+
 const baselineWhen = requirePublishedMigrationWhen("0000_baseline");
 const publishedTerminalSessionUserInputWhen = requirePublishedMigrationWhen(
   "0001_terminal_session_user_input",
@@ -180,7 +208,11 @@ const threadDynamicContextFileStatesWhen = 1779139400002;
 const commandLookupIndexesWhen = 1779943370189;
 const threadPinningMigrationWhen = 1779990051923;
 const threadSchedulesMigrationWhen = 1780614650350;
+const threadScheduleKindDefaultMigrationWhen = 1780687798956;
+const operationStateBackfillMigrationWhen = 1780687798957;
+const eventProducerColumnsMigrationWhen = 1780692763264;
 const terminalSessionRuntimeStateHonestyWhen = 1780718665310;
+const hostDaemonSessionObservabilityMigrationWhen = 1780719536955;
 const queuedMessageSortKeyMigrationPath = resolve(
   __dirname,
   "..",
@@ -205,6 +237,8 @@ const pendingInteractionSchemaHonestyMigrationPath = resolve(
   "drizzle",
   "0019_pending_interactions_schema_honesty.sql",
 );
+const historicalEventProducerColumnsMigrationHash =
+  requireAcceptedHistoricalMigrationHash("0016_salty_arclight");
 
 function closeConnection(db: DbConnection): void {
   db.$client.close();
@@ -458,6 +492,102 @@ function seedPre0017TerminalSessionMigration(
   `);
 }
 
+function seedPre0014ThreadSchedulesSchema(db: DbConnection): void {
+  db.$client.pragma("foreign_keys = OFF");
+  try {
+    db.$client.exec(`
+      DROP TABLE thread_schedules;
+      CREATE TABLE thread_schedules (
+        id text PRIMARY KEY NOT NULL,
+        project_id text NOT NULL,
+        thread_id text NOT NULL,
+        name text NOT NULL,
+        enabled integer DEFAULT true NOT NULL,
+        kind text DEFAULT 'cron' NOT NULL,
+        cron text NOT NULL,
+        timezone text NOT NULL,
+        prompt text NOT NULL,
+        next_fire_at integer NOT NULL,
+        last_fired_at integer,
+        created_at integer NOT NULL,
+        updated_at integer NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE cascade,
+        FOREIGN KEY (thread_id) REFERENCES threads(id) ON DELETE cascade
+      );
+      CREATE INDEX thread_schedules_due_idx
+        ON thread_schedules (enabled, next_fire_at);
+      CREATE INDEX thread_schedules_project_idx
+        ON thread_schedules (project_id);
+      CREATE UNIQUE INDEX thread_schedules_thread_name_idx
+        ON thread_schedules (thread_id, name);
+    `);
+  } finally {
+    db.$client.pragma("foreign_keys = ON");
+  }
+}
+
+function seedFailingPre0014ThreadSchedulesSchema(db: DbConnection): void {
+  db.$client.pragma("foreign_keys = OFF");
+  try {
+    db.$client.exec(`
+      DROP TABLE thread_schedules;
+      CREATE TABLE thread_schedules (
+        id text PRIMARY KEY NOT NULL,
+        project_id text NOT NULL,
+        thread_id text NOT NULL,
+        name text NOT NULL,
+        enabled integer DEFAULT true NOT NULL,
+        kind text,
+        cron text NOT NULL,
+        timezone text NOT NULL,
+        prompt text NOT NULL,
+        next_fire_at integer NOT NULL,
+        last_fired_at integer,
+        created_at integer NOT NULL,
+        updated_at integer NOT NULL
+      );
+      CREATE INDEX thread_schedules_due_idx
+        ON thread_schedules (enabled, next_fire_at);
+      CREATE INDEX thread_schedules_project_idx
+        ON thread_schedules (project_id);
+      CREATE UNIQUE INDEX thread_schedules_thread_name_idx
+        ON thread_schedules (thread_id, name);
+      INSERT INTO thread_schedules (
+        id,
+        project_id,
+        thread_id,
+        name,
+        enabled,
+        kind,
+        cron,
+        timezone,
+        prompt,
+        next_fire_at,
+        last_fired_at,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        'tsched_failing_0014',
+        'proj_failing_0014',
+        'thr_failing_0014',
+        'Bad schedule',
+        1,
+        NULL,
+        '* * * * *',
+        'UTC',
+        'Bad schedule prompt',
+        1000,
+        NULL,
+        1000,
+        1000
+      );
+    `);
+  } finally {
+    db.$client.pragma("foreign_keys = ON");
+  }
+}
+
 function addPre0017TerminalRuntimeColumns(db: DbConnection): void {
   db.$client.exec(`
     ALTER TABLE terminal_sessions ADD COLUMN current_cwd text;
@@ -476,6 +606,23 @@ function runSidebarOrderingMigration(db: DbConnection): void {
 
 function runThreadPinningMigration(db: DbConnection): void {
   runMigrationFile({ db, migrationPath: threadPinningMigrationPath });
+}
+
+function deleteDeferredCleanupMigrationRows(db: DbConnection): void {
+  db.$client
+    .prepare<DeleteMigrationsParameters>(
+      `
+        DELETE FROM __drizzle_migrations
+        WHERE created_at IN (?, ?, ?, ?, ?)
+      `,
+    )
+    .run(
+      threadScheduleKindDefaultMigrationWhen,
+      operationStateBackfillMigrationWhen,
+      eventProducerColumnsMigrationWhen,
+      terminalSessionRuntimeStateHonestyWhen,
+      hostDaemonSessionObservabilityMigrationWhen,
+    );
 }
 
 describe("migrate", () => {
@@ -778,6 +925,394 @@ describe("migrate", () => {
     } finally {
       closeConnection(db);
       vi.useRealTimers();
+    }
+  });
+
+  it("accepts the historical event producer column migration hash", () => {
+    const db = createConnection(":memory:");
+
+    try {
+      migrate(db);
+      replaceAppliedMigrationHash({
+        db,
+        createdAt: eventProducerColumnsMigrationWhen,
+        hash: historicalEventProducerColumnsMigrationHash,
+      });
+
+      expect(() => migrate(db)).not.toThrow();
+    } finally {
+      closeConnection(db);
+    }
+  });
+
+  it("rejects a historical event producer column migration hash at the wrong timestamp", () => {
+    const db = createConnection(":memory:");
+
+    try {
+      migrate(db);
+      replaceAppliedMigrationHash({
+        db,
+        createdAt: eventProducerColumnsMigrationWhen,
+        hash: "wrong-event-producer-column-migration-hash",
+      });
+      db.$client
+        .prepare<InsertMigrationParameters>(
+          `
+            INSERT INTO __drizzle_migrations (hash, created_at)
+            VALUES (?, ?)
+          `,
+        )
+        .run(
+          historicalEventProducerColumnsMigrationHash,
+          eventProducerColumnsMigrationWhen + 1,
+        );
+
+      expect(() => migrate(db)).toThrow(
+        /Mismatched applied migration hashes: 0016_salty_arclight/,
+      );
+    } finally {
+      closeConnection(db);
+    }
+  });
+
+  it("can defer destructive legacy cleanup from a 0013 database while preserving state backfills", () => {
+    const db = createConnection(":memory:");
+
+    try {
+      migrate(db);
+      seedPre0014ThreadSchedulesSchema(db);
+      db.$client.prepare("DROP INDEX projects_deleted_idx").run();
+      db.$client.prepare("ALTER TABLE projects DROP COLUMN deleted_at").run();
+      db.$client
+        .prepare("ALTER TABLE events ADD producer_event_id text")
+        .run();
+      db.$client
+        .prepare("ALTER TABLE events ADD producer_event_payload_hash text")
+        .run();
+      db.$client
+        .prepare(
+          "CREATE UNIQUE INDEX events_producer_event_id_idx ON events (producer_event_id)",
+        )
+        .run();
+      db.$client
+        .prepare(
+          "ALTER TABLE hosts ADD command_cursor integer DEFAULT 0 NOT NULL",
+        )
+        .run();
+      db.$client.exec(`
+        CREATE TABLE host_daemon_commands (
+          id text PRIMARY KEY NOT NULL
+        );
+        CREATE TABLE host_daemon_command_attempts (
+          id text PRIMARY KEY NOT NULL
+        );
+        CREATE TABLE client_turn_requests (
+          id text PRIMARY KEY NOT NULL
+        );
+        CREATE TABLE environment_operations (
+          id text PRIMARY KEY NOT NULL,
+          environment_id text NOT NULL,
+          kind text NOT NULL,
+          state text NOT NULL
+        );
+        CREATE TABLE project_operations (
+          id text PRIMARY KEY NOT NULL,
+          project_id text NOT NULL,
+          kind text NOT NULL,
+          state text NOT NULL,
+          requested_at integer NOT NULL
+        );
+        CREATE TABLE thread_operations (
+          id text PRIMARY KEY NOT NULL,
+          thread_id text NOT NULL,
+          kind text NOT NULL,
+          state text NOT NULL,
+          payload text NOT NULL,
+          requested_at integer NOT NULL
+        );
+        INSERT INTO hosts (
+          id,
+          name,
+          type,
+          command_cursor,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          'host_deferred_cleanup',
+          'Deferred cleanup host',
+          'persistent',
+          0,
+          1000,
+          1000
+        );
+        INSERT INTO projects (
+          id,
+          name,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          'proj_deferred_cleanup',
+          'Deferred cleanup project',
+          1000,
+          1000
+        );
+        INSERT INTO environments (
+          id,
+          project_id,
+          host_id,
+          path,
+          workspace_provision_type,
+          status,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          'env_deferred_cleanup',
+          'proj_deferred_cleanup',
+          'host_deferred_cleanup',
+          '/tmp/deferred-cleanup',
+          'managed-worktree',
+          'provisioning',
+          1000,
+          1000
+        );
+        INSERT INTO threads (
+          id,
+          project_id,
+          environment_id,
+          provider_id,
+          status,
+          latest_attention_at,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          'thr_deferred_cleanup',
+          'proj_deferred_cleanup',
+          'env_deferred_cleanup',
+          'codex',
+          'provisioning',
+          1000,
+          1000,
+          1000
+        );
+        INSERT INTO thread_operations (
+          id,
+          thread_id,
+          kind,
+          state,
+          payload,
+          requested_at
+        )
+        VALUES
+          (
+            'top_deferred_provision',
+            'thr_deferred_cleanup',
+            'provision',
+            'queued',
+            '{}',
+            2000
+          ),
+          (
+            'top_deferred_stop',
+            'thr_deferred_cleanup',
+            'stop',
+            'requested',
+            '{"interruptionReason":"host-daemon-restarted"}',
+            2500
+          );
+        INSERT INTO environment_operations (
+          id,
+          environment_id,
+          kind,
+          state
+        )
+        VALUES (
+          'eop_deferred_provision',
+          'env_deferred_cleanup',
+          'provision',
+          'queued'
+        );
+        INSERT INTO project_operations (
+          id,
+          project_id,
+          kind,
+          state,
+          requested_at
+        )
+        VALUES (
+          'pop_deferred_delete',
+          'proj_deferred_cleanup',
+          'delete',
+          'requested',
+          3000
+        );
+      `);
+      deleteDeferredCleanupMigrationRows(db);
+
+      migrate(db, { deferDestructiveLegacyCleanup: true });
+
+      expect(readTableNames(db)).toEqual(
+        expect.arrayContaining([
+          "client_turn_requests",
+          "environment_operations",
+          "host_daemon_command_attempts",
+          "host_daemon_commands",
+          "project_operations",
+          "thread_operations",
+        ]),
+      );
+      expect(
+        db.$client
+          .prepare<[], TableInfoRow>("PRAGMA table_info(events)")
+          .all()
+          .map((row) => row.name),
+      ).toEqual(expect.arrayContaining(["producer_event_id"]));
+      expect(
+        db.$client
+          .prepare<[], TableInfoRow>("PRAGMA table_info(hosts)")
+          .all()
+          .map((row) => row.name),
+      ).toEqual(expect.arrayContaining(["command_cursor"]));
+      expect(
+        db.$client
+          .prepare<[], OperationBackfillThreadRow>(
+            `
+              SELECT
+                status,
+                stop_requested_at AS stopRequestedAt
+              FROM threads
+              WHERE id = 'thr_deferred_cleanup'
+            `,
+          )
+          .get(),
+      ).toEqual({
+        status: "error",
+        stopRequestedAt: 2_500,
+      });
+      expect(
+        db.$client
+          .prepare<[], OperationBackfillProjectRow>(
+            `
+              SELECT deleted_at AS deletedAt
+              FROM projects
+              WHERE id = 'proj_deferred_cleanup'
+            `,
+          )
+          .get(),
+      ).toEqual({
+        deletedAt: 3_000,
+      });
+      expect(
+        db.$client
+          .prepare<[], OperationBackfillEnvironmentRow>(
+            `
+              SELECT status
+              FROM environments
+              WHERE id = 'env_deferred_cleanup'
+            `,
+          )
+          .get(),
+      ).toEqual({
+        status: "error",
+      });
+      expect(
+        db.$client
+          .prepare<[], MigratedEventRow>(
+            `
+              SELECT
+                id,
+                thread_id AS threadId,
+                environment_id AS environmentId,
+                scope_kind AS scopeKind,
+                turn_id AS turnId,
+                provider_thread_id AS providerThreadId,
+                sequence,
+                type,
+                item_id AS itemId,
+                item_kind AS itemKind,
+                data,
+                created_at AS createdAt
+              FROM events
+              WHERE id = 'evt_top_deferred_stop'
+            `,
+          )
+          .get(),
+      ).toEqual({
+        createdAt: 2_500,
+        data: '{"reason":"host-daemon-restarted"}',
+        environmentId: "env_deferred_cleanup",
+        id: "evt_top_deferred_stop",
+        itemId: null,
+        itemKind: null,
+        providerThreadId: null,
+        scopeKind: "thread",
+        sequence: 1,
+        threadId: "thr_deferred_cleanup",
+        turnId: null,
+        type: "system/thread/interrupted",
+      });
+
+      const migrationCreatedAts = db.$client
+        .prepare<[], MigrationCreatedAtRow>(
+          `
+            SELECT created_at AS createdAt
+            FROM __drizzle_migrations
+            ORDER BY created_at
+          `,
+        )
+        .all()
+        .map((row) => row.createdAt);
+      expect(migrationCreatedAts).toEqual(
+        expect.arrayContaining([
+          threadScheduleKindDefaultMigrationWhen,
+          operationStateBackfillMigrationWhen,
+          eventProducerColumnsMigrationWhen,
+          terminalSessionRuntimeStateHonestyWhen,
+          hostDaemonSessionObservabilityMigrationWhen,
+        ]),
+      );
+    } finally {
+      closeConnection(db);
+    }
+  });
+
+  it("rolls back the manual 0014 deferred migration when the rebuild fails", () => {
+    const db = createConnection(":memory:");
+
+    try {
+      migrate(db);
+      seedFailingPre0014ThreadSchedulesSchema(db);
+      deleteDeferredCleanupMigrationRows(db);
+
+      expect(() =>
+        migrate(db, { deferDestructiveLegacyCleanup: true }),
+      ).toThrow(/NOT NULL constraint failed/);
+
+      expect(readTableNames(db)).toEqual(
+        expect.arrayContaining(["thread_schedules"]),
+      );
+      expect(readTableNames(db)).not.toContain("__new_thread_schedules");
+      expect(
+        db.$client
+          .prepare<[number], MigrationCountRow>(
+            `
+              SELECT COUNT(*) AS count
+              FROM __drizzle_migrations
+              WHERE created_at = ?
+            `,
+          )
+          .get(threadScheduleKindDefaultMigrationWhen),
+      ).toEqual({ count: 0 });
+      const kindColumn = db.$client
+        .prepare<[], TableInfoRow>("PRAGMA table_info(thread_schedules)")
+        .all()
+        .find((row) => row.name === "kind");
+      expect(kindColumn?.notnull).toBe(0);
+    } finally {
+      closeConnection(db);
     }
   });
 
@@ -1203,6 +1738,37 @@ describe("migrate", () => {
           .all()
           .map((row) => row.name),
       ).not.toContain("command_cursor");
+      expect(
+        db.$client
+          .prepare<[], TableInfoRow>("PRAGMA table_info(events)")
+          .all()
+          .map((row) => row.name),
+      ).toEqual([
+        "id",
+        "thread_id",
+        "environment_id",
+        "scope_kind",
+        "turn_id",
+        "provider_thread_id",
+        "sequence",
+        "type",
+        "item_id",
+        "item_kind",
+        "data",
+        "created_at",
+      ]);
+      const eventIndexNames = readIndexNames({
+        db,
+        tableName: "events",
+      }).filter((name) => !name.startsWith("sqlite_"));
+      expect(eventIndexNames).toEqual([
+        "events_completed_item_truncation_idx",
+        "events_environment_idx",
+        "events_thread_sequence_idx",
+        "events_thread_turn_type_item_sequence_idx",
+        "events_thread_type_item_kind_sequence_idx",
+        "events_thread_type_sequence_idx",
+      ]);
 
       const migrationCreatedAts = db.$client
         .prepare<[], MigrationCreatedAtRow>(
@@ -1235,20 +1801,38 @@ describe("migrate", () => {
         stopRequestedAt: 2_500,
       });
       const interruptedEvent = db.$client
-        .prepare<[], OperationBackfillInterruptedEventRow>(
+        .prepare<[], MigratedEventRow>(
           `
             SELECT
-              type,
+              id,
+              thread_id AS threadId,
+              environment_id AS environmentId,
+              scope_kind AS scopeKind,
+              turn_id AS turnId,
+              provider_thread_id AS providerThreadId,
               sequence,
-              data
+              type,
+              item_id AS itemId,
+              item_kind AS itemKind,
+              data,
+              created_at AS createdAt
             FROM events
             WHERE id = 'evt_top_legacy_stop_backfill'
           `,
         )
         .get();
       expect(interruptedEvent).toEqual({
+        createdAt: 2_500,
         data: '{"reason":"host-daemon-restarted"}',
+        environmentId: "env_legacy_operation_backfill",
+        id: "evt_top_legacy_stop_backfill",
+        itemId: null,
+        itemKind: null,
+        providerThreadId: null,
+        scopeKind: "thread",
         sequence: 1,
+        threadId: "thr_legacy_operation_backfill",
+        turnId: null,
         type: "system/thread/interrupted",
       });
       expect(
