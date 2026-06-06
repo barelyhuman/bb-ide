@@ -95,7 +95,6 @@ export function registerEnvironmentCommands(
         if (outputJson(opts, env)) return;
         console.log(`Environment: ${env.id}`);
         console.log(`  Project: ${env.projectId}`);
-        console.log(`  Host: ${env.hostId}`);
         console.log(`  Status: ${env.status}`);
         if (env.path) {
           console.log(`  Path: ${env.path}`);

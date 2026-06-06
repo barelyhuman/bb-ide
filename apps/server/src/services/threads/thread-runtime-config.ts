@@ -186,7 +186,6 @@ export async function resolveThreadRuntimeCommandConfig(
     injectedSkillSources,
     instructionMode: "replace",
     instructions: renderTemplate("managerAgentInstructions", {
-      hostId: args.environment.hostId,
       localTimezone: resolveLocalTimezone(),
       managerDataDir: threadStorageContext.dataDir,
       managerThreadId: args.thread.id,

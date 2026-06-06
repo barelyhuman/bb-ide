@@ -57,19 +57,17 @@ function printCaptureTable(captures: ReplayCaptureHostSummary[]): void {
       {
         head: [
           "Capture",
-          "Host",
           "Provider",
           "Project",
           "Thread",
           "Raw events",
           "Captured",
         ],
-        colWidths: [28, 16, 16, 18, 18, 10, 26],
+        colWidths: [28, 16, 18, 18, 10, 26],
         trimTrailingWhitespace: true,
       },
       captures.map((capture) => [
         capture.captureId,
-        capture.hostId,
         capture.providerId,
         capture.projectId,
         capture.threadId,

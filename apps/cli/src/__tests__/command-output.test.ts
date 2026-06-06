@@ -76,15 +76,13 @@ vi.mock("node:readline/promises", () => ({
 }));
 
 vi.mock("../daemon.js", () => ({
-  fetchLocalHostId: vi.fn(async () => "host-test-001"),
   resolveLocalHostId: vi.fn(async () => "host-test-001"),
 }));
 
-import { fetchLocalHostId, resolveLocalHostId } from "../daemon.js";
+import { resolveLocalHostId } from "../daemon.js";
 import { registerAppCommands } from "../commands/app.js";
 import { registerEnvironmentCommands } from "../commands/environment.js";
 import { registerGuideCommand } from "../commands/guide.js";
-import { registerHostCommands } from "../commands/host.js";
 import { registerManagerCommands } from "../commands/manager.js";
 import { registerProjectCommands } from "../commands/project.js";
 import { registerProviderCommands } from "../commands/provider.js";
@@ -442,7 +440,6 @@ async function getHelpOutput(
 
 describe("CLI command output contracts", () => {
   const createClientMock = serverClientState.createClient;
-  const fetchLocalHostIdMock = vi.mocked(fetchLocalHostId);
   const resolveLocalHostIdMock = vi.mocked(resolveLocalHostId);
 
   beforeEach(() => {
@@ -462,8 +459,6 @@ describe("CLI command output contracts", () => {
     );
 
     createClientMock.mockReset();
-    fetchLocalHostIdMock.mockClear();
-    fetchLocalHostIdMock.mockResolvedValue("host-test-001");
     resolveLocalHostIdMock.mockClear();
     resolveLocalHostIdMock.mockResolvedValue("host-test-001");
     Object.defineProperty(process.stdin, "isTTY", {
@@ -538,7 +533,7 @@ describe("CLI command output contracts", () => {
     const errorOutput = collectLogLines(vi.mocked(console.error)).join("\n");
     expect(errorOutput).toContain("Unknown guide chapter 'missing'");
     expect(errorOutput).toContain(
-      "Available: threads, environments, managers, app, providers, projects, hosts, styling, schedules, async.",
+      "Available: threads, environments, managers, app, providers, projects, styling, schedules, async.",
     );
   });
 
@@ -604,7 +599,7 @@ describe("CLI command output contracts", () => {
 
     expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
       "",
-      "ID      Name   Local Path\n------  -----  ----------\nproj-1  Alpha  /tmp/alpha",
+      "ID      Name   Path\n------  -----  ----------\nproj-1  Alpha  /tmp/alpha",
       "",
     ]);
   });
@@ -712,7 +707,7 @@ describe("CLI command output contracts", () => {
       "Project source updated: source-1",
     );
     expect(collectLogLines(vi.mocked(console.log))).toContain(
-      "source-1  host-test-001 (local)  local_path  /tmp/renamed [default]",
+      "source-1  local_path  /tmp/renamed [default]",
     );
     expect(patch).toHaveBeenCalledTimes(1);
     expect(patch).toHaveBeenNthCalledWith(
@@ -1718,7 +1713,7 @@ describe("CLI command output contracts", () => {
     expect(lines).toContain("Thread: thread-1");
   });
 
-  it("bb status fetches the environment host by id", async () => {
+  it("bb status prints environment without fetching hosts", async () => {
     vi.stubEnv("BB_PROJECT_ID", "proj-1");
     vi.stubEnv("BB_THREAD_ID", "thread-1");
 
@@ -1741,15 +1736,6 @@ describe("CLI command output contracts", () => {
         hostId: "host-remote",
       }),
     );
-    const getHost = vi.fn(async () => ({
-      id: "host-remote",
-      name: "Remote Host",
-      type: "persistent",
-      status: "connected",
-      createdAt: 1,
-      updatedAt: 2,
-      lastSeenAt: 3,
-    }));
     createClientMock.mockReturnValue(
       asServerClient({
         api: {
@@ -1769,11 +1755,6 @@ describe("CLI command output contracts", () => {
                 $get: getEnvironment,
               },
             },
-            hosts: {
-              ":id": {
-                $get: getHost,
-              },
-            },
           },
         },
       }),
@@ -1783,11 +1764,8 @@ describe("CLI command output contracts", () => {
       registerStatusCommand(program, () => "http://server"),
     );
 
-    expect(getHost).toHaveBeenCalledWith({
-      param: { id: "host-remote" },
-    });
     expect(collectLogLines(vi.mocked(console.log))).toContain(
-      "  Environment: Working remotely (env-1)",
+      "  Environment: Working locally (env-1)",
     );
   });
 
@@ -1905,7 +1883,6 @@ describe("CLI command output contracts", () => {
       registerThreadCommands(program, () => "http://server"),
     );
 
-    expect(fetchLocalHostIdMock).not.toHaveBeenCalled();
     expect(resolveLocalHostIdMock).not.toHaveBeenCalled();
     expect(post).toHaveBeenCalledWith({
       json: {
@@ -2696,75 +2673,6 @@ describe("CLI command output contracts", () => {
     expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
       "",
       "ID      Name  \n------  ------\nopenai  OpenAI",
-      "",
-    ]);
-  });
-
-  it("bb host list --json prints raw hosts", async () => {
-    const hosts = [
-      {
-        id: "host-1",
-        name: "Workstation",
-        type: "persistent",
-        status: "connected",
-        createdAt: 1,
-        updatedAt: 2,
-        lastSeenAt: 3,
-      },
-    ];
-    const get = vi.fn(async () => hosts);
-    createClientMock.mockReturnValue(
-      asServerClient({
-        api: {
-          v1: {
-            hosts: {
-              $get: get,
-            },
-          },
-        },
-      }),
-    );
-
-    await runCommand(["host", "list", "--json"], (program) =>
-      registerHostCommands(program, () => "http://server"),
-    );
-
-    expect(
-      JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0])),
-    ).toEqual(hosts);
-  });
-
-  it("bb host list renders the shared borderless table", async () => {
-    const get = vi.fn(async () => [
-      {
-        id: "host-1",
-        name: "Workstation",
-        type: "persistent",
-        status: "connected",
-        createdAt: 1,
-        updatedAt: 2,
-        lastSeenAt: 3,
-      },
-    ]);
-    createClientMock.mockReturnValue(
-      asServerClient({
-        api: {
-          v1: {
-            hosts: {
-              $get: get,
-            },
-          },
-        },
-      }),
-    );
-
-    await runCommand(["host", "list"], (program) =>
-      registerHostCommands(program, () => "http://server"),
-    );
-
-    expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
-      "",
-      "ID      Name         Status\n------  -----------  ---------\nhost-1  Workstation  connected",
       "",
     ]);
   });

@@ -1,5 +1,4 @@
 import { Command } from "commander";
-import { findLocalPathProjectSourceForHost } from "@bb/domain";
 import type {
   CreateProjectSourceRequest,
   ProjectResponse,
@@ -7,7 +6,7 @@ import type {
 } from "@bb/server-contract";
 import { action } from "../action.js";
 import { createCliBbSdk } from "../client.js";
-import { fetchLocalHostId, resolveLocalHostId } from "../daemon.js";
+import { resolveLocalHostId } from "../daemon.js";
 import { renderBorderlessTable } from "../table.js";
 import { confirmDestructiveAction, outputJson } from "./helpers.js";
 
@@ -104,15 +103,17 @@ function buildDefaultProjectSourceUpdateRequest(
   return { isDefault: true, type: "local_path" };
 }
 
-function printProjectSource(
-  source: ProjectSource,
-  localHostId: string | null,
-): void {
-  const local = localHostId && source.hostId === localHostId ? " (local)" : "";
-  const defaultMarker = source.isDefault ? " [default]" : "";
-  console.log(
-    `${source.id}  ${source.hostId}${local}  ${source.type}  ${source.path}${defaultMarker}`,
+function getProjectDisplaySource(
+  project: ProjectResponse,
+): ProjectSource | undefined {
+  return (
+    project.sources.find((source) => source.isDefault) ?? project.sources[0]
   );
+}
+
+function printProjectSource(source: ProjectSource): void {
+  const defaultMarker = source.isDefault ? " [default]" : "";
+  console.log(`${source.id}  ${source.type}  ${source.path}${defaultMarker}`);
 }
 
 export function registerProjectCommands(
@@ -139,8 +140,7 @@ export function registerProjectCommands(
           console.log("No projects found");
           return;
         }
-        const localHostId = await fetchLocalHostId();
-        printProjectTable(projects, localHostId);
+        printProjectTable(projects);
       }),
     );
 
@@ -162,8 +162,7 @@ export function registerProjectCommands(
         });
         if (outputJson(opts, created)) return;
         console.log(`Project created: ${created.id}`);
-        const localHostId = await fetchLocalHostId();
-        printProject(created, localHostId);
+        printProject(created);
       }),
     );
 
@@ -176,8 +175,7 @@ export function registerProjectCommands(
         const sdk = createCliBbSdk(getUrl());
         const found = await sdk.projects.get({ projectId: id });
         if (outputJson(opts, found)) return;
-        const localHostId = await fetchLocalHostId();
-        printProject(found, localHostId);
+        printProject(found);
       }),
     );
 
@@ -198,8 +196,7 @@ export function registerProjectCommands(
         });
         if (outputJson(opts, updated)) return;
         console.log(`Project ${updated.id} updated`);
-        const localHostId = await fetchLocalHostId();
-        printProject(updated, localHostId);
+        printProject(updated);
       }),
     );
 
@@ -254,8 +251,7 @@ export function registerProjectCommands(
 
           if (outputJson(opts, sourceResponse)) return;
           console.log(`Project source added: ${sourceResponse.id}`);
-          const localHostId = await fetchLocalHostId();
-          printProjectSource(sourceResponse, localHostId);
+          printProjectSource(sourceResponse);
         },
       ),
     );
@@ -288,8 +284,7 @@ export function registerProjectCommands(
 
           if (outputJson(opts, updated)) return;
           console.log(`Project source updated: ${updated.id}`);
-          const localHostId = await fetchLocalHostId();
-          printProjectSource(updated, localHostId);
+          printProjectSource(updated);
         },
       ),
     );
@@ -326,10 +321,7 @@ export function registerProjectCommands(
     );
 }
 
-function printProject(
-  project: ProjectResponse,
-  localHostId: string | null,
-): void {
+function printProject(project: ProjectResponse): void {
   console.log("");
   console.log(`  ID:       ${project.id}`);
   console.log(`  Name:     ${project.name}`);
@@ -338,33 +330,25 @@ function printProject(
   if (project.sources.length > 0) {
     console.log("  Sources:");
     for (const source of project.sources) {
-      const local =
-        localHostId && source.hostId === localHostId ? " (local)" : "";
-      console.log(
-        `    ${source.hostId}${local}  ${source.type}  ${source.path}`,
-      );
+      const defaultMarker = source.isDefault ? " [default]" : "";
+      console.log(`    ${source.type}  ${source.path}${defaultMarker}`);
     }
   }
   console.log("");
 }
 
-function printProjectTable(
-  projects: ProjectResponse[],
-  localHostId: string | null,
-): void {
+function printProjectTable(projects: ProjectResponse[]): void {
   const rows = projects.map((project) => {
-    const localSource = localHostId
-      ? findLocalPathProjectSourceForHost(project.sources, localHostId)
-      : undefined;
-    return [project.id, project.name, localSource?.path ?? "-"];
+    const source = getProjectDisplaySource(project);
+    return [project.id, project.name, source?.path ?? "-"];
   });
   const idWidth = Math.max(4, ...rows.map((row) => row[0].length));
   const nameWidth = Math.max(4, ...rows.map((row) => row[1].length));
-  const localPathWidth = Math.max(10, ...rows.map((row) => row[2].length));
+  const pathWidth = Math.max(4, ...rows.map((row) => row[2].length));
   const table = renderBorderlessTable(
     {
-      head: ["ID", "Name", "Local Path"],
-      colWidths: [idWidth, nameWidth, localPathWidth],
+      head: ["ID", "Name", "Path"],
+      colWidths: [idWidth, nameWidth, pathWidth],
       trimTrailingWhitespace: true,
     },
     rows,
