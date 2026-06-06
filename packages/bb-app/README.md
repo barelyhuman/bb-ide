@@ -63,7 +63,9 @@ Then open: `http://localhost:38886`
 
 `npx bb-app@latest` downloads the published `bb-app` package, starts the server and
 local host daemon, and serves the web app. It stores bb-managed state under
-`~/.bb/` by default. Press `Ctrl+C` in the terminal to stop both processes.
+`~/.bb/` by default. If either managed child process exits unexpectedly, the
+launcher restarts that child without stopping the other one. Press `Ctrl+C` in
+the terminal to stop both processes and exit with status `0`.
 
 From the app, add or open a project, start a thread, and choose the provider
 you want that thread to use.

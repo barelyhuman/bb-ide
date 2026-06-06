@@ -50,6 +50,7 @@ const HEALTH_CHECK_TIMEOUT_MS = 60_000;
 const HEALTH_CHECK_INTERVAL_MS = 100;
 const MANAGED_PROCESS_TERMINATION_TIMEOUT_MS = 5_000;
 const MANAGED_PROCESS_KILL_TIMEOUT_MS = 1_000;
+const MANAGED_PROCESS_RESTART_RETRY_DELAY_MS = 1_000;
 const START_COMMAND = "start";
 const HOST_DAEMON_COMMAND = "host-daemon";
 const HOST_DAEMON_JOIN_COMMAND = "join";
@@ -230,9 +231,14 @@ export interface ProcessExitResult {
   signal: NodeJS.Signals | null;
 }
 
-type ManagedProcessName = "daemon" | "server";
+export type ManagedProcessName = "daemon" | "server";
 type OutputChunk = Buffer | string;
 type WaitForProcessExitWithTimeoutResult = "exited" | "timed-out";
+type StartManagedProcess = () => Promise<ManagedProcessRun>;
+export type DelayMillisecondsFn = (
+  args: DelayMillisecondsArgs,
+) => Promise<void>;
+export type FullStackSupervisionResult = "shutdown" | "stopped";
 type ResolveWaitForProcessExitWithTimeout = (
   result: WaitForProcessExitWithTimeoutResult,
 ) => void;
@@ -260,9 +266,81 @@ interface TerminateProcessIfRunningArgs {
   signal: NodeJS.Signals;
 }
 
-interface NamedProcessExitResult {
+export interface NamedProcessExitResult {
   processName: ManagedProcessName;
   result: ProcessExitResult;
+}
+
+export interface ManagedProcessRun {
+  exit: Promise<NamedProcessExitResult>;
+  terminate(signal: NodeJS.Signals): Promise<void>;
+}
+
+interface ChildManagedProcessRun extends ManagedProcessRun {
+  childProcess: ChildProcess;
+}
+
+export interface ManagedFullStackProcesses {
+  daemonRun: ManagedProcessRun | null;
+  serverRun: ManagedProcessRun | null;
+}
+
+interface SpawnNamedManagedProcessArgs {
+  args: string[];
+  command: string;
+  env: NodeJS.ProcessEnv;
+  outputBuffer: OutputBuffer;
+  processName: ManagedProcessName;
+}
+
+interface StartFullStackServerProcessArgs {
+  context: BbAppStartContext;
+  env: NodeJS.ProcessEnv;
+  outputBuffer: OutputBuffer;
+  processes: ManagedFullStackProcesses;
+}
+
+interface StartFullStackDaemonProcessArgs {
+  autoJoinEnv: NodeJS.ProcessEnv;
+  context: BbAppStartContext;
+  outputBuffer: OutputBuffer;
+  processes: ManagedFullStackProcesses;
+}
+
+interface RestartManagedProcessArgs {
+  context: BbAppStartContext;
+  delayMilliseconds: DelayMillisecondsFn;
+  isShutdownRequested: () => boolean;
+  processName: ManagedProcessName;
+  start: StartManagedProcess;
+}
+
+export interface SuperviseFullStackProcessesArgs {
+  context: BbAppStartContext;
+  delayMilliseconds: DelayMillisecondsFn;
+  isShutdownRequested: () => boolean;
+  processes: ManagedFullStackProcesses;
+  startDaemon: StartManagedProcess;
+  startServer: StartManagedProcess;
+}
+
+export interface TerminateManagedFullStackProcessesArgs {
+  processes: ManagedFullStackProcesses;
+  signal: NodeJS.Signals;
+}
+
+export interface CompleteFullStackSupervisionArgs {
+  shutdownPromise: Promise<void> | null;
+  supervisionResult: FullStackSupervisionResult;
+}
+
+interface LogManagedProcessStartupFailureContextArgs {
+  context: BbAppStartContext;
+  processName: ManagedProcessName;
+}
+
+export interface DelayMillisecondsArgs {
+  ms: number;
 }
 
 interface WaitForHealthArgs {
@@ -1530,6 +1608,26 @@ function spawnManagedProcess(args: ManagedSpawnArgs): ChildProcess {
   return child;
 }
 
+function spawnNamedManagedProcess(
+  args: SpawnNamedManagedProcessArgs,
+): ChildManagedProcessRun {
+  const childProcess = spawnManagedProcess(args);
+  return {
+    childProcess,
+    exit: waitForNamedProcessExit({
+      childProcess,
+      processName: args.processName,
+    }),
+    async terminate(signal): Promise<void> {
+      await terminateProcessIfRunning({
+        childProcess,
+        processName: args.processName,
+        signal,
+      });
+    },
+  };
+}
+
 function hasProcessExited(childProcess: ChildProcess): boolean {
   return childProcess.exitCode !== null || childProcess.signalCode !== null;
 }
@@ -1594,11 +1692,35 @@ async function waitForNamedProcessExit(
   };
 }
 
+function formatProcessExitResult(result: ProcessExitResult): string {
+  if (result.code !== null) {
+    return `code ${result.code}`;
+  }
+  if (result.signal !== null) {
+    return `signal ${result.signal}`;
+  }
+  return "no exit code or signal";
+}
+
+function formatManagedProcessName(processName: ManagedProcessName): string {
+  return processName === "server" ? "Server" : "Host daemon";
+}
+
+function formatManagedProcessLabel(processName: ManagedProcessName): string {
+  return processName === "server" ? "server" : "host daemon";
+}
+
 function toExitCode(result: ProcessExitResult): number {
   if (result.code !== null) {
     return result.code;
   }
   return result.signal === null ? 1 : 128;
+}
+
+function delayMilliseconds(args: DelayMillisecondsArgs): Promise<void> {
+  return new Promise((resolvePromise) => {
+    setTimeout(resolvePromise, args.ms);
+  });
 }
 
 async function terminateProcessIfRunning(
@@ -2029,6 +2151,207 @@ CLI:
 `);
 }
 
+function logManagedProcessStartupFailureContext(
+  args: LogManagedProcessStartupFailureContextArgs,
+): void {
+  if (args.processName === "server") {
+    log(" ", dim(`Check logs: ${args.context.logDir}/`));
+    return;
+  }
+
+  log(" ", dim(`lock: ${args.context.daemonLockDir}`));
+  log(" ", dim(`logs: ${args.context.logDir}/`));
+}
+
+async function startFullStackServerProcess(
+  args: StartFullStackServerProcessArgs,
+): Promise<ManagedProcessRun> {
+  const serverRun = spawnNamedManagedProcess({
+    args: [args.context.serverEntry],
+    command: process.execPath,
+    env: args.env,
+    outputBuffer: args.outputBuffer,
+    processName: "server",
+  });
+  args.processes.serverRun = serverRun;
+
+  try {
+    await waitForHealth({
+      childProcess: serverRun.childProcess,
+      url: `${args.context.serverUrl}/health`,
+    });
+    return serverRun;
+  } catch {
+    await terminateProcessIfRunning({
+      childProcess: serverRun.childProcess,
+      processName: "server",
+      signal: "SIGTERM",
+    });
+    if (args.processes.serverRun === serverRun) {
+      args.processes.serverRun = null;
+    }
+    throw new Error("Server failed to become healthy");
+  }
+}
+
+async function startFullStackDaemonProcess(
+  args: StartFullStackDaemonProcessArgs,
+): Promise<ManagedProcessRun> {
+  const daemonRun = spawnNamedManagedProcess({
+    args: [args.context.daemonEntry],
+    command: process.execPath,
+    env: createDaemonEnv(args.context, args.autoJoinEnv),
+    outputBuffer: args.outputBuffer,
+    processName: "daemon",
+  });
+  args.processes.daemonRun = daemonRun;
+
+  try {
+    await waitForHealth({
+      childProcess: daemonRun.childProcess,
+      url: `http://${BB_LOOPBACK_HOST}:${args.context.daemonPort}/health`,
+    });
+    return daemonRun;
+  } catch {
+    await terminateProcessIfRunning({
+      childProcess: daemonRun.childProcess,
+      processName: "daemon",
+      signal: "SIGTERM",
+    });
+    if (args.processes.daemonRun === daemonRun) {
+      args.processes.daemonRun = null;
+    }
+    throw new Error("Host daemon failed to become healthy");
+  }
+}
+
+async function restartManagedProcess(
+  args: RestartManagedProcessArgs,
+): Promise<ManagedProcessRun | null> {
+  while (!args.isShutdownRequested()) {
+    beginStep(`Restarting ${formatManagedProcessLabel(args.processName)}`);
+    try {
+      const processRun = await args.start();
+      endStep(
+        green("✓"),
+        `${formatManagedProcessName(args.processName)} restarted`,
+      );
+      return processRun;
+    } catch {
+      if (args.isShutdownRequested()) {
+        return null;
+      }
+      endStep(
+        red("✗"),
+        `${formatManagedProcessName(args.processName)} failed to restart`,
+      );
+      logManagedProcessStartupFailureContext({
+        context: args.context,
+        processName: args.processName,
+      });
+      await args.delayMilliseconds({
+        ms: MANAGED_PROCESS_RESTART_RETRY_DELAY_MS,
+      });
+    }
+  }
+
+  return null;
+}
+
+export async function terminateManagedFullStackProcesses(
+  args: TerminateManagedFullStackProcessesArgs,
+): Promise<void> {
+  const terminationPromises: Promise<void>[] = [];
+  const serverRun = args.processes.serverRun;
+  const daemonRun = args.processes.daemonRun;
+  if (serverRun !== null) {
+    terminationPromises.push(serverRun.terminate(args.signal));
+  }
+  if (daemonRun !== null) {
+    terminationPromises.push(daemonRun.terminate(args.signal));
+  }
+  await Promise.all(terminationPromises);
+}
+
+export async function superviseFullStackProcesses(
+  args: SuperviseFullStackProcessesArgs,
+): Promise<FullStackSupervisionResult> {
+  while (!args.isShutdownRequested()) {
+    const serverRun = args.processes.serverRun;
+    const daemonRun = args.processes.daemonRun;
+    if (serverRun === null || daemonRun === null) {
+      return "stopped";
+    }
+
+    const exitedProcess = await Promise.race([serverRun.exit, daemonRun.exit]);
+    if (args.isShutdownRequested()) {
+      return "shutdown";
+    }
+
+    log(
+      yellow("!"),
+      `${formatManagedProcessLabel(exitedProcess.processName)} exited with ${formatProcessExitResult(
+        exitedProcess.result,
+      )} - restarting ${formatManagedProcessLabel(exitedProcess.processName)}`,
+    );
+
+    if (exitedProcess.processName === "server") {
+      if (args.processes.serverRun === serverRun) {
+        args.processes.serverRun = null;
+      }
+      await args.delayMilliseconds({
+        ms: MANAGED_PROCESS_RESTART_RETRY_DELAY_MS,
+      });
+      if (args.isShutdownRequested()) {
+        return "shutdown";
+      }
+      const restartedServer = await restartManagedProcess({
+        context: args.context,
+        delayMilliseconds: args.delayMilliseconds,
+        isShutdownRequested: args.isShutdownRequested,
+        processName: "server",
+        start: args.startServer,
+      });
+      if (restartedServer === null) {
+        return "shutdown";
+      }
+      continue;
+    }
+
+    if (args.processes.daemonRun === daemonRun) {
+      args.processes.daemonRun = null;
+    }
+    await args.delayMilliseconds({
+      ms: MANAGED_PROCESS_RESTART_RETRY_DELAY_MS,
+    });
+    if (args.isShutdownRequested()) {
+      return "shutdown";
+    }
+    const restartedDaemon = await restartManagedProcess({
+      context: args.context,
+      delayMilliseconds: args.delayMilliseconds,
+      isShutdownRequested: args.isShutdownRequested,
+      processName: "daemon",
+      start: args.startDaemon,
+    });
+    if (restartedDaemon === null) {
+      return "shutdown";
+    }
+  }
+  return "shutdown";
+}
+
+export async function completeFullStackSupervision(
+  args: CompleteFullStackSupervisionArgs,
+): Promise<void> {
+  if (args.shutdownPromise !== null) {
+    await args.shutdownPromise;
+  }
+  if (args.supervisionResult === "shutdown") {
+    process.exitCode = 0;
+  }
+}
+
 export async function runBbApp(
   cliArgs: string[] = process.argv.slice(2),
 ): Promise<void> {
@@ -2110,47 +2433,33 @@ export async function runBbApp(
     warnExistingDaemonLock(runtime.context.daemonLockDir);
   }
 
-  beginStep("Starting server");
-
-  const serverProcess = spawnManagedProcess({
-    args: [runtime.context.serverEntry],
-    command: process.execPath,
-    env: serverEnv,
-    outputBuffer,
-  });
-  const serverExit = waitForNamedProcessExit({
-    childProcess: serverProcess,
-    processName: "server",
-  });
-
+  const processes: ManagedFullStackProcesses = {
+    daemonRun: null,
+    serverRun: null,
+  };
   let shuttingDown = false;
-  let daemonProcess: ChildProcess | null = null;
+  let shutdownPromise: Promise<void> | null = null;
 
-  const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
-    if (shuttingDown) {
-      return;
+  const isShutdownRequested = (): boolean => shuttingDown;
+  const shutdown = (signal: NodeJS.Signals): Promise<void> => {
+    if (shutdownPromise !== null) {
+      return shutdownPromise;
     }
     shuttingDown = true;
-    process.stdout.write("\n");
-    log(dim("●"), "Shutting down");
-    const terminationPromises = [
-      terminateProcessIfRunning({
-        childProcess: serverProcess,
-        processName: "server",
-        signal,
-      }),
-    ];
-    if (daemonProcess !== null) {
-      terminationPromises.push(
-        terminateProcessIfRunning({
-          childProcess: daemonProcess,
-          processName: "daemon",
-          signal,
-        }),
-      );
-    }
-    await Promise.all(terminationPromises);
+    shutdownPromise = (async () => {
+      process.stdout.write("\n");
+      log(dim("●"), "Shutting down");
+      await terminateManagedFullStackProcesses({ processes, signal });
+    })();
+    return shutdownPromise;
   };
+  const startServer = (): Promise<ManagedProcessRun> =>
+    startFullStackServerProcess({
+      context,
+      env: serverEnv,
+      outputBuffer,
+      processes,
+    });
 
   const removeSignalForwarding = installTerminationSignalForwarding(
     (signal) => {
@@ -2159,14 +2468,15 @@ export async function runBbApp(
   );
 
   try {
+    beginStep("Starting server");
     try {
-      await waitForHealth({
-        childProcess: serverProcess,
-        url: `${context.serverUrl}/health`,
-      });
+      await startServer();
     } catch {
       endStep(red("✗"), "Server failed to start (health check timed out)");
-      log(" ", dim(`Check logs: ${context.logDir}/`));
+      logManagedProcessStartupFailureContext({
+        context,
+        processName: "server",
+      });
       outputBuffer.flush();
       process.exitCode = 1;
       await shutdown("SIGTERM");
@@ -2181,27 +2491,22 @@ export async function runBbApp(
       env: sharedEnv,
       serverUrl: context.serverUrl,
     });
-
-    daemonProcess = spawnManagedProcess({
-      args: [context.daemonEntry],
-      command: process.execPath,
-      env: createDaemonEnv(context, autoJoinEnv),
-      outputBuffer,
-    });
-    const daemonExit = waitForNamedProcessExit({
-      childProcess: daemonProcess,
-      processName: "daemon",
-    });
+    const startDaemon = (): Promise<ManagedProcessRun> =>
+      startFullStackDaemonProcess({
+        autoJoinEnv,
+        context,
+        outputBuffer,
+        processes,
+      });
 
     try {
-      await waitForHealth({
-        childProcess: daemonProcess,
-        url: `http://${BB_LOOPBACK_HOST}:${context.daemonPort}/health`,
-      });
+      await startDaemon();
     } catch {
       endStep(red("✗"), "Host daemon failed to start");
-      log(" ", dim(`lock: ${context.daemonLockDir}`));
-      log(" ", dim(`logs: ${context.logDir}/`));
+      logManagedProcessStartupFailureContext({
+        context,
+        processName: "daemon",
+      });
       outputBuffer.flush();
       process.exitCode = 1;
       await shutdown("SIGTERM");
@@ -2223,23 +2528,15 @@ export async function runBbApp(
     log(" ", dim("Press Ctrl+C to stop"));
 
     outputBuffer.flush();
-    const firstExit = await Promise.race([serverExit, daemonExit]);
-
-    if (firstExit.processName === "server") {
-      await terminateProcessIfRunning({
-        childProcess: daemonProcess,
-        processName: "daemon",
-        signal: firstExit.result.signal ?? "SIGTERM",
-      });
-    } else {
-      await terminateProcessIfRunning({
-        childProcess: serverProcess,
-        processName: "server",
-        signal: firstExit.result.signal ?? "SIGTERM",
-      });
-    }
-
-    process.exitCode = toExitCode(firstExit.result);
+    const supervisionResult = await superviseFullStackProcesses({
+      context,
+      delayMilliseconds,
+      isShutdownRequested,
+      processes,
+      startDaemon,
+      startServer,
+    });
+    await completeFullStackSupervision({ shutdownPromise, supervisionResult });
   } catch (error) {
     await shutdown("SIGTERM");
     throw error;

@@ -29,10 +29,32 @@ import {
   resolveBbAppCommand,
   runBbApp,
 } from "../src/index.js";
-import { readBbAppPackageVersion, waitForProcessExit } from "../src/launcher.js";
+import {
+  completeFullStackSupervision,
+  readBbAppPackageVersion,
+  superviseFullStackProcesses,
+  terminateManagedFullStackProcesses,
+  waitForProcessExit,
+} from "../src/launcher.js";
+import type { BbAppStartContext } from "../src/index.js";
+import type {
+  DelayMillisecondsArgs,
+  DelayMillisecondsFn,
+  FullStackSupervisionResult,
+  ManagedFullStackProcesses,
+  ManagedProcessName,
+  ManagedProcessRun,
+  NamedProcessExitResult,
+  ProcessExitResult,
+} from "../src/launcher.js";
 
 interface DelayArgs {
   ms: number;
+}
+
+interface ControlledDelayCall {
+  ms: number;
+  resolve(): void;
 }
 
 interface ConfigReloadTestServer {
@@ -56,6 +78,33 @@ interface InvalidConfigCommandCase {
 }
 
 type DelayResult = "timeout";
+type ResolveFakeManagedProcessExit = (result: NamedProcessExitResult) => void;
+type StartFakeManagedProcess = () => Promise<ManagedProcessRun>;
+
+interface FakeManagedProcessRunArgs {
+  id: string;
+  processName: ManagedProcessName;
+}
+
+interface WaitForProcessReplacementArgs {
+  currentRun: () => ManagedProcessRun | null;
+  previousRun: ManagedProcessRun;
+}
+
+interface WaitForDelayCallArgs {
+  delay: ControlledDelay;
+  index: number;
+}
+
+interface FakeSupervisor {
+  daemonRuns: FakeManagedProcessRun[];
+  daemonStart: StartFakeManagedProcess;
+  processes: ManagedFullStackProcesses;
+  serverRuns: FakeManagedProcessRun[];
+  serverStart: StartFakeManagedProcess;
+  setShutdownRequested(value: boolean): void;
+  shutdownRequested(): boolean;
+}
 
 const invalidConfigCommandCases: InvalidConfigCommandCase[] = [
   {
@@ -94,12 +143,163 @@ const packageMetadataSchema = z.object({
 
 type PackageMetadata = z.infer<typeof packageMetadataSchema>;
 
+class FakeManagedProcessRun implements ManagedProcessRun {
+  readonly exit: Promise<NamedProcessExitResult>;
+  readonly id: string;
+  readonly processName: ManagedProcessName;
+  readonly terminationSignals: NodeJS.Signals[] = [];
+  running = true;
+  private resolveExit: ResolveFakeManagedProcessExit = () => undefined;
+
+  constructor(args: FakeManagedProcessRunArgs) {
+    this.id = args.id;
+    this.processName = args.processName;
+    this.exit = new Promise<NamedProcessExitResult>((resolvePromise) => {
+      this.resolveExit = resolvePromise;
+    });
+  }
+
+  exitWith(result: ProcessExitResult): void {
+    if (!this.running) {
+      return;
+    }
+    this.running = false;
+    this.resolveExit({ processName: this.processName, result });
+  }
+
+  async terminate(signal: NodeJS.Signals): Promise<void> {
+    this.terminationSignals.push(signal);
+    this.exitWith({ code: null, signal });
+  }
+}
+
+class ControlledDelay {
+  readonly calls: ControlledDelayCall[] = [];
+
+  async delayMilliseconds(args: DelayMillisecondsArgs): Promise<void> {
+    await new Promise<void>((resolvePromise) => {
+      this.calls.push({
+        ms: args.ms,
+        resolve: resolvePromise,
+      });
+    });
+  }
+}
+
 function delay(args: DelayArgs): Promise<DelayResult> {
   return new Promise((resolvePromise) => {
     setTimeout(() => {
       resolvePromise("timeout");
     }, args.ms);
   });
+}
+
+const immediateDelay: DelayMillisecondsFn = () => {
+  return Promise.resolve();
+};
+
+function createTestStartContext(): BbAppStartContext {
+  return {
+    appDistDir: "/tmp/bb-app-test/app/dist",
+    appVersion: "0.0.0-test",
+    configFile: "/tmp/bb-app-test/config.json",
+    daemonBundleDir: "/tmp/bb-app-test/host-daemon/dist",
+    daemonEntry: "/tmp/bb-app-test/host-daemon/dist/daemon-bundle.mjs",
+    daemonLockDir: "/tmp/bb-app-test/daemon.lock.lock",
+    daemonLockFile: "/tmp/bb-app-test/daemon.lock",
+    daemonPort: 38887,
+    dataDir: "/tmp/bb-app-test",
+    dbPath: "/tmp/bb-app-test/bb.db",
+    envFile: "/tmp/bb-app-test/env.json",
+    logDir: "/tmp/bb-app-test/logs",
+    packageRoot: "/tmp/bb-app-test/package",
+    serverEntry: "/tmp/bb-app-test/server/dist/index.js",
+    serverPort: 38886,
+    serverUrl: "http://127.0.0.1:38886",
+  };
+}
+
+function createFakeSupervisor(): FakeSupervisor {
+  let shutdownRequested = false;
+  const serverRuns = [
+    new FakeManagedProcessRun({ id: "server-1", processName: "server" }),
+  ];
+  const daemonRuns = [
+    new FakeManagedProcessRun({ id: "daemon-1", processName: "daemon" }),
+  ];
+  const processes: ManagedFullStackProcesses = {
+    daemonRun: daemonRuns[0],
+    serverRun: serverRuns[0],
+  };
+  const serverStart = async (): Promise<ManagedProcessRun> => {
+    const run = new FakeManagedProcessRun({
+      id: `server-${serverRuns.length + 1}`,
+      processName: "server",
+    });
+    serverRuns.push(run);
+    processes.serverRun = run;
+    return run;
+  };
+  const daemonStart = async (): Promise<ManagedProcessRun> => {
+    const run = new FakeManagedProcessRun({
+      id: `daemon-${daemonRuns.length + 1}`,
+      processName: "daemon",
+    });
+    daemonRuns.push(run);
+    processes.daemonRun = run;
+    return run;
+  };
+  return {
+    daemonRuns,
+    daemonStart,
+    processes,
+    serverRuns,
+    serverStart,
+    setShutdownRequested(value) {
+      shutdownRequested = value;
+    },
+    shutdownRequested() {
+      return shutdownRequested;
+    },
+  };
+}
+
+async function waitForProcessReplacement(
+  args: WaitForProcessReplacementArgs,
+): Promise<ManagedProcessRun> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const currentRun = args.currentRun();
+    if (currentRun !== null && currentRun !== args.previousRun) {
+      return currentRun;
+    }
+    await delay({ ms: 1 });
+  }
+  throw new Error("Timed out waiting for process replacement");
+}
+
+async function waitForDelayCall(
+  args: WaitForDelayCallArgs,
+): Promise<ControlledDelayCall> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const call = args.delay.calls[args.index];
+    if (call !== undefined) {
+      return call;
+    }
+    await delay({ ms: 1 });
+  }
+  throw new Error("Timed out waiting for restart throttle delay");
+}
+
+async function stopFakeSupervisor(
+  supervisor: FakeSupervisor,
+  supervision: Promise<FullStackSupervisionResult>,
+): Promise<FullStackSupervisionResult> {
+  supervisor.setShutdownRequested(true);
+  await terminateManagedFullStackProcesses({
+    processes: supervisor.processes,
+    signal: "SIGTERM",
+  });
+  return supervision;
 }
 
 async function startConfigReloadTestServer(): Promise<ConfigReloadTestServer> {
@@ -819,6 +1019,183 @@ describe("bb-app launcher", () => {
     await expect(
       Promise.race([waitForProcessExit(childProcess), delay({ ms: 100 })]),
     ).resolves.toEqual({ code: 7, signal: null });
+  });
+
+  it("keeps daemon running and starts only a new server after server exit", async () => {
+    const supervisor = createFakeSupervisor();
+    const initialServerRun = supervisor.serverRuns[0];
+    const initialDaemonRun = supervisor.daemonRuns[0];
+    const supervision = superviseFullStackProcesses({
+      context: createTestStartContext(),
+      delayMilliseconds: immediateDelay,
+      isShutdownRequested: supervisor.shutdownRequested,
+      processes: supervisor.processes,
+      startDaemon: supervisor.daemonStart,
+      startServer: supervisor.serverStart,
+    });
+
+    initialServerRun.exitWith({ code: 1, signal: null });
+    const nextServerRun = await waitForProcessReplacement({
+      currentRun: () => supervisor.processes.serverRun,
+      previousRun: initialServerRun,
+    });
+
+    expect(initialServerRun.running).toBe(false);
+    expect(initialDaemonRun.running).toBe(true);
+    expect(supervisor.processes.daemonRun).toBe(initialDaemonRun);
+    expect(supervisor.daemonRuns).toHaveLength(1);
+    expect(supervisor.serverRuns).toHaveLength(2);
+    expect(nextServerRun).toBe(supervisor.serverRuns[1]);
+    expect(supervisor.serverRuns[1]?.running).toBe(true);
+
+    await expect(stopFakeSupervisor(supervisor, supervision)).resolves.toBe(
+      "shutdown",
+    );
+  });
+
+  it("keeps server running and starts only a new daemon after daemon exit", async () => {
+    const supervisor = createFakeSupervisor();
+    const initialServerRun = supervisor.serverRuns[0];
+    const initialDaemonRun = supervisor.daemonRuns[0];
+    const supervision = superviseFullStackProcesses({
+      context: createTestStartContext(),
+      delayMilliseconds: immediateDelay,
+      isShutdownRequested: supervisor.shutdownRequested,
+      processes: supervisor.processes,
+      startDaemon: supervisor.daemonStart,
+      startServer: supervisor.serverStart,
+    });
+
+    initialDaemonRun.exitWith({ code: 1, signal: null });
+    const nextDaemonRun = await waitForProcessReplacement({
+      currentRun: () => supervisor.processes.daemonRun,
+      previousRun: initialDaemonRun,
+    });
+
+    expect(initialDaemonRun.running).toBe(false);
+    expect(initialServerRun.running).toBe(true);
+    expect(supervisor.processes.serverRun).toBe(initialServerRun);
+    expect(supervisor.serverRuns).toHaveLength(1);
+    expect(supervisor.daemonRuns).toHaveLength(2);
+    expect(nextDaemonRun).toBe(supervisor.daemonRuns[1]);
+    expect(supervisor.daemonRuns[1]?.running).toBe(true);
+
+    await expect(stopFakeSupervisor(supervisor, supervision)).resolves.toBe(
+      "shutdown",
+    );
+  });
+
+  it("terminates both children without restarting during shutdown", async () => {
+    const supervisor = createFakeSupervisor();
+    const initialServerRun = supervisor.serverRuns[0];
+    const initialDaemonRun = supervisor.daemonRuns[0];
+    const supervision = superviseFullStackProcesses({
+      context: createTestStartContext(),
+      delayMilliseconds: immediateDelay,
+      isShutdownRequested: supervisor.shutdownRequested,
+      processes: supervisor.processes,
+      startDaemon: supervisor.daemonStart,
+      startServer: supervisor.serverStart,
+    });
+
+    supervisor.setShutdownRequested(true);
+    await terminateManagedFullStackProcesses({
+      processes: supervisor.processes,
+      signal: "SIGINT",
+    });
+
+    await expect(supervision).resolves.toBe("shutdown");
+    expect(initialServerRun.running).toBe(false);
+    expect(initialDaemonRun.running).toBe(false);
+    expect(initialServerRun.terminationSignals).toEqual(["SIGINT"]);
+    expect(initialDaemonRun.terminationSignals).toEqual(["SIGINT"]);
+    expect(supervisor.serverRuns).toHaveLength(1);
+    expect(supervisor.daemonRuns).toHaveLength(1);
+  });
+
+  it("sets exit code to 0 after clean full-stack shutdown", async () => {
+    const previousExitCode = process.exitCode;
+    const supervisor = createFakeSupervisor();
+    const supervision = superviseFullStackProcesses({
+      context: createTestStartContext(),
+      delayMilliseconds: immediateDelay,
+      isShutdownRequested: supervisor.shutdownRequested,
+      processes: supervisor.processes,
+      startDaemon: supervisor.daemonStart,
+      startServer: supervisor.serverStart,
+    });
+
+    try {
+      process.exitCode = 1;
+      supervisor.setShutdownRequested(true);
+      const shutdownPromise = terminateManagedFullStackProcesses({
+        processes: supervisor.processes,
+        signal: "SIGINT",
+      });
+      const supervisionResult = await supervision;
+
+      await completeFullStackSupervision({
+        shutdownPromise,
+        supervisionResult,
+      });
+
+      expect(process.exitCode).toBe(0);
+      expect(supervisor.serverRuns).toHaveLength(1);
+      expect(supervisor.daemonRuns).toHaveLength(1);
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it("throttles repeated healthy child exits before restarting", async () => {
+    const restartThrottle = new ControlledDelay();
+    const supervisor = createFakeSupervisor();
+    const firstServerRun = supervisor.serverRuns[0];
+    const supervision = superviseFullStackProcesses({
+      context: createTestStartContext(),
+      delayMilliseconds: (args) => restartThrottle.delayMilliseconds(args),
+      isShutdownRequested: supervisor.shutdownRequested,
+      processes: supervisor.processes,
+      startDaemon: supervisor.daemonStart,
+      startServer: supervisor.serverStart,
+    });
+
+    firstServerRun.exitWith({ code: 1, signal: null });
+    const firstDelay = await waitForDelayCall({
+      delay: restartThrottle,
+      index: 0,
+    });
+    expect(firstDelay.ms).toBe(1_000);
+    expect(supervisor.serverRuns).toHaveLength(1);
+    expect(supervisor.processes.serverRun).toBeNull();
+    firstDelay.resolve();
+
+    const secondServerRun = await waitForProcessReplacement({
+      currentRun: () => supervisor.processes.serverRun,
+      previousRun: firstServerRun,
+    });
+    expect(supervisor.serverRuns).toHaveLength(2);
+
+    supervisor.serverRuns[1]?.exitWith({ code: 1, signal: null });
+    const secondDelay = await waitForDelayCall({
+      delay: restartThrottle,
+      index: 1,
+    });
+    expect(secondDelay.ms).toBe(1_000);
+    expect(supervisor.serverRuns).toHaveLength(2);
+    expect(supervisor.processes.serverRun).toBeNull();
+    secondDelay.resolve();
+
+    const thirdServerRun = await waitForProcessReplacement({
+      currentRun: () => supervisor.processes.serverRun,
+      previousRun: secondServerRun,
+    });
+    expect(thirdServerRun).toBe(supervisor.serverRuns[2]);
+    expect(supervisor.serverRuns).toHaveLength(3);
+
+    await expect(stopFakeSupervisor(supervisor, supervision)).resolves.toBe(
+      "shutdown",
+    );
   });
 
   it("limits npm package metadata to documented runtimes", () => {
