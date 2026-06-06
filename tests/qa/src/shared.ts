@@ -107,6 +107,11 @@ interface StandaloneProcessInfo {
   pid: number;
 }
 
+interface ShouldCleanupStandaloneParentArgs {
+  parentPid: number;
+  source: string;
+}
+
 interface CleanupStandaloneResult {
   instanceId?: string | null;
   killedPids: number[];
@@ -134,6 +139,8 @@ interface WaitForOptions {
   intervalMs?: number;
   timeoutMs: number;
 }
+
+type ProcessSignalStatus = "missing" | "permission-denied" | "running";
 
 const standaloneStateSchema = z.object({
   daemon: z
@@ -177,6 +184,14 @@ function warnProcessEnumerationSkipped(error: ExecFileException): void {
     error.code == null ? error.message : `code ${String(error.code)}`;
   console.warn(
     `Warning: skipped standalone QA process enumeration (${reason}); orphaned QA processes may remain.`,
+  );
+}
+
+function warnStandaloneParentSkipped(
+  args: ShouldCleanupStandaloneParentArgs,
+): void {
+  console.warn(
+    `Warning: skipped standalone QA cleanup for ${args.source} because parent process ${String(args.parentPid)} is not signalable; root may belong to another user or session.`,
   );
 }
 
@@ -763,6 +778,34 @@ async function listStandaloneProcesses(): Promise<StandaloneProcessInfo[]> {
     });
 }
 
+function getProcessSignalStatus(pid: number): ProcessSignalStatus {
+  try {
+    process.kill(pid, 0);
+    return "running";
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ESRCH") {
+      return "missing";
+    }
+    if (isNodeError(error) && error.code === "EPERM") {
+      return "permission-denied";
+    }
+    throw error;
+  }
+}
+
+function shouldCleanupStandaloneParent(
+  args: ShouldCleanupStandaloneParentArgs,
+): boolean {
+  const status = getProcessSignalStatus(args.parentPid);
+  if (status === "missing") {
+    return true;
+  }
+  if (status === "permission-denied") {
+    warnStandaloneParentSkipped(args);
+  }
+  return false;
+}
+
 export async function cleanupStandaloneInstance(
   state: StandaloneState,
 ): Promise<CleanupStandaloneResult> {
@@ -806,7 +849,13 @@ export async function cleanupStandaloneOrphans(): Promise<CleanupStandaloneResul
       path.join(tmpRoot, "standalone-state.json"),
     );
     const runtime = readStandaloneStateRuntime(state);
-    if (!runtime.parentPid || (await isProcessRunning(runtime.parentPid))) {
+    if (
+      !runtime.parentPid ||
+      !shouldCleanupStandaloneParent({
+        parentPid: runtime.parentPid,
+        source: tmpRoot,
+      })
+    ) {
       continue;
     }
     const cleanupResult = await cleanupStandaloneInstance({
@@ -831,7 +880,10 @@ export async function cleanupStandaloneOrphans(): Promise<CleanupStandaloneResul
     if (
       !processInfo.parentPid ||
       killedPids.has(processInfo.pid) ||
-      (await isProcessRunning(processInfo.parentPid))
+      !shouldCleanupStandaloneParent({
+        parentPid: processInfo.parentPid,
+        source: `process ${String(processInfo.pid)}`,
+      })
     ) {
       continue;
     }
@@ -945,13 +997,5 @@ export async function waitForServerReady(serverUrl: string): Promise<boolean> {
 }
 
 async function isProcessRunning(pid: number): Promise<boolean> {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ESRCH") {
-      return false;
-    }
-    throw error;
-  }
+  return getProcessSignalStatus(pid) !== "missing";
 }

@@ -4,9 +4,16 @@ import type {
   ExecFileOptionsWithStringEncoding,
   SpawnOptions,
 } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 interface SpawnInvocation {
@@ -31,12 +38,41 @@ type ExecFileSecondArg = readonly string[] | ExecFileOptions | null;
 type ExecFileThirdArg = ExecFileOptions | ExecFileCallback | null;
 type ProcessScanErrorCode = string | number;
 
+interface ExecFilePromiseResult {
+  stderr: string;
+  stdout: string;
+}
+
+interface ProcessKillError extends Error {
+  code: string;
+}
+
 interface SpawnMockState {
   children: ChildProcess[];
   execFileInvocations: ExecFileInvocation[];
   processScanErrorCode: ProcessScanErrorCode | null;
   invocations: SpawnInvocation[];
   tempDirs: string[];
+}
+
+interface StandaloneStateFixture {
+  daemon?: {
+    pid?: number | null;
+  };
+  instanceId?: string | null;
+  parentPid?: number | null;
+  paths?: {
+    tmpRoot?: string | null;
+  };
+  server?: {
+    pid?: number | null;
+  };
+}
+
+interface CreateStandaloneRootArgs {
+  name: string;
+  state: StandaloneStateFixture;
+  tmpDir: string;
 }
 
 function createSpawnMockState(): SpawnMockState {
@@ -51,8 +87,85 @@ function createSpawnMockState(): SpawnMockState {
 
 const spawnMockState = vi.hoisted(createSpawnMockState);
 
+function createProcessKillError(code: string): ProcessKillError {
+  return Object.assign(new Error(`kill ${code}`), { code });
+}
+
+function useIsolatedStandaloneTmpDir(): string {
+  const tempDir = mkdtempSync(path.join(tmpdir(), "standalone-cleanup-test-"));
+  spawnMockState.tempDirs.push(tempDir);
+  vi.stubEnv("TMPDIR", tempDir);
+  return tempDir;
+}
+
+function createStandaloneRoot(args: CreateStandaloneRootArgs): string {
+  const tmpRoot = path.join(args.tmpDir, args.name);
+  mkdirSync(tmpRoot, { recursive: true });
+  writeFileSync(
+    path.join(tmpRoot, "standalone-state.json"),
+    JSON.stringify(args.state),
+    "utf8",
+  );
+  return tmpRoot;
+}
+
 vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
+
+  function execFileMock(
+    command: string,
+    args?: ExecFileSecondArg,
+    options?: ExecFileThirdArg,
+    callback?: ExecFileCallback,
+  ): ChildProcess {
+    const callbackArg = typeof options === "function" ? options : callback;
+    const commandArgs = Array.isArray(args) ? args : null;
+
+    spawnMockState.execFileInvocations.push({
+      args: commandArgs,
+      command,
+    });
+
+    const child = actual.spawn(process.execPath, ["-e", ""], {
+      stdio: "ignore",
+    });
+    spawnMockState.children.push(child);
+
+    const processScanErrorCode = spawnMockState.processScanErrorCode;
+    if (command === "ps" && processScanErrorCode) {
+      const error = Object.assign(
+        new Error(`spawn ${String(processScanErrorCode)}`),
+        {
+          code: processScanErrorCode,
+        },
+      );
+      queueMicrotask(() => callbackArg?.(error, "", ""));
+      return child;
+    }
+
+    queueMicrotask(() => callbackArg?.(null, "", ""));
+    return child;
+  }
+
+  function promisifiedExecFileMock(
+    command: string,
+    args?: ExecFileSecondArg,
+    options?: ExecFileOptions,
+  ): Promise<ExecFilePromiseResult> {
+    return new Promise((resolve, reject) => {
+      execFileMock(command, args, options, (error, stdout, stderr) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve({ stderr, stdout });
+      });
+    });
+  }
+
+  Object.defineProperty(execFileMock, promisify.custom, {
+    value: promisifiedExecFileMock,
+  });
 
   return {
     ...actual,
@@ -77,40 +190,7 @@ vi.mock("node:child_process", async (importOriginal) => {
       spawnMockState.children.push(child);
       return child;
     },
-    execFile(
-      command: string,
-      args?: ExecFileSecondArg,
-      options?: ExecFileThirdArg,
-      callback?: ExecFileCallback,
-    ): ChildProcess {
-      const callbackArg = typeof options === "function" ? options : callback;
-      const commandArgs = Array.isArray(args) ? args : null;
-
-      spawnMockState.execFileInvocations.push({
-        args: commandArgs,
-        command,
-      });
-
-      const child = actual.spawn(process.execPath, ["-e", ""], {
-        stdio: "ignore",
-      });
-      spawnMockState.children.push(child);
-
-      const processScanErrorCode = spawnMockState.processScanErrorCode;
-      if (command === "ps" && processScanErrorCode) {
-        const error = Object.assign(
-          new Error(`spawn ${String(processScanErrorCode)}`),
-          {
-            code: processScanErrorCode,
-          },
-        );
-        queueMicrotask(() => callbackArg?.(error, "", ""));
-        return child;
-      }
-
-      queueMicrotask(() => callbackArg?.(null, "", ""));
-      return child;
-    },
+    execFile: execFileMock,
   };
 });
 
@@ -123,6 +203,8 @@ import {
 } from "../src/shared.js";
 
 afterEach(() => {
+  vi.restoreAllMocks();
+
   for (const child of spawnMockState.children) {
     child.kill();
   }
@@ -132,7 +214,6 @@ afterEach(() => {
   spawnMockState.invocations.length = 0;
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
-  vi.restoreAllMocks();
 
   for (const tempDir of spawnMockState.tempDirs) {
     rmSync(tempDir, { force: true, recursive: true });
@@ -256,9 +337,16 @@ describe("spawnLoggedProcess", () => {
 });
 
 describe("cleanupStandaloneOrphans", () => {
-  it.each(["EPERM", "EACCES", 1] as const)(
+  const processScanErrorCodes: readonly ProcessScanErrorCode[] = [
+    "EPERM",
+    "EACCES",
+    1,
+  ];
+
+  it.each(processScanErrorCodes)(
     "warns and continues when process enumeration is blocked with %s",
     async (errorCode) => {
+      useIsolatedStandaloneTmpDir();
       const warn = vi
         .spyOn(console, "warn")
         .mockImplementation(() => undefined);
@@ -279,4 +367,69 @@ describe("cleanupStandaloneOrphans", () => {
       );
     },
   );
+
+  it("skips a standalone root whose parent process exists but is not signalable", async () => {
+    const tmpDir = useIsolatedStandaloneTmpDir();
+    const tmpRoot = createStandaloneRoot({
+      name: "bb-standalone-unowned",
+      state: {
+        daemon: { pid: 1111 },
+        parentPid: 1,
+        server: { pid: 2222 },
+      },
+      tmpDir,
+    });
+    const killedSignals: string[] = [];
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(process, "kill").mockImplementation((pid, signal) => {
+      if (pid === 1 && signal === 0) {
+        throw createProcessKillError("EPERM");
+      }
+      killedSignals.push(`${String(pid)}:${String(signal)}`);
+      return true;
+    });
+
+    await expect(cleanupStandaloneOrphans()).resolves.toMatchObject({
+      killedPids: [],
+      removedRoots: [],
+    });
+    expect(existsSync(tmpRoot)).toBe(true);
+    expect(killedSignals).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("parent process 1 is not signalable"),
+    );
+  });
+
+  it("removes stale standalone roots whose parent process is gone", async () => {
+    const tmpDir = useIsolatedStandaloneTmpDir();
+    const tmpRoot = createStandaloneRoot({
+      name: "bb-standalone-owned-stale",
+      state: {
+        daemon: { pid: 1111 },
+        parentPid: 4242,
+        server: { pid: 2222 },
+      },
+      tmpDir,
+    });
+    const runningPids = new Set([1111, 2222]);
+    vi.spyOn(process, "kill").mockImplementation((pid, signal) => {
+      if (pid === 4242 && signal === 0) {
+        throw createProcessKillError("ESRCH");
+      }
+      if (signal === 0) {
+        if (runningPids.has(pid)) {
+          return true;
+        }
+        throw createProcessKillError("ESRCH");
+      }
+      runningPids.delete(pid);
+      return true;
+    });
+
+    await expect(cleanupStandaloneOrphans()).resolves.toMatchObject({
+      killedPids: [1111, 2222],
+      removedRoots: [tmpRoot],
+    });
+    expect(existsSync(tmpRoot)).toBe(false);
+  });
 });
