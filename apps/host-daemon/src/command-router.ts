@@ -715,6 +715,8 @@ export class CommandRouter {
     // event-before-result ordering policy in the host-daemon contract.
     switch (command.type) {
       case "environment.cleanup_preflight":
+      case "thread.start":
+      case "turn.submit":
       case "workspace.status":
       case "workspace.diff":
         return "read";

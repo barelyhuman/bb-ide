@@ -11,6 +11,7 @@ import {
   unarchiveThread,
 } from "../../helpers/api.js";
 import {
+  waitForEnvironmentStatus,
   waitForPathRemoval,
   waitForThreadStatus,
 } from "../../helpers/assertions.js";
@@ -62,6 +63,12 @@ describe.sequential(
         await archiveThread(harness.api, threadA.thread.id);
         await archiveThread(harness.api, threadB.thread.id);
         await waitForPathRemoval(originalWorkspacePath, DEFAULT_TIMEOUT_MS);
+        await waitForEnvironmentStatus(
+          harness.api,
+          threadA.environment.id,
+          "destroyed",
+          DEFAULT_TIMEOUT_MS,
+        );
 
         await unarchiveThread(harness.api, threadA.thread.id);
         await sendTextMessage(harness.api, threadA.thread.id, {

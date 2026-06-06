@@ -308,7 +308,15 @@ export function cancelPendingEnvironmentCleanup(
         hub: notificationBuffer,
       };
       const environment = getEnvironment(tx, environmentId);
-      if (!environment || environment.cleanupMode === null) {
+      if (!environment) {
+        return "not_requested";
+      }
+
+      if (environment.status === "destroying") {
+        return "in_progress";
+      }
+
+      if (environment.cleanupMode === null) {
         return "not_requested";
       }
 
