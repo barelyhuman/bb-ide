@@ -36,6 +36,7 @@ import {
 import { wsManager } from "@/lib/ws";
 import { useRootComposeReuseEnvironment } from "@/lib/root-compose-selection";
 import { encodeReuseValue } from "@/components/pickers/environment-picker-value";
+import { CHROME_SECTION_LABEL_CLASS } from "@/components/ui/chromeStyleTokens";
 import {
   projectsQueryKey,
   sidebarNavigationQueryKey,
@@ -570,6 +571,9 @@ describe("ProjectList", () => {
     const appRow = await findReviewBoardAppButton();
     const appsLabel = screen.getByText("Apps");
     const managerLabel = screen.getByText("Sidebar Manager");
+    expect(
+      appsLabel.closest("[data-sidebar-sticky-tier=\"label\"]")?.className,
+    ).toContain(CHROME_SECTION_LABEL_CLASS);
 
     // One global app → exactly one app row, regardless of the manager present.
     expect(
@@ -1136,6 +1140,11 @@ describe("ProjectList", () => {
     const projectlessThreadRow = projectlessThreadLabel.closest("div");
     const projectsLabel = screen.getByText("Projects");
     const threadsLabel = screen.getByText("Threads");
+    for (const label of [projectsLabel, threadsLabel]) {
+      expect(
+        label.closest("[data-sidebar-sticky-tier=\"label\"]")?.className,
+      ).toContain(CHROME_SECTION_LABEL_CLASS);
+    }
     const sectionStack = projectsLabel.closest(
       "[data-sidebar-sticky-tier='label']",
     )?.parentElement?.parentElement;

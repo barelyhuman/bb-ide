@@ -18,9 +18,12 @@ import { createNoopDesktopBrowserApi } from "@/test/bb-desktop-test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import {
+  type NewTabMenuRenderer,
   type SecondaryPanelFileTab,
   ThreadSecondaryPanel,
 } from "./ThreadSecondaryPanel";
+import { SECONDARY_PANEL_TOP_CHROME_BACKGROUND_CLASS } from "./panelChromeClasses";
+import { CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS } from "@/components/ui/chromeStyleTokens";
 import {
   MACOS_COLLAPSED_HEADER_RESERVE_CLASS,
   MACOS_TRAFFIC_LIGHT_RESERVE_CLASS,
@@ -38,6 +41,7 @@ interface RenderPanelArgs {
   isConversationCollapsed?: boolean;
   onToggleConversationCollapse?: () => void;
   reserveLeftForDesktopTrafficLights?: boolean;
+  renderNewTabMenu?: NewTabMenuRenderer;
 }
 
 interface ResizeDragEndScenario {
@@ -59,6 +63,7 @@ interface BuildActiveFileTabArgs {
 }
 
 const noop = () => {};
+const renderEmptyNewTabMenu: NewTabMenuRenderer = () => <div>New tab menu</div>;
 const IFRAME_DRAG_GUARD_OVERLAY_TESTID = "iframe-drag-guard-overlay";
 // The class that used to disable iframe pointer-events during resize — asserted
 // absent so the regression that broke wheel-scroll can't be reintroduced.
@@ -140,7 +145,8 @@ function renderPanel({
   isConversationCollapsed = false,
   onToggleConversationCollapse = noop,
   reserveLeftForDesktopTrafficLights = false,
-}: RenderPanelArgs) {
+  renderNewTabMenu = renderEmptyNewTabMenu,
+}: RenderPanelArgs = {}) {
   const { wrapper } = createQueryClientTestHarness();
   const panel = (
     <ThreadSecondaryPanel
@@ -155,7 +161,7 @@ function renderPanel({
       metadataContent={<div>Thread details</div>}
       onCollapse={noop}
       onClose={noop}
-      onOpenNewTab={noop}
+      renderNewTabMenu={renderNewTabMenu}
       onPanelChange={noop}
       onPanelFocus={noop}
       isConversationCollapsed={isConversationCollapsed}
@@ -226,7 +232,7 @@ describe("ThreadSecondaryPanel", () => {
         screen.getByRole("button", { name: "Show thread info panel" }),
       );
       expectNoDragRegionOnElementOrAncestor(
-        screen.getByRole("button", { name: "Open a new tab" }),
+        screen.getByRole("button", { name: "Open tab menu" }),
       );
       expectNoDragRegionOnElementOrAncestor(
         screen.getByRole("button", { name: "Hide secondary panel" }),
@@ -242,6 +248,139 @@ describe("ThreadSecondaryPanel", () => {
       }
     },
   );
+
+  it("keeps the New Tab button immediately after the tab strip's last tab", () => {
+    renderPanel({
+      fileTabs: [
+        buildActiveFileTab({
+          id: "workspace:a.ts",
+          filename: "a.ts",
+          isPinned: false,
+        }),
+      ],
+      renderAsDrawer: false,
+    });
+
+    const strip = screen.getByTestId("secondary-panel-tab-strip");
+    const newTab = screen.getByRole("button", { name: "Open tab menu" });
+
+    // Browser-style: the + sits right after the last tab. It is the strip's
+    // immediate next sibling, and the strip is sized to its tabs (no flex-grow),
+    // so leftover panel width cannot push the + to the far edge.
+    expect(strip.nextElementSibling).toBe(newTab);
+    expect(strip.className).not.toContain("flex-1");
+  });
+
+  it("exposes the panel view controls as a toolbar, not an unbacked tablist", () => {
+    renderPanel({ renderAsDrawer: false });
+
+    // The Info/Diff/file controls are toggle buttons (`aria-pressed`), not
+    // tabs backed by tabpanels, so the control row must carry toolbar
+    // semantics rather than pretending to be a tablist.
+    expect(
+      screen.getByRole("toolbar", { name: "Secondary panel views" }),
+    ).not.toBeNull();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.queryByRole("tab")).toBeNull();
+  });
+
+  it("opens the new-tab action popout from the plus button", () => {
+    renderPanel();
+
+    const infoButton = screen.getByRole("button", {
+      name: "Show thread info panel",
+    });
+    const newTabButton = screen.getByRole("button", { name: "Open tab menu" });
+    expect(infoButton.className).toContain(
+      CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS,
+    );
+    expect(newTabButton.className).toContain(
+      CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS,
+    );
+    expect(newTabButton.className).toContain("h-7");
+    expect(newTabButton.className).toContain("w-7");
+
+    fireEvent.click(newTabButton);
+
+    const menu = screen.getByText("New tab menu");
+    const surface = menu.parentElement;
+
+    expect(menu).toBeTruthy();
+    expect(surface?.className).toContain("w-auto");
+    expect(surface?.className).toContain("min-w-40");
+    expect(surface?.className).toContain("focus-visible:ring-0");
+    expect(surface?.className).not.toContain("w-80");
+    expect(surface?.className).not.toContain("w-96");
+  });
+
+  it("does not land focus on the first popout action when the menu opens", () => {
+    renderPanel({
+      renderNewTabMenu: () => (
+        <div data-testid="new-tab-action-menu">
+          <button type="button">Open file</button>
+          <button type="button">Open browser</button>
+        </div>
+      ),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open tab menu" }));
+
+    // Opening the popout must not autofocus the first row: that paints it with
+    // the keyboard-focus highlight and makes Open file read as already
+    // selected/hovered at rest. Focus rests on the dialog container instead, so
+    // the first Tab still reaches Open file with the visible focus cue.
+    const openFile = screen.getByRole("button", { name: "Open file" });
+    expect(document.activeElement).not.toBe(openFile);
+    expect(document.activeElement).toBe(screen.getByRole("dialog"));
+  });
+
+  it("closes the new-tab action popout after a menu action", async () => {
+    const onOpenFile = vi.fn();
+    renderPanel({
+      renderNewTabMenu: ({ closeMenu }) => (
+        <button
+          type="button"
+          onClick={() => {
+            closeMenu();
+            onOpenFile();
+          }}
+        >
+          Open file
+        </button>
+      ),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open tab menu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open file" }));
+
+    expect(onOpenFile).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Open file" })).toBeNull();
+    });
+  });
+
+  it("uses the vertical seam token for the panel resize-handle hairline", () => {
+    renderPanel({ renderAsDrawer: false });
+
+    const handle = screen.getByRole("separator", {
+      name: "Resize thread and secondary panels",
+    });
+    const hairline = handle.querySelector("span");
+
+    // The resting hairline uses the dedicated vertical seam token rather than
+    // the stronger content `bg-border`.
+    expect(hairline?.className).toContain("bg-border-seam-vertical");
+  });
+
+  it("uses the shared top chrome background on the panel top nav", () => {
+    renderPanel({ renderAsDrawer: false });
+
+    const topChrome = screen.getByTestId("thread-secondary-panel-top-chrome");
+
+    expect(topChrome.parentElement?.className).toContain(
+      SECONDARY_PANEL_TOP_CHROME_BACKGROUND_CLASS,
+    );
+  });
 
   it.each<ResizeDragEndScenario>([
     {

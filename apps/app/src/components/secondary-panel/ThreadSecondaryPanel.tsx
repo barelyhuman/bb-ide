@@ -4,6 +4,7 @@ import {
   type ReactNode,
   useCallback,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useAtomValue } from "jotai";
@@ -11,11 +12,18 @@ import { Icon } from "@/components/ui/icon.js";
 import { EmptyStatePanel } from "@/components/ui/empty-state.js";
 import { Panel, PanelResizeHandle } from "react-resizable-panels";
 import { Button } from "@/components/ui/button.js";
+import { CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS } from "@/components/ui/chromeStyleTokens";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover.js";
 import { cn } from "@/lib/utils";
 import {
   PANEL_COLLAPSE_TRANSITION_CLASS,
   PANEL_RESIZE_HIT_AREA_MARGINS,
 } from "./panelTransitionTokens";
+import { SECONDARY_PANEL_TOP_CHROME_BACKGROUND_CLASS } from "./panelChromeClasses";
 import { resolveConversationCollapseControl } from "./panelToggleControlState";
 import { SecondaryPanelTabStrip } from "./SecondaryPanelTabStrip";
 import type { SecondaryPanelFileTab } from "./secondaryPanelFileTab";
@@ -39,6 +47,7 @@ import {
   ThreadInfoTabContent,
 } from "./ThreadSecondaryPanelTabContent";
 import {
+  CHROME_ROW_CLASS,
   getBbDesktopInfo,
   MACOS_TRAFFIC_LIGHT_RESERVE_CLASS,
   MACOS_WINDOW_DRAG_CLASS,
@@ -62,6 +71,14 @@ const PANEL_SCROLL_SLOT_CLASS =
 const SECONDARY_RESIZABLE_PANEL_STYLE: CSSProperties = {
   pointerEvents: "auto",
 };
+const SECONDARY_PANEL_CHROME_ICON_BUTTON_CLASS =
+  `h-7 w-7 shrink-0 rounded-md p-0 ${CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS}`;
+
+export interface NewTabMenuRenderProps {
+  closeMenu: () => void;
+}
+
+export type NewTabMenuRenderer = (props: NewTabMenuRenderProps) => ReactNode;
 
 export interface ThreadSecondaryPanelProps {
   activePanel: ThreadSecondaryPanelTab | null;
@@ -90,7 +107,7 @@ export interface ThreadSecondaryPanelProps {
   onPanelChange: (panel: ThreadSecondaryPanelTab) => void;
   onCollapse: () => void;
   onClose: () => void;
-  onOpenNewTab: () => void;
+  renderNewTabMenu: NewTabMenuRenderer;
   workspaceRootPath?: string | null;
   onOpenFileInEditor?: (path: string) => void;
   onOpenFilePreview?: (path: string) => void;
@@ -141,7 +158,7 @@ export function ThreadSecondaryPanel({
   onPanelChange,
   onCollapse,
   onClose,
-  onOpenNewTab,
+  renderNewTabMenu,
   workspaceRootPath,
   onOpenFileInEditor,
   onOpenFilePreview,
@@ -268,11 +285,12 @@ export function ThreadSecondaryPanel({
       )}
     >
       <IframeDragGuardOverlay active={isSecondaryPanelResizing} />
-      <div className="bg-background">
+      <div className={SECONDARY_PANEL_TOP_CHROME_BACKGROUND_CLASS}>
         <div
           data-testid="thread-secondary-panel-top-chrome"
           className={cn(
-            "flex h-12 min-w-0 items-center justify-between gap-2 px-4",
+            CHROME_ROW_CLASS,
+            "min-w-0 justify-between gap-2 px-4",
             usesDesktopChrome && MACOS_WINDOW_DRAG_CLASS,
             reserveLeftForDesktopTrafficLights &&
               MACOS_TRAFFIC_LIGHT_RESERVE_CLASS,
@@ -280,7 +298,12 @@ export function ThreadSecondaryPanel({
         >
           <div
             className="flex min-w-0 flex-1 items-center gap-1"
-            role="tablist"
+            // A toolbar, not a tablist: the Info/Diff controls and file tabs are
+            // toggle buttons (`aria-pressed`) rather than `role="tab"` widgets
+            // backed by tabpanels, so `role="tablist"` would be malformed. Toolbar
+            // semantics describe this compact row of view controls without
+            // claiming the unimplemented tab contract.
+            role="toolbar"
             aria-label="Secondary panel views"
           >
             <Button
@@ -288,7 +311,7 @@ export function ThreadSecondaryPanel({
               variant="ghost"
               size="sm"
               className={cn(
-                "h-7 w-7 shrink-0 rounded-md p-0",
+                SECONDARY_PANEL_CHROME_ICON_BUTTON_CLASS,
                 usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
               )}
               onClick={() => onPanelChange("thread-info")}
@@ -304,7 +327,7 @@ export function ThreadSecondaryPanel({
                 variant="ghost"
                 size="sm"
                 className={cn(
-                  "h-7 w-7 shrink-0 rounded-md p-0",
+                  SECONDARY_PANEL_CHROME_ICON_BUTTON_CLASS,
                   usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
                 )}
                 onClick={() => onPanelChange("git-diff")}
@@ -322,7 +345,7 @@ export function ThreadSecondaryPanel({
               />
             ) : null}
             <NewTabButton
-              onOpenNewTab={onOpenNewTab}
+              renderNewTabMenu={renderNewTabMenu}
               usesDesktopChrome={usesDesktopChrome}
             />
           </div>
@@ -478,26 +501,58 @@ export function ThreadSecondaryPanel({
 }
 
 interface NewTabButtonProps {
-  onOpenNewTab: () => void;
+  renderNewTabMenu: NewTabMenuRenderer;
   usesDesktopChrome: boolean;
 }
 
-function NewTabButton({ onOpenNewTab, usesDesktopChrome }: NewTabButtonProps) {
+function NewTabButton({
+  renderNewTabMenu,
+  usesDesktopChrome,
+}: NewTabButtonProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const closeMenu = useCallback(() => {
+    setIsOpen(false);
+  }, []);
+  const handleOpenAutoFocus = useCallback((event: Event) => {
+    // Radix focuses the first row on open, which paints it with the
+    // keyboard-focus highlight and makes the menu read as if Open file were
+    // already selected. Move focus to the popout container instead so no row is
+    // highlighted at rest; the first Tab still lands on Open file with the
+    // visible focus cue, and the menu stays keyboard-reachable inside the portal.
+    event.preventDefault();
+    contentRef.current?.focus();
+  }, []);
+
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      className={cn(
-        "h-7 w-7 shrink-0 rounded-md p-0",
-        usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
-      )}
-      onClick={onOpenNewTab}
-      aria-label="Open a new tab"
-      title="New tab"
-    >
-      <Icon name="Plus" />
-    </Button>
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className={cn(
+            SECONDARY_PANEL_CHROME_ICON_BUTTON_CLASS,
+            usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
+          )}
+          aria-label="Open tab menu"
+          title="New tab"
+        >
+          <Icon name="Plus" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        ref={contentRef}
+        align="start"
+        side="bottom"
+        sideOffset={6}
+        className="w-auto min-w-40 p-1 focus-visible:ring-0"
+        mobileTitle="New tab menu"
+        onOpenAutoFocus={handleOpenAutoFocus}
+      >
+        {renderNewTabMenu({ closeMenu })}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -539,7 +594,7 @@ function SecondaryPanelResizeHandle({
     >
       <span
         className={cn(
-          "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors",
+          "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border-seam-vertical transition-colors",
           isResizing
             ? "bg-accent-foreground/50"
             : "group-hover:bg-accent-foreground/35",

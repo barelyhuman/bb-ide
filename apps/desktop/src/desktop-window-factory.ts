@@ -18,9 +18,17 @@ import {
 
 export type DesktopWindowIcon = BrowserWindowConstructorOptions["icon"];
 
+// Inset the macOS traffic lights an equal distance from the window's top and
+// left edges so they sit on a 45° diagonal from the top-left corner. The shared
+// value vertically centers the lights within the 48px chrome row and brings them
+// onto the sidebar icon column's left rail. This is the native half of a paired
+// geometry contract: the renderer half is `CHROME_ROW_HEIGHT_CLASS` (h-12) and
+// the traffic-light reserve tokens in apps/app/src/lib/bb-desktop.ts. The two
+// bundles can't share a runtime value, so keep this inset in sync with them.
+const MACOS_TRAFFIC_LIGHT_DIAGONAL_INSET = 18;
 const MACOS_TRAFFIC_LIGHT_POSITION = {
-  x: 12,
-  y: 18,
+  x: MACOS_TRAFFIC_LIGHT_DIAGONAL_INSET,
+  y: MACOS_TRAFFIC_LIGHT_DIAGONAL_INSET,
 };
 
 export interface DesktopWindowOpenDetails {

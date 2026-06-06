@@ -3,7 +3,10 @@ import { useIsSidebarShowing } from "@/components/ui/sidebar.js";
 import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import {
   BROWSER_COLLAPSED_HEADER_RESERVE_CLASS,
+  CHROME_ROW_CLASS,
+  CHROME_ROW_HEIGHT_CLASS,
   getBbDesktopInfo,
+  MACOS_CHROME_TRAFFIC_LIGHT_AXIS_NUDGE_CLASS,
   MACOS_COLLAPSED_HEADER_RESERVE_CLASS,
   MACOS_WINDOW_DRAG_CLASS,
   MACOS_WINDOW_NO_DRAG_CLASS,
@@ -37,16 +40,28 @@ export function AppPageHeader({
   return (
     <header
       className={cn(
-        "relative h-12 shrink-0 bg-surface-scrim px-4 backdrop-blur-sm",
+        CHROME_ROW_HEIGHT_CLASS,
+        "relative shrink-0 bg-surface-scrim px-4 backdrop-blur-sm",
         usesDesktopChrome && MACOS_WINDOW_DRAG_CLASS,
-        bordered && "border-b border-border",
+        bordered && "border-b border-border-seam",
         className,
       )}
     >
       <div
         data-testid="app-page-header-content-row"
         className={cn(
-          "flex h-full items-center gap-1 md:gap-2",
+          // Center the title/actions on the shared chrome axis using the chrome
+          // row's full height rather than `h-full`: a bordered header's `border-b`
+          // shrinks the content box by 1px, which would otherwise drift the
+          // visual center half a pixel above the traffic-light / sidebar-arrow
+          // axis.
+          CHROME_ROW_CLASS,
+          "gap-1 md:gap-2",
+          // In macOS desktop chrome, drop the header content onto the native
+          // traffic-light axis (which renders ~2 CSS px below the row center) so
+          // the title bar lines up with the lights, the pinned collapse trigger,
+          // and the sidebar arrows. No-op in the web build (no traffic lights).
+          usesDesktopChrome && MACOS_CHROME_TRAFFIC_LIGHT_AXIS_NUDGE_CLASS,
           // The sidebar toggle is pinned at the app's top-left (see AppLayout's
           // SidebarTriggerOverlay), so when the sidebar is collapsed the header
           // content shares the row with that fixed button and reserves its

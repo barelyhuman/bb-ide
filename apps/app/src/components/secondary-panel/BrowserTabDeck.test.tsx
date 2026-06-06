@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { getDefaultStore } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -13,6 +13,7 @@ import type {
 import type { BrowserFixedPanelTab } from "@/lib/fixed-panel-tabs-state";
 import { BROWSER_VIEW_BOUNDS_SYNC_EVENT } from "@/lib/browser-view-bounds-sync";
 import { BrowserTabDeck } from "./BrowserTabDeck";
+import { SECONDARY_PANEL_TOP_CHROME_BACKGROUND_CLASS } from "./panelChromeClasses";
 import { resetBrowserViewPersistence } from "./browserViewVisibilityCoordinator";
 import { threadSecondaryPanelResizingAtom } from "./threadSecondaryPanelAtoms";
 
@@ -123,6 +124,7 @@ function browserTab(id: string, url: string): BrowserFixedPanelTab {
 const TAB_A = browserTab("browser:a", "https://a.example/");
 const TAB_B = browserTab("browser:b", "https://b.example/");
 const TAB_C = browserTab("browser:c", "https://c.example/");
+const TAB_EMPTY = browserTab("browser:empty", "");
 
 type RestoreHandler = () => void;
 
@@ -211,9 +213,7 @@ function maxConcurrentVisible(calls: readonly RecordedBrowserCall[]): number {
   return max;
 }
 
-function installBrowserContentRect(
-  rect: BrowserContentRect,
-): RestoreHandler {
+function installBrowserContentRect(rect: BrowserContentRect): RestoreHandler {
   const rectMock = vi
     .spyOn(HTMLElement.prototype, "getBoundingClientRect")
     .mockImplementation(
@@ -318,6 +318,52 @@ afterEach(() => {
 });
 
 describe("BrowserTabDeck", () => {
+  it("uses the shared panel top chrome background for the browser nav bar", () => {
+    const { api } = createRecordingBrowserApi();
+    installDesktopBrowserApi(api);
+
+    render(
+      <BrowserTabDeck
+        browserTabs={[TAB_EMPTY]}
+        activeBrowserTabId={TAB_EMPTY.id}
+        environmentId="env_test"
+        isPanelOpen
+        threadId="thr_test"
+        onUpdate={() => {}}
+      />,
+    );
+
+    const navBar = screen.getByTestId("browser-tab-nav-bar");
+
+    expect(navBar.className).toContain(
+      SECONDARY_PANEL_TOP_CHROME_BACKGROUND_CLASS,
+    );
+    expect(navBar.className).toContain("border-border-seam");
+    expect(navBar.className).not.toContain("bg-card");
+  });
+
+  it("uses the requested address placeholder and no empty-state message", () => {
+    const { api } = createRecordingBrowserApi();
+    installDesktopBrowserApi(api);
+
+    render(
+      <BrowserTabDeck
+        browserTabs={[TAB_EMPTY]}
+        activeBrowserTabId={TAB_EMPTY.id}
+        environmentId="env_test"
+        isPanelOpen
+        threadId="thr_test"
+        onUpdate={() => {}}
+      />,
+    );
+
+    expect(screen.getByLabelText("Address and search bar")).toHaveProperty(
+      "placeholder",
+      "Enter a URL",
+    );
+    expect(screen.queryByText(/Pages you visit appear here/u)).toBeNull();
+  });
+
   it("creates a live view for every open browser tab and shows only the active one", () => {
     const { api, calls } = createRecordingBrowserApi();
     installDesktopBrowserApi(api);

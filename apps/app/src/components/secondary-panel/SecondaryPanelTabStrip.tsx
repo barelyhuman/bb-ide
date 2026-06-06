@@ -161,7 +161,14 @@ export function SecondaryPanelTabStrip({
     : null;
 
   return (
-    <div className="group relative flex min-w-0 flex-1 items-center">
+    // Sized to its tabs (no `flex-1`) so the New Tab button that follows it
+    // stays immediately to the right of the last tab instead of being pushed to
+    // the far panel edge by leftover space. It still shrinks (`min-w-0`) when the
+    // tabs overflow, scrolling them under the edge fades/chevrons.
+    <div
+      data-testid="secondary-panel-tab-strip"
+      className="group relative flex min-w-0 items-center"
+    >
       {overflow.canScrollLeft ? (
         <OverflowFade placement="left" className="z-10" />
       ) : null}

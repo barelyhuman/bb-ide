@@ -71,6 +71,7 @@ import {
 } from "@/lib/root-compose-selection";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button.js";
+import { CHROME_SECTION_LABEL_CLASS } from "@/components/ui/chromeStyleTokens";
 import { EmptyState } from "@/components/ui/empty-state.js";
 import { Icon, type IconName } from "@/components/ui/icon.js";
 import {
@@ -416,7 +417,8 @@ function TopLevelSidebarSection({
         tier="label"
         className={cn(
           SIDEBAR_HOVER_ACTIONS_ROW_CLASS,
-          "rounded-md pr-1 text-muted-foreground transition-colors",
+          CHROME_SECTION_LABEL_CLASS,
+          "rounded-md pr-1 transition-colors",
           dragBindings &&
             !dragBindings.disabled &&
             "select-none cursor-grab active:cursor-grabbing",

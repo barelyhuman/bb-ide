@@ -25,9 +25,10 @@ import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import { AppLayout } from "./AppLayout";
 import {
   BROWSER_COLLAPSED_HEADER_RESERVE_CLASS,
+  CHROME_ROW_HEIGHT_CLASS,
   MACOS_APP_REGION_NO_DRAG_CLASS,
+  MACOS_CHROME_TRAFFIC_LIGHT_AXIS_NUDGE_CLASS,
   MACOS_COLLAPSED_HEADER_RESERVE_CLASS,
-  MACOS_SIDEBAR_TRIGGER_OFFSET_CLASS,
   MACOS_TRAFFIC_LIGHT_RESERVE_CLASS,
   MACOS_TRAFFIC_LIGHT_RESERVE_OFFSET_CLASS,
   MACOS_WINDOW_DRAG_CLASS,
@@ -122,9 +123,7 @@ async function renderAppLayout(args: RenderAppLayoutArgs): Promise<void> {
         <Route
           path="*"
           element={
-            <AppLayout>
-              {args.children ?? <div>Layout content</div>}
-            </AppLayout>
+            <AppLayout>{args.children ?? <div>Layout content</div>}</AppLayout>
           }
         />
       </Routes>,
@@ -171,13 +170,172 @@ describe("AppLayout desktop chrome", () => {
     );
   });
 
+  it("renders the sidebar history controls in the top chrome row, not the primary actions", async () => {
+    await renderAppLayout({ desktopInfo: null, initialEntry: "/" });
+
+    const topReserveRow = await screen.findByTestId(
+      "app-sidebar-top-reserve-row",
+    );
+    const primaryActions = screen.getByTestId("app-sidebar-primary-actions");
+    const goBack = within(topReserveRow).getByRole("button", {
+      name: "Go back",
+    });
+    const goForward = within(topReserveRow).getByRole("button", {
+      name: "Go forward",
+    });
+
+    // The arrows live on the top chrome row (the traffic-light / collapse-trigger
+    // axis), right-aligned, with Back before Forward. The row height comes from
+    // the shared chrome-row token, not a local value.
+    expect(topReserveRow.className).toContain("justify-end");
+    expect(topReserveRow.className).toContain(CHROME_ROW_HEIGHT_CLASS);
+    expect(
+      Boolean(
+        goBack.compareDocumentPosition(goForward) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+
+    // They are no longer in the primary actions above New Thread / New Manager.
+    expect(
+      within(primaryActions).queryByRole("button", { name: "Go back" }),
+    ).toBeNull();
+    expect(
+      within(primaryActions).queryByRole("button", { name: "Go forward" }),
+    ).toBeNull();
+    expect(
+      within(primaryActions).getByRole("button", { name: "New thread" }),
+    ).toBeTruthy();
+
+    // At the app root with no recorded history both controls are inert, and the
+    // sidebar chrome still hosts exactly one toggle.
+    expect(goBack).toHaveProperty("disabled", true);
+    expect(goForward).toHaveProperty("disabled", true);
+    expect(
+      screen.getAllByRole("button", { name: "Toggle Sidebar" }),
+    ).toHaveLength(1);
+  });
+
+  it("keeps the desktop history arrows clickable inside the window-drag chrome row", async () => {
+    await renderAppLayout({
+      desktopInfo: createBbDesktopApi({
+        lastCheckedAt: null,
+        latestVersion: null,
+        pendingVersion: null,
+        platform: "macos",
+        updateAvailable: false,
+        updateDownloaded: false,
+        version: "0.0.1",
+      }),
+      initialEntry: "/",
+    });
+
+    const topReserveRow = await screen.findByTestId(
+      "app-sidebar-top-reserve-row",
+    );
+    const controlsRow = within(topReserveRow).getByRole("button", {
+      name: "Go back",
+    }).parentElement;
+
+    // The chrome row stays a window-drag strip, but the arrows opt out so clicks
+    // register instead of dragging the window.
+    expect(topReserveRow.className).toContain(MACOS_WINDOW_DRAG_CLASS);
+    expect(controlsRow?.className).toContain(MACOS_WINDOW_NO_DRAG_CLASS);
+  });
+
+  it("drops the collapse trigger, history arrows, and header onto the traffic-light axis in desktop chrome", async () => {
+    await renderAppLayout({
+      desktopInfo: createBbDesktopApi({
+        lastCheckedAt: null,
+        latestVersion: null,
+        pendingVersion: null,
+        platform: "macos",
+        updateAvailable: false,
+        updateDownloaded: false,
+        version: "0.0.1",
+      }),
+      initialEntry: "/",
+    });
+
+    const overlay = await screen.findByTestId("app-desktop-sidebar-trigger");
+    const trigger = within(overlay).getByRole("button", {
+      name: "Toggle Sidebar",
+    });
+    const topReserveRow = screen.getByTestId("app-sidebar-top-reserve-row");
+    const arrowsRow = within(topReserveRow).getByRole("button", {
+      name: "Go back",
+    }).parentElement;
+    const headerRow = screen.getByTestId("app-page-header-content-row");
+
+    // The native lights render ~2 CSS px below the row center; the shared axis
+    // token moves all three top-chrome surfaces onto that axis together.
+    expect(trigger.className).toContain(
+      MACOS_CHROME_TRAFFIC_LIGHT_AXIS_NUDGE_CLASS,
+    );
+    expect(arrowsRow?.className).toContain(
+      MACOS_CHROME_TRAFFIC_LIGHT_AXIS_NUDGE_CLASS,
+    );
+    expect(headerRow.className).toContain(
+      MACOS_CHROME_TRAFFIC_LIGHT_AXIS_NUDGE_CLASS,
+    );
+  });
+
+  it("keeps the top chrome row-centered in the browser layout (no traffic lights)", async () => {
+    await renderAppLayout({ desktopInfo: null, initialEntry: "/" });
+
+    const trigger = await screen.findByRole("button", {
+      name: "Toggle Sidebar",
+    });
+    const topReserveRow = screen.getByTestId("app-sidebar-top-reserve-row");
+    const arrowsRow = within(topReserveRow).getByRole("button", {
+      name: "Go back",
+    }).parentElement;
+    const headerRow = screen.getByTestId("app-page-header-content-row");
+
+    expect(trigger.className).not.toContain(
+      MACOS_CHROME_TRAFFIC_LIGHT_AXIS_NUDGE_CLASS,
+    );
+    expect(arrowsRow?.className ?? "").not.toContain(
+      MACOS_CHROME_TRAFFIC_LIGHT_AXIS_NUDGE_CLASS,
+    );
+    expect(headerRow.className).not.toContain(
+      MACOS_CHROME_TRAFFIC_LIGHT_AXIS_NUDGE_CLASS,
+    );
+  });
+
+  it("uses the subtle seam token for the bordered top-nav divider", async () => {
+    await renderAppLayout({ desktopInfo: null, initialEntry: "/settings" });
+
+    const headerRow = await screen.findByTestId("app-page-header-content-row");
+    const header = headerRow.parentElement;
+
+    // The top-nav divider is drawn with the dedicated subtle seam token, not the
+    // stronger content border.
+    expect(header?.className).toContain("border-b");
+    expect(header?.className).toContain("border-border-seam");
+  });
+
+  it("draws the sidebar/content panel edge with the vertical seam token", async () => {
+    await renderAppLayout({ desktopInfo: null, initialEntry: "/" });
+
+    await screen.findByRole("button", { name: "Toggle Sidebar" });
+    const panel = document.querySelector("[data-sidebar='panel']");
+
+    // The sidebar's right edge is a vertical panel divider; it uses the
+    // dedicated vertical seam token instead of the default content border color.
+    expect(panel?.className).toContain("md:border-border-seam-vertical");
+    expect(panel?.className).toContain("md:group-data-[side=left]:border-r");
+  });
+
   it("renders root with project-style header spacing in browser layout", async () => {
     await renderAppLayout({ desktopInfo: null, initialEntry: "/" });
 
     const headerRow = await screen.findByTestId("app-page-header-content-row");
     const header = headerRow.parentElement;
 
-    expect(header?.className).toContain("h-12");
+    // The thread-title / page header shares the chrome-row height token so its
+    // top bar stays on the same axis as the sidebar arrows and traffic lights.
+    expect(header?.className).toContain(CHROME_ROW_HEIGHT_CLASS);
     expect(header?.className).not.toContain("border-b");
     expect(
       screen.getAllByRole("button", { name: "Toggle Sidebar" }),
@@ -200,9 +358,7 @@ describe("AppLayout desktop chrome", () => {
 
     await screen.findByRole("button", { name: "Toggle Sidebar" });
     const contentShell = screen.getByTestId("app-layout-content-shell");
-    const topReserveRow = screen.getByTestId(
-      "app-sidebar-top-reserve-row",
-    );
+    const topReserveRow = screen.getByTestId("app-sidebar-top-reserve-row");
     const primaryActions = screen.getByTestId("app-sidebar-primary-actions");
     const sidebarPanel = document.querySelector("[data-sidebar='panel']");
     const overlay = screen.getByTestId("app-desktop-sidebar-trigger");
@@ -242,9 +398,10 @@ describe("AppLayout desktop chrome", () => {
     expect(overlay.className).toContain(MACOS_WINDOW_DRAG_CLASS);
     expect(overlay.className).not.toContain(MACOS_APP_REGION_NO_DRAG_CLASS);
     expect(sidebarTrigger.className).toContain(MACOS_WINDOW_NO_DRAG_CLASS);
-    expect(sidebarTrigger.className).toContain(
-      MACOS_SIDEBAR_TRIGGER_OFFSET_CLASS,
-    );
+    // The overlay centers the trigger on the shared chrome row; the button
+    // carries no per-component vertical nudge of its own.
+    expect(overlay.className).toContain(CHROME_ROW_HEIGHT_CLASS);
+    expect(sidebarTrigger.className).not.toContain("mt-px");
   });
 
   it("keeps the pinned trigger and reserves its footprint in the collapsed header on desktop", async () => {
@@ -272,9 +429,7 @@ describe("AppLayout desktop chrome", () => {
     const sidebarTrigger = within(overlay).getByRole("button", {
       name: "Toggle Sidebar",
     });
-    const topReserveRow = screen.getByTestId(
-      "app-sidebar-top-reserve-row",
-    );
+    const topReserveRow = screen.getByTestId("app-sidebar-top-reserve-row");
     const sidebarTriggers = screen.getAllByRole("button", {
       name: "Toggle Sidebar",
     });
@@ -321,9 +476,9 @@ describe("AppLayout desktop chrome", () => {
     expect(overlay.className).toContain(MACOS_WINDOW_DRAG_CLASS);
     expect(overlay.className).not.toContain(MACOS_APP_REGION_NO_DRAG_CLASS);
     expect(sidebarTrigger.className).toContain(MACOS_WINDOW_NO_DRAG_CLASS);
-    expect(sidebarTrigger.className).toContain(
-      MACOS_SIDEBAR_TRIGGER_OFFSET_CLASS,
-    );
+    // Centering comes from the shared chrome row, not a per-button nudge.
+    expect(overlay.className).toContain(CHROME_ROW_HEIGHT_CLASS);
+    expect(sidebarTrigger.className).not.toContain("mt-px");
   });
 
   it("pins a single browser sidebar trigger and reserves the collapsed header footprint", async () => {
@@ -337,17 +492,15 @@ describe("AppLayout desktop chrome", () => {
     });
     const overlay = screen.getByTestId("app-sidebar-trigger-overlay");
     const headerRow = screen.getByTestId("app-page-header-content-row");
-    const topReserveRow = screen.getByTestId(
-      "app-sidebar-top-reserve-row",
-    );
+    const topReserveRow = screen.getByTestId("app-sidebar-top-reserve-row");
 
     // The pinned overlay is the only toggle; neither the header nor the
     // sidebar's top reserve hosts one, so toggling can't make a button
     // mount/unmount in the header (the source of the old jump).
     expect(screen.queryByTestId("app-desktop-sidebar-trigger")).toBeNull();
-    expect(within(overlay).getByRole("button", { name: "Toggle Sidebar" })).toBe(
-      trigger,
-    );
+    expect(
+      within(overlay).getByRole("button", { name: "Toggle Sidebar" }),
+    ).toBe(trigger);
     expect(
       screen.getAllByRole("button", { name: "Toggle Sidebar" }),
     ).toHaveLength(1);
@@ -368,7 +521,9 @@ describe("AppLayout desktop chrome", () => {
 
     fireEvent.click(trigger);
 
-    expect(headerRow.className).toContain(BROWSER_COLLAPSED_HEADER_RESERVE_CLASS);
+    expect(headerRow.className).toContain(
+      BROWSER_COLLAPSED_HEADER_RESERVE_CLASS,
+    );
     // Still exactly one toggle after collapsing — the same pinned overlay.
     expect(
       screen.getAllByRole("button", { name: "Toggle Sidebar" }),
