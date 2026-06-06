@@ -14,10 +14,6 @@ import { Panel, PanelResizeHandle } from "react-resizable-panels";
 import { Button } from "@/components/ui/button.js";
 import { CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS } from "@/components/ui/chromeStyleTokens";
 import {
-  TAB_PILL_AFFORDANCE_BUTTON_CLASS,
-  TAB_PILL_AFFORDANCE_ICON_CLASS,
-} from "@/components/ui/tab-pill";
-import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -531,18 +527,19 @@ function NewTabButton({
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           className={cn(
-            TAB_PILL_AFFORDANCE_BUTTON_CLASS,
-            "ml-0.5 text-muted-foreground",
+            SECONDARY_PANEL_CHROME_ICON_BUTTON_CLASS,
             usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
           )}
           aria-label="Open tab menu"
           title="New tab"
         >
-          <Icon name="Plus" className={TAB_PILL_AFFORDANCE_ICON_CLASS} />
-        </button>
+          <Icon name="Plus" />
+        </Button>
       </PopoverTrigger>
       <PopoverContent
         ref={contentRef}

@@ -25,10 +25,6 @@ import {
 import { SECONDARY_PANEL_TOP_CHROME_BACKGROUND_CLASS } from "./panelChromeClasses";
 import { CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS } from "@/components/ui/chromeStyleTokens";
 import {
-  TAB_PILL_AFFORDANCE_BUTTON_CLASS,
-  TAB_PILL_AFFORDANCE_ICON_CLASS,
-} from "@/components/ui/tab-pill";
-import {
   MACOS_COLLAPSED_HEADER_RESERVE_CLASS,
   MACOS_TRAFFIC_LIGHT_RESERVE_CLASS,
   MACOS_WINDOW_DRAG_CLASS,
@@ -299,14 +295,10 @@ describe("ThreadSecondaryPanel", () => {
       CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS,
     );
     expect(newTabButton.className).toContain(
-      TAB_PILL_AFFORDANCE_BUTTON_CLASS,
+      CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS,
     );
-    expect(newTabButton.className).toContain("text-muted-foreground");
-    expect(newTabButton.querySelector("svg")?.getAttribute("class")).toContain(
-      TAB_PILL_AFFORDANCE_ICON_CLASS,
-    );
-    expect(newTabButton.className).not.toContain("h-7");
-    expect(newTabButton.className).not.toContain("w-7");
+    expect(newTabButton.className).toContain("h-7");
+    expect(newTabButton.className).toContain("w-7");
 
     fireEvent.click(newTabButton);
 
