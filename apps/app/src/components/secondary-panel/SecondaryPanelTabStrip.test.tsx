@@ -14,6 +14,7 @@ import {
   type SecondaryPanelFileTab,
   SecondaryPanelTabStrip,
 } from "./SecondaryPanelTabStrip";
+import { TAB_PILL_CLOSE_BUTTON_CLASS } from "@/components/ui/tab-pill";
 
 const noop = () => {};
 
@@ -127,6 +128,28 @@ afterEach(() => {
 });
 
 describe("SecondaryPanelTabStrip", () => {
+  it("only reveals tab close buttons while the tab is hovered or focused", () => {
+    render(
+      <SecondaryPanelTabStrip
+        fileTabs={[buildTab({ id: "a", filename: "a.ts", isActive: true })]}
+        usesDesktopChrome={false}
+      />,
+    );
+
+    const closeButton = screen.getByRole("button", { name: "Close a.ts" });
+
+    expect(closeButton.parentElement?.className).toContain("group/tab-pill");
+    expect(closeButton.className).toContain(TAB_PILL_CLOSE_BUTTON_CLASS);
+    expect(closeButton.className).toContain("opacity-0");
+    expect(closeButton.className).toContain(
+      "group-hover/tab-pill:opacity-100",
+    );
+    expect(closeButton.className).toContain(
+      "group-focus-within/tab-pill:opacity-100",
+    );
+    expect(closeButton.className).not.toContain("opacity-70");
+  });
+
   it("hides both scroll chevrons when every tab fits", () => {
     render(
       <SecondaryPanelTabStrip

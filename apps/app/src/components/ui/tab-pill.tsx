@@ -3,6 +3,13 @@ import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 
 const TAB_PILL_DEFAULT_LABEL_MAX_WIDTH_CLASS = "max-w-[180px]";
+const TAB_PILL_AFFORDANCE_BUTTON_BASE_CLASS =
+  "inline-flex size-4 shrink-0 items-center justify-center rounded transition-opacity hover:bg-muted-foreground/15 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none";
+export const TAB_PILL_AFFORDANCE_BUTTON_CLASS =
+  `${TAB_PILL_AFFORDANCE_BUTTON_BASE_CLASS} opacity-70 hover:opacity-100 focus-visible:opacity-100 disabled:opacity-30`;
+export const TAB_PILL_AFFORDANCE_ICON_CLASS = "size-3";
+export const TAB_PILL_CLOSE_BUTTON_CLASS =
+  `mr-1 ml-0.5 ${TAB_PILL_AFFORDANCE_BUTTON_BASE_CLASS} opacity-0 hover:opacity-100 focus-visible:opacity-100 group-hover/tab-pill:opacity-100 group-focus-within/tab-pill:opacity-100 disabled:opacity-30`;
 
 export interface TabPillCloseAction {
   onClose: () => void;
@@ -39,7 +46,7 @@ export function TabPill({
   return (
     <div
       className={cn(
-        "inline-flex h-7 shrink-0 items-center rounded-md text-xs transition-colors",
+        "group/tab-pill inline-flex h-7 shrink-0 items-center rounded-md text-xs transition-colors",
         isActive
           ? "bg-muted text-foreground"
           : "text-muted-foreground hover:bg-state-hover",
@@ -76,12 +83,15 @@ export function TabPill({
           disabled={closeAction.isClosing}
           aria-label={closeAction.closeLabel}
           title={closeAction.closeTooltip}
-          className="mr-1 ml-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded opacity-70 transition-opacity hover:bg-muted-foreground/15 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-30"
+          className={TAB_PILL_CLOSE_BUTTON_CLASS}
         >
           {closeAction.isClosing ? (
-            <Icon name="Spinner" className="size-3 animate-spin" />
+            <Icon
+              name="Spinner"
+              className={`${TAB_PILL_AFFORDANCE_ICON_CLASS} animate-spin`}
+            />
           ) : (
-            <Icon name="X" className="size-3" />
+            <Icon name="X" className={TAB_PILL_AFFORDANCE_ICON_CLASS} />
           )}
         </button>
       ) : null}
