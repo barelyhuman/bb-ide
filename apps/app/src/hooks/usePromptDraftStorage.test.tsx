@@ -7,6 +7,7 @@ import {
   usePromptDraftHasInput,
   usePromptDraftStorage,
 } from "./usePromptDraftStorage";
+import type { PromptDraftAttachment } from "@/lib/prompt-draft";
 
 const PROJECT_DRAFT_SCOPE = {
   projectId: "proj-1",
@@ -15,6 +16,24 @@ const PROJECT_DRAFT_SCOPE = {
 const THREAD_DRAFT_SCOPE = {
   projectId: "proj-1",
   threadId: "thr-1",
+};
+const DRAFT_ATTACHMENT: PromptDraftAttachment = {
+  type: "localFile",
+  path: "/tmp/spec.md",
+  name: "spec.md",
+  sizeBytes: 42,
+  mimeType: "text/markdown",
+};
+const DRAFT_MENTION: PromptTextMention = {
+  start: 0,
+  end: 7,
+  resource: {
+    kind: "thread",
+    threadId: "thr_prompt",
+    projectId: "proj-1",
+    threadType: "standard",
+    label: "Prompt review",
+  },
 };
 
 afterEach(() => {
@@ -259,5 +278,31 @@ describe("usePromptDraftStorage", () => {
     });
 
     expect(hasInput.result.current).toBe(false);
+
+    act(() => {
+      draft.result.current.setDraft({
+        text: "",
+        mentions: [],
+        attachments: [DRAFT_ATTACHMENT],
+      });
+    });
+
+    expect(hasInput.result.current).toBe(true);
+
+    act(() => {
+      draft.result.current.clear();
+    });
+
+    expect(hasInput.result.current).toBe(false);
+
+    act(() => {
+      draft.result.current.setDraft({
+        text: "",
+        mentions: [DRAFT_MENTION],
+        attachments: [],
+      });
+    });
+
+    expect(hasInput.result.current).toBe(true);
   });
 });

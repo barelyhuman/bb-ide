@@ -429,9 +429,7 @@ function ThreadRowComponent({
   const linkLabel = hasComposerDraft
     ? `Open ${threadTitle} (unsubmitted draft)`
     : `Open ${threadTitle}`;
-  const linkTitle = hasComposerDraft
-    ? "Unsubmitted draft"
-    : `Open ${threadTitle}`;
+  const linkTitle = linkLabel;
   // Env-grouped children sit under a header that already shows the
   // worktree branch + icon, so suppress the redundant trailing icon.
   const environmentIcon = options.isEnvGrouped
