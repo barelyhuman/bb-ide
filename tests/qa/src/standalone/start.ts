@@ -63,6 +63,7 @@ async function main() {
   const serverDataDir = path.join(tmpRoot, "server-data");
   const projectRoot = path.join(tmpRoot, "repos", "test-project");
   const statePath = path.join(tmpRoot, "standalone-state.json");
+  const daemonRestartPidPath = path.join(tmpRoot, "host-daemon-restart.pid");
   const daemonLogPath = path.join(logsDir, "host-daemon.log");
   const serverLogPath = path.join(logsDir, "server.log");
 
@@ -129,14 +130,17 @@ async function main() {
       `--state ${shellQuote(statePath)} && ` +
       `pnpm --silent --dir ${shellQuote(repoRoot)} --filter @bb/qa standalone:cleanup`;
     const restartDaemonCommand = buildDaemonRestartCommand({
+      cwd: repoRoot,
       daemonPid: daemonProcess.pid,
       daemonPort,
       dataDir: bbRoot,
       entrypoint: path.join(repoRoot, "apps/host-daemon/dist/index.js"),
       envFilePath: envFile.path,
       hostId: host.id,
+      instanceId,
       logPath: daemonLogPath,
       parentPid,
+      pidPath: daemonRestartPidPath,
       serverUrl,
     });
 
@@ -175,6 +179,7 @@ async function main() {
       parentPid,
       paths: {
         bbRoot,
+        daemonRestartPidPath,
         envFilePath: envFile.path,
         logsDir,
         projectRoot,

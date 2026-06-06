@@ -40,9 +40,45 @@ const STANDALONE_THREAD_CONTEXT_ENV = [
   "BB_ENVIRONMENT_ID",
   "BB_THREAD_STORAGE",
 ];
+const RESTART_DAEMON_ENTRYPOINT_ENV = "BB_RESTART_DAEMON_ENTRYPOINT";
+const RESTART_DAEMON_CWD_ENV = "BB_RESTART_DAEMON_CWD";
+const RESTART_DAEMON_LOG_PATH_ENV = "BB_RESTART_DAEMON_LOG_PATH";
+const RESTART_DAEMON_PID_PATH_ENV = "BB_RESTART_DAEMON_PID_PATH";
+const DETACHED_DAEMON_LAUNCHER_SCRIPT = [
+  'const { spawn } = require("node:child_process");',
+  'const { closeSync, openSync, writeFileSync } = require("node:fs");',
+  "function requiredEnv(name) {",
+  "  const value = process.env[name];",
+  "  if (!value) throw new Error(`Missing ${name}`);",
+  "  return value;",
+  "}",
+  `const entrypoint = requiredEnv("${RESTART_DAEMON_ENTRYPOINT_ENV}");`,
+  `const cwd = requiredEnv("${RESTART_DAEMON_CWD_ENV}");`,
+  `const logPath = requiredEnv("${RESTART_DAEMON_LOG_PATH_ENV}");`,
+  `const pidPath = requiredEnv("${RESTART_DAEMON_PID_PATH_ENV}");`,
+  "const daemonEnv = { ...process.env };",
+  `delete daemonEnv["${RESTART_DAEMON_ENTRYPOINT_ENV}"];`,
+  `delete daemonEnv["${RESTART_DAEMON_CWD_ENV}"];`,
+  `delete daemonEnv["${RESTART_DAEMON_LOG_PATH_ENV}"];`,
+  `delete daemonEnv["${RESTART_DAEMON_PID_PATH_ENV}"];`,
+  'const logFd = openSync(logPath, "a");',
+  "try {",
+  "  const child = spawn(process.execPath, [entrypoint], {",
+  "    cwd,",
+  "    detached: true,",
+  "    env: daemonEnv,",
+  '    stdio: ["ignore", logFd, logFd],',
+  "  });",
+  "  writeFileSync(pidPath, String(child.pid));",
+  "  child.unref();",
+  "} finally {",
+  "  closeSync(logFd);",
+  "}",
+].join("\n");
 
 interface StandaloneStateRuntime {
   daemonPid: number | null;
+  daemonRestartPidPath: string | null;
   instanceId: string | null;
   parentPid: number | null;
   serverPid: number | null;
@@ -90,14 +126,17 @@ interface StartQaServerResult {
 }
 
 interface BuildDaemonRestartCommandArgs {
+  cwd: string;
   daemonPid: number | null | undefined;
   daemonPort: number;
   dataDir: string;
   entrypoint: string;
   envFilePath: string | null;
   hostId: string;
+  instanceId: string;
   logPath: string;
   parentPid: number;
+  pidPath: string;
   serverUrl: string;
 }
 
@@ -152,6 +191,7 @@ const standaloneStateSchema = z.object({
   parentPid: z.number().int().positive().nullable().optional(),
   paths: z
     .object({
+      daemonRestartPidPath: z.string().nullable().optional(),
       tmpRoot: z.string().nullable().optional(),
     })
     .optional(),
@@ -242,6 +282,7 @@ export function readStandaloneStateRuntime(
 ): StandaloneStateRuntime {
   return {
     daemonPid: state?.daemon?.pid ?? null,
+    daemonRestartPidPath: state?.paths?.daemonRestartPidPath ?? null,
     instanceId: state?.instanceId ?? null,
     parentPid: state?.parentPid ?? null,
     serverPid: state?.server?.pid ?? null,
@@ -714,6 +755,23 @@ async function listOpenFilePids(targetPath: string): Promise<number[]> {
   }
 }
 
+async function readPidFile(pidPath: string | null): Promise<number | null> {
+  if (!pidPath) {
+    return null;
+  }
+
+  try {
+    const rawPid = await fs.readFile(pidPath, "utf8");
+    const pid = Number.parseInt(rawPid.trim(), 10);
+    return Number.isInteger(pid) && pid > 0 ? pid : null;
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+}
+
 async function listProcessesByInstance(instanceId: string): Promise<number[]> {
   return (await listStandaloneProcesses())
     .filter((entry) => entry.instanceId === instanceId)
@@ -813,6 +871,7 @@ export async function cleanupStandaloneInstance(
   const killedPids = new Set<number>();
   const pidsToKill = new Set<number | null>([
     runtime.daemonPid,
+    await readPidFile(runtime.daemonRestartPidPath),
     runtime.serverPid,
     ...(runtime.instanceId
       ? await listProcessesByInstance(runtime.instanceId)
@@ -919,13 +978,20 @@ export function buildDaemonRestartCommand(
     `BB_DATA_DIR=${shellQuote(args.dataDir)}`,
     `BB_HOST_DAEMON_PORT=${shellQuote(String(args.daemonPort))}`,
     `BB_SERVER_URL=${shellQuote(args.serverUrl)}`,
+    `${STANDALONE_INSTANCE_ENV}=${shellQuote(args.instanceId)}`,
     `BB_STANDALONE_PARENT_PID=${shellQuote(String(args.parentPid))}`,
   ].join(" ");
-  const startCommand =
-    `(set -a; ${envFileCommand}; set +a; ` +
+  const launcherEnv = [
+    `${RESTART_DAEMON_ENTRYPOINT_ENV}=${shellQuote(args.entrypoint)}`,
+    `${RESTART_DAEMON_CWD_ENV}=${shellQuote(args.cwd)}`,
+    `${RESTART_DAEMON_LOG_PATH_ENV}=${shellQuote(args.logPath)}`,
+    `${RESTART_DAEMON_PID_PATH_ENV}=${shellQuote(args.pidPath)}`,
+  ].join(" ");
+  const startScript =
+    `set -a; ${envFileCommand}; set +a; ` +
     `${providerEnvCommand}; ` +
-    `${daemonEnv} exec node ${shellQuote(args.entrypoint)} ` +
-    `>> ${shellQuote(args.logPath)} 2>&1) &`;
+    `${daemonEnv} ${launcherEnv} node -e ${shellQuote(DETACHED_DAEMON_LAUNCHER_SCRIPT)}`;
+  const startCommand = `(${startScript}) </dev/null >> ${shellQuote(args.logPath)} 2>&1`;
   const waitForReconnectCommand = [
     "connected=0",
     `for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do if curl -fsS ${shellQuote(`${args.serverUrl}/api/v1/hosts`)} | jq -e ${shellQuote(`any(.[]; .id == ${JSON.stringify(args.hostId)} and .status == "connected")`)} >/dev/null; then connected=1; break; fi`,
@@ -933,7 +999,7 @@ export function buildDaemonRestartCommand(
     "done",
     `[ "$connected" = 1 ]`,
   ].join("; ");
-  const startAndWaitCommand = `${startCommand} ${waitForReconnectCommand}`;
+  const startAndWaitCommand = `${startCommand}; ${waitForReconnectCommand}`;
 
   return [...shutdownCommand, startAndWaitCommand].join("; ");
 }
