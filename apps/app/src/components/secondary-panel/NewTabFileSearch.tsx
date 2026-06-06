@@ -1191,10 +1191,13 @@ function NewTabResults({
               })}
             </div>
           ) : (
-            <p className="px-2 py-1.5 text-xs text-muted-foreground">
+            // Framed dashed placeholder so the empty Recent surface reads as a
+            // dedicated zero-state card. This belongs to the Open file / search
+            // surface only; the browser new-tab and root + menu stay card-less.
+            <EmptyStatePanel className="py-4 text-xs">
               Nothing referenced yet — plans, mockups, and files you open will
               show up here.
-            </p>
+            </EmptyStatePanel>
           )}
           {recent.toggleVisible ? (
             <button

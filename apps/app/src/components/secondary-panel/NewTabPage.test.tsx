@@ -350,7 +350,7 @@ describe("NewTabPage recent section", () => {
     expect(recentOption.getAttribute("aria-selected")).toBe("true");
   });
 
-  it("degrades to a quiet hint when the thread has no recent items", async () => {
+  it("frames the empty recent state in a dashed placeholder card", async () => {
     mockEmptySearchSources();
     renderNewTabPage({
       projectId: "proj-1",
@@ -359,7 +359,8 @@ describe("NewTabPage recent section", () => {
     });
 
     const hint = await screen.findByText(/Nothing referenced yet/u);
-    expect(hint).toBeTruthy();
-    expect(hint.className).not.toContain("border-dashed");
+    expect(hint.className).toContain("border-dashed");
+    // The deprecated raised fill stays gone so the card never clashes on white.
+    expect(hint.className).not.toContain("bg-surface-raised");
   });
 });
