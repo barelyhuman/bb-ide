@@ -1,8 +1,6 @@
 import type { JsonRpcMessage } from "../runtime-json-rpc.js";
 import {
   createProviderVisibilityMetadata,
-  type ProviderObservedToolCall,
-  type ProviderObservedToolCallCoverage,
   type ProviderRawEventDescription,
   type ProviderVisibilityMetadata,
 } from "../provider-visibility.js";
@@ -12,18 +10,6 @@ import {
   getStringProperty,
   isRecord,
 } from "../shared/provider-visibility-helpers.js";
-
-const PI_WELL_KNOWN_TOOL_NAMES = [
-  "bash",
-  "edit",
-  "find",
-  "grep",
-  "read",
-  "write",
-] as const;
-const PI_WELL_KNOWN_TOOL_NAME_SET = new Set<string>(PI_WELL_KNOWN_TOOL_NAMES);
-
-const PI_ACCEPTED_FALLBACK_TOOL_NAMES = new Set(["ls", "repo_outline"]);
 
 type PiAssistantEventType =
   | "text_delta"
@@ -105,7 +91,6 @@ interface PiMessageUpdateRawEvent {
 
 interface PiToolExecutionStartRawEvent {
   kind: "sdk/tool_execution_start";
-  toolName?: string;
 }
 
 type PiRawEvent =
@@ -261,10 +246,7 @@ function parsePiRawEvent(event: JsonRpcMessage): PiRawEvent {
     }
 
     case "tool_execution_start":
-      return {
-        kind: "sdk/tool_execution_start",
-        toolName: getStringProperty(message, "toolName"),
-      };
+      return { kind: "sdk/tool_execution_start" };
 
     case "agent_end":
     case "agent_start":
@@ -397,40 +379,8 @@ function describeParsedPiRawEvent(
   }
 }
 
-function classifyPiToolCallCoverage(
-  toolName: string,
-): ProviderObservedToolCallCoverage {
-  if (PI_WELL_KNOWN_TOOL_NAME_SET.has(toolName)) {
-    return "well-known";
-  }
-  if (PI_ACCEPTED_FALLBACK_TOOL_NAMES.has(toolName)) {
-    return "accepted-fallback";
-  }
-  return "unknown";
-}
-
-function extractObservedToolCallsFromParsedPiRawEvent(
-  event: PiRawEvent,
-): ProviderObservedToolCall[] {
-  if (event.kind !== "sdk/tool_execution_start" || !event.toolName) {
-    return [];
-  }
-
-  return [
-    {
-      key: event.toolName,
-      displayName: event.toolName,
-      coverage: classifyPiToolCallCoverage(event.toolName),
-    },
-  ];
-}
-
 export const piVisibilityMetadata: ProviderVisibilityMetadata<PiRawEvent> =
   createProviderVisibilityMetadata({
-    providerId: "pi",
-    wellKnownToolNames: PI_WELL_KNOWN_TOOL_NAMES,
     parseRawEvent: parsePiRawEvent,
     describeParsedRawEvent: describeParsedPiRawEvent,
-    extractObservedToolCallsFromParsed:
-      extractObservedToolCallsFromParsedPiRawEvent,
   });

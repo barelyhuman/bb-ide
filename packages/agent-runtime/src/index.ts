@@ -1,7 +1,6 @@
 export { createAgentRuntime } from "./runtime.js";
 export {
   createProviderForId,
-  getProviderVisibilityMetadata,
   listAvailableProviderInfos as listAvailableProviders,
 } from "./provider-registry.js";
 export type {
@@ -25,8 +24,6 @@ export type {
   StopThreadArgs,
 } from "./types.js";
 export type {
-  ProviderObservedToolCall,
-  ProviderObservedToolCallCoverage,
   ProviderRawEventCoverage,
   ProviderRawEventDescription,
   ProviderVisibilityMetadata,

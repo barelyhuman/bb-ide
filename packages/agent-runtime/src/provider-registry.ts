@@ -12,16 +12,12 @@ import {
 } from "@bb/agent-providers";
 import type { ProviderInfo } from "@bb/domain";
 import { createClaudeCodeProviderAdapter } from "./claude-code/adapter.js";
-import { claudeCodeVisibilityMetadata } from "./claude-code/visibility.js";
 import { createCodexProviderAdapter } from "./codex/adapter.js";
-import { codexVisibilityMetadata } from "./codex/visibility.js";
 import { createPiProviderAdapter } from "./pi/adapter.js";
-import { piVisibilityMetadata } from "./pi/visibility.js";
 import type {
   ProviderAdapter,
   ProviderAdapterFactoryOptions,
 } from "./provider-adapter.js";
-import type { ProviderVisibilityMetadata } from "./provider-visibility.js";
 
 // ---------------------------------------------------------------------------
 // Registry state
@@ -33,7 +29,6 @@ type ProviderFactory = (
 interface BuiltInProviderDescriptor {
   createAdapter: ProviderFactory;
   info: ProviderInfo;
-  visibility: ProviderVisibilityMetadata;
 }
 
 const builtInProviders = [
@@ -42,17 +37,14 @@ const builtInProviders = [
     // runtime-generated prefix is only for adapters that synthesize bb turn ids.
     createAdapter: (options) => createCodexProviderAdapter(options),
     info: getBuiltInAgentProviderInfo("codex"),
-    visibility: codexVisibilityMetadata,
   },
   {
     createAdapter: (options) => createClaudeCodeProviderAdapter(options),
     info: getBuiltInAgentProviderInfo("claude-code"),
-    visibility: claudeCodeVisibilityMetadata,
   },
   {
     createAdapter: (options) => createPiProviderAdapter(options),
     info: getBuiltInAgentProviderInfo("pi"),
-    visibility: piVisibilityMetadata,
   },
 ] satisfies BuiltInProviderDescriptor[];
 
@@ -100,28 +92,6 @@ export function createProviderForId(
   };
 
   return descriptor.createAdapter(adapterOptions);
-}
-
-export function getProviderVisibilityMetadata(
-  providerId: string,
-): ProviderVisibilityMetadata {
-  if (!isAgentProviderId(providerId)) {
-    const allIds = builtInProviders.map((provider) => provider.info.id);
-    throw new Error(
-      `Unsupported provider "${providerId}". Available providers: ${allIds.join(", ")}.`,
-    );
-  }
-
-  const metadata = builtInProvidersById.get(providerId)?.visibility;
-
-  if (!metadata) {
-    const allIds = builtInProviders.map((provider) => provider.info.id);
-    throw new Error(
-      `Unsupported provider "${providerId}". Available providers: ${allIds.join(", ")}.`,
-    );
-  }
-
-  return metadata;
 }
 
 /**

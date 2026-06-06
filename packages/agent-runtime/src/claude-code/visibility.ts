@@ -1,9 +1,6 @@
-import { claudeTaskToolNameValues } from "@bb/domain";
 import type { JsonRpcMessage } from "../runtime-json-rpc.js";
 import {
   createProviderVisibilityMetadata,
-  type ProviderObservedToolCall,
-  type ProviderObservedToolCallCoverage,
   type ProviderRawEventDescription,
   type ProviderVisibilityMetadata,
 } from "../provider-visibility.js";
@@ -12,27 +9,8 @@ import {
   getRawSdkMessage,
   getRecordProperty,
   getStringProperty,
-  isRecord,
-  type StringRecord,
 } from "../shared/provider-visibility-helpers.js";
 
-const CLAUDE_WELL_KNOWN_TOOL_NAMES = [
-  "Agent",
-  "Bash",
-  "Edit",
-  "Glob",
-  "Grep",
-  "Read",
-  ...claudeTaskToolNameValues,
-  "TodoWrite",
-  "ToolSearch",
-  "WebFetch",
-  "WebSearch",
-  "Write",
-] as const;
-const CLAUDE_WELL_KNOWN_TOOL_NAME_SET = new Set<string>(
-  CLAUDE_WELL_KNOWN_TOOL_NAMES,
-);
 const CLAUDE_NORMALIZED_ASSISTANT_CONTENT_TYPES = new Set([
   "text",
   "thinking",
@@ -102,7 +80,6 @@ interface ClaudeUnknownSdkRawEvent {
 interface ClaudeAssistantRawEvent {
   contentTypes: ClaudeMessageContentType[];
   kind: "sdk/assistant";
-  toolNames: string[];
 }
 
 interface ClaudeUserRawEvent {
@@ -253,27 +230,6 @@ function toClaudeStreamDeltaType(
   }
 }
 
-function getClaudeToolNames(message: StringRecord): string[] {
-  const messagePayload = getRecordProperty(message, "message");
-  const content = messagePayload?.["content"];
-  if (!Array.isArray(content)) {
-    return [];
-  }
-
-  const toolNames: string[] = [];
-  for (const block of content) {
-    if (!isRecord(block) || getStringProperty(block, "type") !== "tool_use") {
-      continue;
-    }
-    const toolName = getStringProperty(block, "name");
-    if (!toolName) {
-      continue;
-    }
-    toolNames.push(toolName);
-  }
-  return toolNames;
-}
-
 function parseClaudeRawEvent(event: JsonRpcMessage): ClaudeRawEvent {
   if (event.method === "thread/identity") {
     return { kind: "thread/identity" };
@@ -307,7 +263,6 @@ function parseClaudeRawEvent(event: JsonRpcMessage): ClaudeRawEvent {
         contentTypes: getMessageContentTypes(message).map(
           toClaudeMessageContentType,
         ),
-        toolNames: getClaudeToolNames(message),
       };
 
     case "rate_limit_event":
@@ -574,35 +529,8 @@ function describeParsedClaudeRawEvent(
   }
 }
 
-function classifyClaudeToolCallCoverage(
-  toolName: string,
-): ProviderObservedToolCallCoverage {
-  if (CLAUDE_WELL_KNOWN_TOOL_NAME_SET.has(toolName)) {
-    return "well-known";
-  }
-  return "unknown";
-}
-
-function extractObservedToolCallsFromParsedClaudeRawEvent(
-  event: ClaudeRawEvent,
-): ProviderObservedToolCall[] {
-  if (event.kind !== "sdk/assistant") {
-    return [];
-  }
-
-  return event.toolNames.map((toolName) => ({
-    key: toolName,
-    displayName: toolName,
-    coverage: classifyClaudeToolCallCoverage(toolName),
-  }));
-}
-
 export const claudeCodeVisibilityMetadata: ProviderVisibilityMetadata<ClaudeRawEvent> =
   createProviderVisibilityMetadata({
-    providerId: "claude-code",
-    wellKnownToolNames: CLAUDE_WELL_KNOWN_TOOL_NAMES,
     parseRawEvent: parseClaudeRawEvent,
     describeParsedRawEvent: describeParsedClaudeRawEvent,
-    extractObservedToolCallsFromParsed:
-      extractObservedToolCallsFromParsedClaudeRawEvent,
   });

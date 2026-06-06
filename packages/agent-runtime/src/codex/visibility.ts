@@ -1,8 +1,6 @@
 import type { JsonRpcMessage } from "../runtime-json-rpc.js";
 import {
   createProviderVisibilityMetadata,
-  type ProviderObservedToolCall,
-  type ProviderObservedToolCallCoverage,
   type ProviderRawEventCoverage,
   type ProviderRawEventDescription,
   type ProviderVisibilityMetadata,
@@ -14,23 +12,7 @@ import {
 } from "../shared/provider-visibility-helpers.js";
 import type { ServerNotification } from "./generated/codex-app-server/schema/ServerNotification.js";
 
-const CODEX_WELL_KNOWN_TOOL_NAMES = [
-  "closeAgent",
-  "resumeAgent",
-  "sendInput",
-  "spawnAgent",
-  "wait",
-] as const;
-const CODEX_WELL_KNOWN_TOOL_NAME_SET = new Set<string>(
-  CODEX_WELL_KNOWN_TOOL_NAMES,
-);
-
 type CodexServerNotificationMethod = ServerNotification["method"];
-
-interface CodexObservedToolCallDetails {
-  key: string;
-  displayName: string;
-}
 
 interface CodexNotificationRawEvent {
   kind: "notification";
@@ -293,85 +275,8 @@ function isCodexUserMessageItemEvent(
   return item ? getStringProperty(item, "type") === "userMessage" : false;
 }
 
-function classifyCodexToolCallCoverage(
-  details: CodexObservedToolCallDetails,
-): ProviderObservedToolCallCoverage {
-  if (details.key.startsWith("mcp:")) {
-    return "accepted-fallback";
-  }
-  if (details.key.startsWith("dynamic:")) {
-    return "accepted-fallback";
-  }
-  if (CODEX_WELL_KNOWN_TOOL_NAME_SET.has(details.displayName)) {
-    return "well-known";
-  }
-  return "unknown";
-}
-
-function toCodexObservedToolCallDetails(
-  event: CodexRawEvent,
-): CodexObservedToolCallDetails | null {
-  if (event.kind !== "notification" || event.method !== "item/started") {
-    return null;
-  }
-  if (!isRecord(event.params)) {
-    return null;
-  }
-
-  const item = getRecordProperty(event.params, "item");
-  if (!item) {
-    return null;
-  }
-
-  const itemType = getStringProperty(item, "type");
-  if (itemType === "mcpToolCall") {
-    const server = getStringProperty(item, "server");
-    const tool = getStringProperty(item, "tool");
-    if (!server || !tool) {
-      return null;
-    }
-    return {
-      key: `mcp:${server}:${tool}`,
-      displayName: `${server}:${tool}`,
-    };
-  }
-
-  if (itemType === "dynamicToolCall" || itemType === "collabAgentToolCall") {
-    const tool = getStringProperty(item, "tool");
-    if (!tool) {
-      return null;
-    }
-    return {
-      key: `${itemType === "dynamicToolCall" ? "dynamic" : "collab"}:${tool}`,
-      displayName: tool,
-    };
-  }
-
-  return null;
-}
-
-function extractObservedToolCallsFromParsedCodexRawEvent(
-  event: CodexRawEvent,
-): ProviderObservedToolCall[] {
-  const details = toCodexObservedToolCallDetails(event);
-  if (!details) {
-    return [];
-  }
-  return [
-    {
-      key: details.key,
-      displayName: details.displayName,
-      coverage: classifyCodexToolCallCoverage(details),
-    },
-  ];
-}
-
 export const codexVisibilityMetadata: ProviderVisibilityMetadata<CodexRawEvent> =
   createProviderVisibilityMetadata({
-    providerId: "codex",
-    wellKnownToolNames: CODEX_WELL_KNOWN_TOOL_NAMES,
     parseRawEvent: parseCodexRawEvent,
     describeParsedRawEvent: describeParsedCodexRawEvent,
-    extractObservedToolCallsFromParsed:
-      extractObservedToolCallsFromParsedCodexRawEvent,
   });
