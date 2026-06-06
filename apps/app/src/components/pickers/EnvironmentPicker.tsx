@@ -8,7 +8,6 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
 import {
@@ -147,18 +146,15 @@ export function EnvironmentPickerUI({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
-        className="min-w-52 max-w-80 divide-y [&>*+*]:pt-2 [&>*:not(:last-child)]:pb-2"
+        className="min-w-52 max-w-80"
         mobileTitle="Environment"
       >
-        <WorkspaceModeSection
+        <EnvironmentOptionsSection
           hostId={hostId}
-          enabled={hostId !== null && hasSource}
+          hasProjectSource={hostId !== null && hasSource}
+          reuseDisabled={Boolean(reuseDisabled)}
+          selectedType={parsed?.type}
           value={value}
-          onChange={onChange}
-        />
-        <ReuseSection
-          isReuseSelected={parsed?.type === "reuse"}
-          disabled={Boolean(reuseDisabled)}
           onChange={onChange}
         />
       </DropdownMenuContent>
@@ -201,108 +197,64 @@ export function EnvironmentPicker({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Reuse section — single entry, sets the value to the bare reuse marker.
-// The actual worktree picker lives beside the env picker (see WorktreePicker).
-// ---------------------------------------------------------------------------
-
-interface ReuseSectionProps {
-  isReuseSelected: boolean;
-  disabled: boolean;
-  onChange: (value: string) => void;
-}
-
-function ReuseSection({
-  isReuseSelected,
-  disabled,
-  onChange,
-}: ReuseSectionProps) {
-  return (
-    <DropdownMenuGroup>
-      <DropdownMenuLabel>Reuse</DropdownMenuLabel>
-      <DropdownMenuItem
-        disabled={disabled}
-        onSelect={() => {
-          if (disabled) return;
-          onChange(REUSE_VALUE_WITHOUT_ENVIRONMENT);
-        }}
-        className="flex items-center justify-between gap-3"
-      >
-        <span className="flex min-w-0 items-center gap-2">
-          <Icon
-            name={getEnvironmentWorkspaceLabelIconName("managed-worktree")}
-            className={cn(
-              "text-muted-foreground",
-              COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
-            )}
-          />
-          <span className="flex min-w-0 flex-col">
-            <span className="truncate text-xs">Existing worktree</span>
-            {disabled ? (
-              // No extra muting: the disabled DropdownMenuItem already
-              // applies opacity-50 to its content. Stacking more dimming
-              // here would make the subtitle barely readable.
-              <span className="text-xs">No worktrees in this project yet</span>
-            ) : null}
-          </span>
-        </span>
-        <Icon
-          name="Check"
-          className={cn(
-            COARSE_POINTER_ICON_SIZE_CLASS,
-            isReuseSelected ? "opacity-100" : "opacity-0",
-          )}
-        />
-      </DropdownMenuItem>
-    </DropdownMenuGroup>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Workspace mode section
-// ---------------------------------------------------------------------------
-
-interface WorkspaceModeSectionProps {
+interface EnvironmentOptionsSectionProps {
   hostId: string | null;
-  enabled: boolean;
+  hasProjectSource: boolean;
+  reuseDisabled: boolean;
+  selectedType:
+    | NonNullable<ReturnType<typeof parseEnvironmentValue>>["type"]
+    | undefined;
   value: string;
   onChange: (value: string) => void;
 }
 
-function WorkspaceModeSection({
+function EnvironmentOptionsSection({
   hostId,
-  enabled,
+  hasProjectSource,
+  reuseDisabled,
+  selectedType,
   value,
   onChange,
-}: WorkspaceModeSectionProps) {
-  const localValue = hostId ? encodeHostValue(hostId, "local") : "";
-  const worktreeValue = hostId ? encodeHostValue(hostId, "worktree") : "";
+}: EnvironmentOptionsSectionProps) {
+  const localValue = hostId ? encodeHostValue(hostId, "local") : null;
+  const worktreeValue = hostId ? encodeHostValue(hostId, "worktree") : null;
+  const workspaceDisabled = !hasProjectSource;
+  const workspaceDisabledDescription = workspaceDisabled
+    ? "Project source unavailable"
+    : undefined;
 
   return (
     <DropdownMenuGroup>
-      <DropdownMenuLabel>Workspace</DropdownMenuLabel>
-      {enabled ? (
-        <>
-          <EnvironmentMenuItem
-            label="Work locally"
-            icon={getEnvironmentWorkspaceLabelIconName("other")}
-            itemValue={localValue}
-            selectedValue={value}
-            onSelect={onChange}
-          />
-          <EnvironmentMenuItem
-            label="New worktree"
-            icon={getEnvironmentWorkspaceLabelIconName("managed-worktree")}
-            itemValue={worktreeValue}
-            selectedValue={value}
-            onSelect={onChange}
-          />
-        </>
-      ) : (
-        <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-          Project source unavailable
-        </DropdownMenuItem>
-      )}
+      <EnvironmentMenuItem
+        label="Work locally"
+        description={workspaceDisabledDescription}
+        icon={getEnvironmentWorkspaceLabelIconName("other")}
+        selected={localValue !== null && value === localValue}
+        disabled={workspaceDisabled || localValue === null}
+        onSelect={() => {
+          if (localValue !== null) onChange(localValue);
+        }}
+      />
+      <EnvironmentMenuItem
+        label="New worktree"
+        description={workspaceDisabledDescription}
+        icon={getEnvironmentWorkspaceLabelIconName("managed-worktree")}
+        selected={worktreeValue !== null && value === worktreeValue}
+        disabled={workspaceDisabled || worktreeValue === null}
+        onSelect={() => {
+          if (worktreeValue !== null) onChange(worktreeValue);
+        }}
+      />
+      <EnvironmentMenuItem
+        label="Existing worktree"
+        description={
+          reuseDisabled ? "No worktrees in this project yet" : undefined
+        }
+        icon={getEnvironmentWorkspaceLabelIconName("managed-worktree")}
+        selected={selectedType === "reuse"}
+        disabled={reuseDisabled}
+        onSelect={() => onChange(REUSE_VALUE_WITHOUT_ENVIRONMENT)}
+      />
     </DropdownMenuGroup>
   );
 }
@@ -312,25 +264,28 @@ function WorkspaceModeSection({
 
 interface EnvironmentMenuItemProps {
   label: string;
+  description?: string;
   icon: IconName;
-  itemValue: string;
-  selectedValue: string;
-  onSelect: (value: string) => void;
+  selected: boolean;
+  onSelect: () => void;
   disabled?: boolean;
 }
 
 function EnvironmentMenuItem({
   label,
+  description,
   icon,
-  itemValue,
-  selectedValue,
+  selected,
   onSelect,
   disabled,
 }: EnvironmentMenuItemProps) {
   return (
     <DropdownMenuItem
       disabled={disabled}
-      onSelect={() => onSelect(itemValue)}
+      onSelect={() => {
+        if (disabled) return;
+        onSelect();
+      }}
       className="flex items-center justify-between gap-3"
     >
       <span className="flex min-w-0 items-center gap-2">
@@ -341,13 +296,16 @@ function EnvironmentMenuItem({
             COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
           )}
         />
-        <span className="truncate text-xs">{label}</span>
+        <span className="flex min-w-0 flex-col">
+          <span className="truncate text-xs">{label}</span>
+          {description ? <span className="text-xs">{description}</span> : null}
+        </span>
       </span>
       <Icon
         name="Check"
         className={cn(
           COARSE_POINTER_ICON_SIZE_CLASS,
-          itemValue === selectedValue ? "opacity-100" : "opacity-0",
+          selected ? "opacity-100" : "opacity-0",
         )}
       />
     </DropdownMenuItem>

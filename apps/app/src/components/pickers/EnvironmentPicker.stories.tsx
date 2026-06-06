@@ -29,7 +29,7 @@ const noop = () => {};
 export function Overview() {
   return (
     <StoryCard>
-      <StoryRow label="local direct" hint="host: local + mode: local">
+      <StoryRow label="local direct" hint="selected: Work locally">
         <EnvironmentPickerUI
           value={`host:${HOST_IDS.local}:local`}
           onChange={noop}
@@ -46,7 +46,7 @@ export function Overview() {
           muted
         />
       </StoryRow>
-      <StoryRow label="local worktree" hint="host: local + mode: worktree">
+      <StoryRow label="local worktree" hint="selected: New worktree">
         <EnvironmentPickerUI
           value={`host:${HOST_IDS.local}:worktree`}
           onChange={noop}
