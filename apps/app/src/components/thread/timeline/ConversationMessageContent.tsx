@@ -37,7 +37,6 @@ import {
 import { USER_MESSAGE_CHAR_CAP } from "./conversation-message-limits.js";
 import { turnRequestLabel } from "./conversation-turn-request-label.js";
 import {
-  ConversationMessageInlineOverflowToggle,
   ConversationMessageOverflowToggle,
   useIsOverflowing,
 } from "./conversation-message-overflow.js";
@@ -111,11 +110,6 @@ interface CollapsibleMessageTextProps {
    * system-initiated messages and non-user messages without sender metadata.
    */
   mutePrefixLength?: number;
-}
-
-interface AssistantMessageTextProps {
-  linkRouting: MarkdownLinkRouting | undefined;
-  text: string;
 }
 
 function splitPreWrappedLines(text: string): string[] {
@@ -195,50 +189,6 @@ function CollapsibleMessageText({
           expanded={isExpanded}
           labels={{ collapsed: "Show more", expanded: "Show less" }}
           onToggle={() => setIsExpanded((prev) => !prev)}
-        />
-      ) : null}
-    </>
-  );
-}
-
-function AssistantMessageText({
-  linkRouting,
-  text,
-}: AssistantMessageTextProps) {
-  const [isFullTextVisible, setIsFullTextVisible] = useState(false);
-  const textRef = useRef<HTMLDivElement>(null);
-  const isOverflowing = useIsOverflowing({
-    elementRef: textRef,
-    enabled: !isFullTextVisible,
-    measurementKey: text,
-  });
-  const showToggle = isFullTextVisible || isOverflowing;
-  const showInlineToggle = !isFullTextVisible && isOverflowing;
-
-  return (
-    <>
-      <div
-        ref={textRef}
-        className={cn(
-          !isFullTextVisible && "line-clamp-2",
-          showInlineToggle && "relative",
-        )}
-      >
-        <MarkdownPreview content={text} linkRouting={linkRouting} />
-        {showInlineToggle ? (
-          <ConversationMessageInlineOverflowToggle
-            buttonBackgroundClassName="bg-background"
-            fadeFromClassName="from-background"
-            label="Show more"
-            onToggle={() => setIsFullTextVisible(true)}
-          />
-        ) : null}
-      </div>
-      {isFullTextVisible && showToggle ? (
-        <ConversationMessageOverflowToggle
-          expanded={isFullTextVisible}
-          labels={{ collapsed: "Show more", expanded: "Show less" }}
-          onToggle={() => setIsFullTextVisible((prev) => !prev)}
         />
       ) : null}
     </>
@@ -386,7 +336,7 @@ function AssistantConversationMessage({
 
   return (
     <div className="group w-full px-2 text-sm leading-relaxed">
-      <AssistantMessageText text={text} linkRouting={linkRouting} />
+      <MarkdownPreview content={text} linkRouting={linkRouting} />
       <ConversationAttachments
         filePaths={attachmentItems.filePaths}
         imageItems={attachmentItems.imageItems}

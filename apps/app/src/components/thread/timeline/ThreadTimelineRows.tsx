@@ -291,12 +291,6 @@ interface ConversationRowProps {
   row: TimelineConversationViewRow;
 }
 
-interface AssistantConversationRowProps {
-  horizontalPadding: TimelineRowHorizontalPadding;
-  row: Extract<TimelineConversationViewRow, { role: "assistant" }>;
-  title: TimelineTitle;
-}
-
 const TimelineRendererStaticContext =
   createContext<TimelineRendererStaticContextValue | null>(null);
 const TimelineTurnStateContext =
@@ -678,27 +672,6 @@ function ConversationRow({ row }: ConversationRowProps) {
   );
 }
 
-function AssistantConversationRow({
-  horizontalPadding,
-  row,
-  title,
-}: AssistantConversationRowProps) {
-  const { onTitleAction, resolveSegmentLinkHref } =
-    useTimelineRendererStaticContext();
-  const renderBody = useCallback(() => <ConversationRow row={row} />, [row]);
-
-  return (
-    <ExpandableTimelineRow
-      title={title}
-      horizontalPadding={horizontalPadding}
-      autoExpanded
-      onTitleAction={onTitleAction}
-      resolveSegmentLinkHref={resolveSegmentLinkHref}
-      renderBody={renderBody}
-    />
-  );
-}
-
 function TimelineUnreadDivider({ autoScroll }: TimelineUnreadDividerProps) {
   const bottomAnchor = useBottomAnchoredScroll();
   const dividerRef = useRef<HTMLDivElement>(null);
@@ -991,9 +964,9 @@ function TimelineRowView({
   scopeActive,
   spacing,
 }: TimelineRowViewProps) {
+  const horizontalPadding = timelineRowHorizontalPadding(spacing);
   const { onTitleAction, resolveSegmentLinkHref } =
     useTimelineRendererStaticContext();
-  const horizontalPadding = timelineRowHorizontalPadding(spacing);
   const titleState = useTimelineRowTitleRenderState({
     activeLatestBundleId,
     compactActivityIntents,
@@ -1003,20 +976,9 @@ function TimelineRowView({
   });
 
   if (row.kind === "conversation") {
-    if (row.role === "user") {
-      return <ConversationRow row={row} />;
-    }
-    if (titleState.kind === "compact-activity-intents") {
-      return null;
-    }
-    return (
-      <AssistantConversationRow
-        row={row}
-        title={titleState.title}
-        horizontalPadding={horizontalPadding}
-      />
-    );
+    return <ConversationRow row={row} />;
   }
+
   if (titleState.kind === "compact-activity-intents") {
     return (
       <>
