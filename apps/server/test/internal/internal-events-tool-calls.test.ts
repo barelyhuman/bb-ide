@@ -41,7 +41,7 @@ async function postEventBatch(args: {
 }
 
 describe("internal event and tool-call routes", () => {
-  it("appends event batches and returns accepted producer events", async () => {
+  it("appends event batches and returns accepted event indexes", async () => {
     await withTestHarness(async (harness) => {
       const { session } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
@@ -62,7 +62,6 @@ describe("internal event and tool-call routes", () => {
         sessionId: session.id,
         events: [
           {
-            producerEventId: "hdevt_23456789abcdefghijkm",
             threadId: thread.id,
             event: {
               type: "turn/started",
@@ -72,7 +71,6 @@ describe("internal event and tool-call routes", () => {
             },
           },
           {
-            producerEventId: "hdevt_23456789abcdefghijkn",
             threadId: thread.id,
             event: {
               type: "turn/completed",
@@ -89,12 +87,12 @@ describe("internal event and tool-call routes", () => {
       await expect(readJson(response)).resolves.toEqual({
         acceptedEvents: [
           {
-            producerEventId: "hdevt_23456789abcdefghijkm",
+            eventIndex: 0,
             threadId: thread.id,
             sequence: 1,
           },
           {
-            producerEventId: "hdevt_23456789abcdefghijkn",
+            eventIndex: 1,
             threadId: thread.id,
             sequence: 2,
           },
@@ -132,7 +130,6 @@ describe("internal event and tool-call routes", () => {
         sessionId: session.id,
         events: [
           {
-            producerEventId: "hdevt_23456789abcdefghijkz",
             threadId: thread.id,
             event: {
               type: "turn/completed",
@@ -159,70 +156,6 @@ describe("internal event and tool-call routes", () => {
     });
   });
 
-  it("rejects producer event id reuse with a different payload", async () => {
-    await withTestHarness(async (harness) => {
-      const { session } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: session.hostId,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: session.hostId,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
-      });
-
-      const firstEvent: HostDaemonEventEnvelope = {
-        producerEventId: "hdevt_23456789abcdefghijkp",
-        threadId: thread.id,
-        event: {
-          type: "turn/started",
-          threadId: thread.id,
-          providerThreadId: "provider-1",
-          scope: turnScope("turn-1"),
-        },
-      };
-      const firstResponse = await postEventBatch({
-        harness,
-        sessionId: session.id,
-        events: [firstEvent],
-      });
-      expect(firstResponse.status).toBe(200);
-
-      const conflictResponse = await postEventBatch({
-        harness,
-        sessionId: session.id,
-        events: [
-          {
-            ...firstEvent,
-            event: {
-              type: "turn/started",
-              threadId: thread.id,
-              providerThreadId: "provider-2",
-              scope: turnScope("turn-1"),
-            },
-          },
-        ],
-      });
-
-      expect(conflictResponse.status).toBe(409);
-      await expect(readJson(conflictResponse)).resolves.toEqual({
-        code: "producer_event_payload_mismatch",
-        message: "Producer event id was reused with a different payload",
-      });
-      expect(
-        harness.db
-          .select()
-          .from(events)
-          .where(eq(events.threadId, thread.id))
-          .all(),
-      ).toHaveLength(1);
-    });
-  });
-
   it("transitions active threads back to idle for a started/completed event batch", async () => {
     await withTestHarness(async (harness) => {
       const { session } = seedHostSession(harness.deps);
@@ -244,7 +177,6 @@ describe("internal event and tool-call routes", () => {
         sessionId: session.id,
         events: [
           {
-            producerEventId: "hdevt_23456789abcdefghijkq",
             threadId: thread.id,
             event: {
               type: "turn/started",
@@ -254,7 +186,6 @@ describe("internal event and tool-call routes", () => {
             },
           },
           {
-            producerEventId: "hdevt_23456789abcdefghijkr",
             threadId: thread.id,
             event: {
               type: "turn/completed",
@@ -330,7 +261,6 @@ describe("internal event and tool-call routes", () => {
         sessionId: session.id,
         events: [
           createTestDaemonEventEnvelope({
-            producerEventIdValue: 1_001,
             event: {
               type: "turn/started",
               threadId: thread.id,
@@ -339,7 +269,6 @@ describe("internal event and tool-call routes", () => {
             },
           }),
           createTestDaemonEventEnvelope({
-            producerEventIdValue: 1_002,
             event: {
               type: "turn/completed",
               threadId: thread.id,
@@ -360,7 +289,7 @@ describe("internal event and tool-call routes", () => {
     });
   });
 
-  it("does not reactivate a thread when a started/completed batch is replayed", async () => {
+  it("keeps a thread idle when a started/completed batch is posted again", async () => {
     await withTestHarness(async (harness) => {
       const { session } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
@@ -377,7 +306,6 @@ describe("internal event and tool-call routes", () => {
       });
       const eventBatch: HostDaemonEventEnvelope[] = [
         {
-          producerEventId: "hdevt_23456789abcdefghijkt",
           threadId: thread.id,
           event: {
             type: "turn/started",
@@ -387,7 +315,6 @@ describe("internal event and tool-call routes", () => {
           },
         },
         {
-          producerEventId: "hdevt_23456789abcdefghijkv",
           threadId: thread.id,
           event: {
             type: "turn/completed",
@@ -422,7 +349,7 @@ describe("internal event and tool-call routes", () => {
           .from(events)
           .where(eq(events.threadId, thread.id))
           .all(),
-      ).toHaveLength(2);
+      ).toHaveLength(4);
     });
   });
 

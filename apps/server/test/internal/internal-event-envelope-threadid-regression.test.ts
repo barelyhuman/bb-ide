@@ -52,7 +52,6 @@ describe("internal event envelope threadId regression", () => {
           sessionId: hostA.session.id,
           events: [
             createTestDaemonEventEnvelope({
-              producerEventIdValue: 1,
               threadId: threadA.id,
               event: {
                 type: "thread/name/updated",

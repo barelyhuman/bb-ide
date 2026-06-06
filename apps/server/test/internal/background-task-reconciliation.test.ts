@@ -1,4 +1,4 @@
-import { closeSession, listEvents } from "@bb/db";
+import { closeSession, getThread, listEvents } from "@bb/db";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { threadScope, turnScope } from "@bb/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -7,7 +7,10 @@ import {
   handleDaemonSocketClosed,
   handleExpiredHostSessionLeases,
 } from "../../src/internal/session-owner-side-effects.js";
-import { DAEMON_DISCONNECT_GRACE_MS } from "../../src/constants.js";
+import {
+  DAEMON_ACTIVE_WORK_DISCONNECT_GRACE_MS,
+  DAEMON_DISCONNECT_GRACE_MS,
+} from "../../src/constants.js";
 import { internalAuthHeaders } from "../helpers/commands.js";
 import {
   seedEnvironment,
@@ -16,6 +19,7 @@ import {
   seedStoredEvent,
   seedThread,
   seedThreadFixture,
+  seedTurnStarted,
 } from "../helpers/seed.js";
 import { withTestHarness, type TestAppHarness } from "../helpers/test-app.js";
 
@@ -92,6 +96,18 @@ function seedOpenBackgroundTaskThread(
     }),
   });
   return { ...fixture, itemId };
+}
+
+function seedActiveTurnThread(harness: TestAppHarness) {
+  const fixture = seedThreadFixture(harness, {
+    thread: { status: "active" },
+  });
+  seedTurnStarted(harness.deps, {
+    environmentId: fixture.environment.id,
+    threadId: fixture.thread.id,
+    turnId: "turn-live-1",
+  });
+  return fixture;
 }
 
 function listSettledBackgroundTaskItems(
@@ -384,6 +400,121 @@ describe("background-task lifecycle reconciliation triggers", () => {
       vi.advanceTimersByTime(DAEMON_DISCONNECT_GRACE_MS + 1);
       expect(listSettledBackgroundTaskItems(harness, thread.id)).toEqual([
         { status: "interrupted", taskStatus: "stopped" },
+      ]);
+    });
+  });
+});
+
+describe("active thread disconnect reconciliation triggers", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("does not interrupt active turns when the same daemon instance reconnects with the thread active", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session, thread } = seedActiveTurnThread(harness);
+
+      handleDaemonSocketClosed(harness.deps, { sessionId: session.id });
+
+      const response = await harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness, {
+          hostId: host.id,
+          hostType: host.type,
+        }),
+        body: JSON.stringify({
+          hostId: host.id,
+          instanceId: "instance-1",
+          hostName: host.name,
+          hostType: host.type,
+          dataDir: "/tmp/host-daemon-active-same-instance",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [{ threadId: thread.id }],
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      expect(getThread(harness.deps.db, thread.id)?.status).toBe("active");
+      expect(
+        listEvents(harness.deps.db, { threadId: thread.id })
+          .filter((row) => row.type !== "turn/started")
+          .map((row) => row.type),
+      ).toEqual([]);
+    });
+  });
+
+  it("interrupts active turns when a different daemon instance registers", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session, thread } = seedActiveTurnThread(harness);
+
+      handleDaemonSocketClosed(harness.deps, { sessionId: session.id });
+
+      const response = await harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness, {
+          hostId: host.id,
+          hostType: host.type,
+        }),
+        body: JSON.stringify({
+          hostId: host.id,
+          instanceId: "instance-restarted",
+          hostName: host.name,
+          hostType: host.type,
+          dataDir: "/tmp/host-daemon-active-restarted-instance",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      expect(getThread(harness.deps.db, thread.id)?.status).toBe("error");
+      const rows = listEvents(harness.deps.db, { threadId: thread.id }).filter(
+        (row) => row.type !== "turn/started",
+      );
+      expect(rows.map((row) => row.type)).toEqual([
+        "turn/completed",
+        "system/error",
+        "system/thread/interrupted",
+      ]);
+      expect(JSON.parse(rows[0]!.data)).toMatchObject({
+        status: "interrupted",
+      });
+      expect(JSON.parse(rows[1]!.data)).toMatchObject({
+        code: "thread_command_failed",
+      });
+      expect(JSON.parse(rows[2]!.data)).toEqual({
+        reason: "host-daemon-restarted",
+      });
+    });
+  });
+
+  it("interrupts active turns after the live event window elapses without a reconnect", async () => {
+    await withTestHarness(async (harness) => {
+      const { session, thread } = seedActiveTurnThread(harness);
+
+      vi.useFakeTimers();
+      handleDaemonSocketClosed(harness.deps, { sessionId: session.id });
+
+      await vi.advanceTimersByTimeAsync(DAEMON_DISCONNECT_GRACE_MS + 1);
+      expect(getThread(harness.deps.db, thread.id)?.status).toBe("active");
+      expect(
+        listEvents(harness.deps.db, { threadId: thread.id })
+          .filter((row) => row.type !== "turn/started")
+          .map((row) => row.type),
+      ).toEqual([]);
+
+      await vi.advanceTimersByTimeAsync(
+        DAEMON_ACTIVE_WORK_DISCONNECT_GRACE_MS - DAEMON_DISCONNECT_GRACE_MS,
+      );
+      expect(getThread(harness.deps.db, thread.id)?.status).toBe("error");
+      expect(
+        listEvents(harness.deps.db, { threadId: thread.id })
+          .filter((row) => row.type !== "turn/started")
+          .map((row) => row.type),
+      ).toEqual([
+        "turn/completed",
+        "system/error",
+        "system/thread/interrupted",
       ]);
     });
   });

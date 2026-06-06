@@ -95,6 +95,10 @@ export class NotificationHub implements DbNotifier {
     string,
     ReturnType<typeof setTimeout>
   >();
+  private readonly pendingDaemonActiveWorkDisconnects = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
   private readonly terminalClientSocketsById = new Map<
     string,
     Set<HubSocket>
@@ -274,7 +278,7 @@ export class NotificationHub implements DbNotifier {
     delayMs: number,
     callback: () => void,
   ): void {
-    this.cancelPendingDaemonDisconnect(sessionId);
+    this.cancelPendingDaemonDisconnectGrace(sessionId);
     const timeout = setTimeout(() => {
       this.pendingDaemonDisconnects.delete(sessionId);
       callback();
@@ -282,13 +286,40 @@ export class NotificationHub implements DbNotifier {
     this.pendingDaemonDisconnects.set(sessionId, timeout);
   }
 
-  cancelPendingDaemonDisconnect(sessionId: string): void {
+  scheduleDaemonActiveWorkDisconnect(
+    sessionId: string,
+    delayMs: number,
+    callback: () => void,
+  ): void {
+    this.cancelPendingDaemonActiveWorkDisconnect(sessionId);
+    const timeout = setTimeout(() => {
+      this.pendingDaemonActiveWorkDisconnects.delete(sessionId);
+      callback();
+    }, delayMs);
+    this.pendingDaemonActiveWorkDisconnects.set(sessionId, timeout);
+  }
+
+  private cancelPendingDaemonDisconnectGrace(sessionId: string): void {
     const timeout = this.pendingDaemonDisconnects.get(sessionId);
     if (!timeout) {
       return;
     }
     clearTimeout(timeout);
     this.pendingDaemonDisconnects.delete(sessionId);
+  }
+
+  private cancelPendingDaemonActiveWorkDisconnect(sessionId: string): void {
+    const timeout = this.pendingDaemonActiveWorkDisconnects.get(sessionId);
+    if (!timeout) {
+      return;
+    }
+    clearTimeout(timeout);
+    this.pendingDaemonActiveWorkDisconnects.delete(sessionId);
+  }
+
+  cancelPendingDaemonDisconnect(sessionId: string): void {
+    this.cancelPendingDaemonDisconnectGrace(sessionId);
+    this.cancelPendingDaemonActiveWorkDisconnect(sessionId);
   }
 
   async waitForThreadEvent(

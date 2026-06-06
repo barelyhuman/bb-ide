@@ -4,24 +4,16 @@ import {
   encodeClientTurnRequestIdAlphabetIndexes,
   encodeClientTurnRequestIdNumber,
   formatClientTurnRequestIdSuffix,
-  hostDaemonProducerEventIdSchema,
 } from "../src/index.js";
 
 describe("protocol id schemas", () => {
-  it("accepts prefixed daemon event and client request ids", () => {
-    expect(
-      hostDaemonProducerEventIdSchema.safeParse("hdevt_23456789abcdefghijkm")
-        .success,
-    ).toBe(true);
+  it("accepts prefixed client request ids", () => {
     expect(clientTurnRequestIdSchema.safeParse("creq_23456789ab").success).toBe(
       true,
     );
   });
 
   it("rejects unprefixed or short ids", () => {
-    expect(
-      hostDaemonProducerEventIdSchema.safeParse("23456789abcdefghijkm").success,
-    ).toBe(false);
     expect(clientTurnRequestIdSchema.safeParse("creq_23456789").success).toBe(
       false,
     );

@@ -4,7 +4,7 @@ import {
   type AgentRuntimeOptions,
 } from "@bb/agent-runtime";
 import type { AvailableModel, ProviderInfo } from "@bb/domain";
-import type { BufferedEventInput } from "./event-buffer.js";
+import type { EventSinkInput } from "./event-sink.js";
 import type {
   HostDaemonCommand,
   HostDaemonInjectedSkillSource,
@@ -29,7 +29,7 @@ export type CommandOf<TType extends DispatchCommand["type"]> = Extract<
 >;
 
 export interface EventSink {
-  emit: (event: BufferedEventInput) => void;
+  emit: (event: EventSinkInput) => void;
   flush: () => Promise<void>;
 }
 
@@ -233,4 +233,3 @@ export async function requireWorkspaceEnvironment(
     workspaceProvisionType: args.workspaceContext.workspaceProvisionType,
   });
 }
-

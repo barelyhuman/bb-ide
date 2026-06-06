@@ -6,7 +6,7 @@ import {
 } from "@bb/host-workspace";
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import { dispatchCommand } from "../../src/command-dispatch.js";
-import type { BufferedEventInput } from "../../src/event-buffer.js";
+import type { EventSinkInput } from "../../src/event-sink.js";
 import {
   cleanupTempDirs,
   createFakeRuntime,
@@ -325,7 +325,7 @@ describe("environment command dispatch", () => {
   it("streams live events and flushes when initiator is provided", async () => {
     const harness = createHarness({ workspacePath: "/tmp/live-stream" });
     const sourcePath = await makeTempDir("bb-dispatch-stream-");
-    const emittedEvents: BufferedEventInput[] = [];
+    const emittedEvents: EventSinkInput[] = [];
     let flushCount = 0;
 
     const result = await dispatchCommand(
@@ -371,7 +371,7 @@ describe("environment command dispatch", () => {
   });
 
   it("flushes live events before surfacing provisioning failures", async () => {
-    const emittedEvents: BufferedEventInput[] = [];
+    const emittedEvents: EventSinkInput[] = [];
     let flushCount = 0;
     const manager = new RuntimeManager({
       provisionWorkspace: async (options) => {

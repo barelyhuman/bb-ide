@@ -484,7 +484,6 @@ describe("thread event pruning", () => {
           sessionId: session.id,
           events: [
             createTestDaemonEventEnvelope({
-              producerEventIdValue: 1,
               event: {
                 type: "thread/tokenUsage/updated",
                 threadId: thread.id,

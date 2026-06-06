@@ -177,7 +177,7 @@ describe("createServerClient", () => {
         JSON.stringify({
           acceptedEvents: [
             {
-              producerEventId: "hdevt_23456789abcdefghijkm",
+              eventIndex: 0,
               sequence: 6,
               threadId: "thr_123",
             },
@@ -203,7 +203,6 @@ describe("createServerClient", () => {
     await expect(
       client.postEvents([
         {
-          producerEventId: "hdevt_23456789abcdefghijkm",
           threadId: "thr_123",
           event: {
             type: "turn/started",
@@ -216,7 +215,7 @@ describe("createServerClient", () => {
     ).resolves.toEqual({
       acceptedEvents: [
         {
-          producerEventId: "hdevt_23456789abcdefghijkm",
+          eventIndex: 0,
           sequence: 6,
           threadId: "thr_123",
         },

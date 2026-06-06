@@ -55,7 +55,6 @@ const MIGRATABLE_LEGACY_ENTRY_NAMES = new Set([
   "bb.db",
   "bb.db-shm",
   "bb.db-wal",
-  "event-spool.sqlite",
   "host-id",
   "logs",
   "replays",
@@ -88,10 +87,7 @@ async function isDirectoryEmpty(pathToCheck: string): Promise<boolean> {
 function isMigratableLegacyEntryName(entryName: string): boolean {
   return (
     MIGRATABLE_LEGACY_ENTRY_NAMES.has(entryName) ||
-    /^bb\.db\./u.test(entryName) ||
-    /^event-spool\..*\.sqlite$/u.test(entryName) ||
-    /^event-spool\..*\.sqlite-(?:shm|wal)$/u.test(entryName) ||
-    /^event-spool\.sqlite-(?:shm|wal)$/u.test(entryName)
+    /^bb\.db\./u.test(entryName)
   );
 }
 

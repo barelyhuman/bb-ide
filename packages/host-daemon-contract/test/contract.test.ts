@@ -32,7 +32,6 @@ import {
   hostDaemonTerminalOutputChunkSchema,
 } from "../src/index.js";
 
-const PRODUCER_EVENT_ID = "hdevt_23456789abcdefghijkm";
 const CLIENT_REQUEST_ID = "creq_23456789ab";
 
 type OnlineRpcResponseResultFixtures = Record<
@@ -1978,7 +1977,6 @@ describe("host-daemon session schemas", () => {
         sessionId: "session_123",
         events: [
           {
-            producerEventId: PRODUCER_EVENT_ID,
             threadId: "thr_123",
             event: {
               type: "system/error",
@@ -1993,7 +1991,6 @@ describe("host-daemon session schemas", () => {
       sessionId: "session_123",
       events: [
         {
-          producerEventId: PRODUCER_EVENT_ID,
           threadId: "thr_123",
         },
       ],
@@ -2003,14 +2000,14 @@ describe("host-daemon session schemas", () => {
       hostDaemonEventBatchResponseSchema.parse({
         acceptedEvents: [
           {
-            producerEventId: PRODUCER_EVENT_ID,
+            eventIndex: 0,
             threadId: "thr_123",
             sequence: 42,
           },
         ],
         rejectedEvents: [
           {
-            producerEventId: "hdevt_23456789abcdefghijkn",
+            eventIndex: 1,
             reason: "thread_not_owned_by_host",
             threadId: "thr_stale",
           },
@@ -2019,14 +2016,14 @@ describe("host-daemon session schemas", () => {
     ).toEqual({
       acceptedEvents: [
         {
-          producerEventId: PRODUCER_EVENT_ID,
+          eventIndex: 0,
           threadId: "thr_123",
           sequence: 42,
         },
       ],
       rejectedEvents: [
         {
-          producerEventId: "hdevt_23456789abcdefghijkn",
+          eventIndex: 1,
           reason: "thread_not_owned_by_host",
           threadId: "thr_stale",
         },
@@ -2044,7 +2041,7 @@ describe("host-daemon session schemas", () => {
         acceptedEvents: [],
         rejectedEvents: [
           {
-            producerEventId: "hdevt_23456789abcdefghijkn",
+            eventIndex: 1,
             reason: "unknown_reason",
             threadId: "thr_stale",
           },
@@ -2057,7 +2054,6 @@ describe("host-daemon session schemas", () => {
         sessionId: "session_123",
         events: [
           {
-            producerEventId: PRODUCER_EVENT_ID,
             threadId: "thr_123",
             sequence: 1,
             event: {
@@ -2075,7 +2071,7 @@ describe("host-daemon session schemas", () => {
       hostDaemonEventBatchResponseSchema.parse({
         acceptedEvents: [
           {
-            producerEventId: PRODUCER_EVENT_ID,
+            eventIndex: 0,
             threadId: "thr_123",
             sequence: 42,
           },

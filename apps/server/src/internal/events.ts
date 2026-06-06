@@ -8,7 +8,6 @@ import {
   listCompletedTurnsByThreadIds,
   listThreadEnvironmentAssignmentsOnHost,
   MissingStoredTurnStartedError,
-  ProducerEventPayloadMismatchError,
   events as storedEvents,
   updateThread,
 } from "@bb/db";
@@ -18,7 +17,6 @@ import type {
   AppendDaemonEventsResult,
 } from "@bb/db";
 import {
-  HOST_DAEMON_PROTOCOL_VERSION,
   hostDaemonEventBatchRequestSchema,
   typedRoutes,
   type HostDaemonEventBatchResponse,
@@ -27,13 +25,11 @@ import {
   type HostDaemonRejectedEvent,
 } from "@bb/host-daemon-contract";
 import {
-  canonicalizeProducerEventPayload,
   requireThreadEventScopeTurnId,
   type ThreadEventType,
   type ThreadEventTurnStatus,
 } from "@bb/domain";
 import type { Hono } from "hono";
-import { createHash } from "node:crypto";
 import { ApiError } from "../errors.js";
 import type {
   AppDeps,
@@ -75,6 +71,7 @@ interface ResolvePostableEventBatchEntriesArgs {
 interface PostableEventBatchEntry {
   envelope: HostDaemonEventEnvelope;
   environmentId: string | null;
+  eventIndex: number;
 }
 
 interface ResolvePostableEventBatchEntriesResult {
@@ -214,26 +211,12 @@ function resolveProviderIdentifiers(event: HostDaemonEventEnvelope["event"]): {
   }
 }
 
-function hashProducerEventPayload(args: ToStoredEventArgs): string {
-  return createHash("sha256")
-    .update(
-      canonicalizeProducerEventPayload({
-        event: args.envelope.event,
-        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
-        threadId: args.envelope.threadId,
-      }),
-    )
-    .digest("hex");
-}
-
 function toStoredEvent(args: ToStoredEventArgs): AppendDaemonEventInput {
   const envelope = args.envelope;
   const { scope, type, threadId, ...data } = envelope.event;
   return {
     threadId: envelope.threadId,
     environmentId: args.environmentId,
-    producerEventId: envelope.producerEventId,
-    producerEventPayloadHash: hashProducerEventPayload(args),
     ...resolveProviderIdentifiers(envelope.event),
     scope,
     type,
@@ -410,7 +393,6 @@ async function applyEventEffects(
         {
           err: error,
           eventType: entry.event.type,
-          producerEventId: entry.producerEventId,
           threadId: entry.threadId,
         },
         "Failed to apply event side effects",
@@ -673,10 +655,10 @@ function resolvePostableEventBatchEntries(
 
   const entries: PostableEventBatchEntry[] = [];
   const rejectedEvents: HostDaemonRejectedEvent[] = [];
-  for (const entry of args.events) {
+  for (const [eventIndex, entry] of args.events.entries()) {
     if (!canonicalEnvironmentIdByThreadId.has(entry.threadId)) {
       rejectedEvents.push({
-        producerEventId: entry.producerEventId,
+        eventIndex,
         reason: "thread_not_owned_by_host",
         threadId: entry.threadId,
       });
@@ -687,6 +669,7 @@ function resolvePostableEventBatchEntries(
     entries.push({
       envelope: entry,
       environmentId: canonicalEnvironmentId,
+      eventIndex,
     });
   }
 
@@ -741,23 +724,6 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
           { behavior: "immediate" },
         );
       } catch (error) {
-        if (error instanceof ProducerEventPayloadMismatchError) {
-          deps.logger.error(
-            {
-              existingHash: error.details.existingHash,
-              hostId: session.hostId,
-              producerEventId: error.details.producerEventId,
-              receivedHash: error.details.receivedHash,
-              sessionId: session.id,
-            },
-            "Producer event id payload mismatch",
-          );
-          throw new ApiError(
-            409,
-            "producer_event_payload_mismatch",
-            "Producer event id was reused with a different payload",
-          );
-        }
         if (error instanceof MissingStoredTurnStartedError) {
           deps.logger.warn(
             {
@@ -794,7 +760,19 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
 
       deferEventFollowUpBatch(deps, followUps);
       return context.json({
-        acceptedEvents: appendResult.acceptedEvents,
+        acceptedEvents: appendResult.acceptedEvents.map(
+          (acceptedEvent, inputIndex) => {
+            const entry = entries[inputIndex];
+            if (entry === undefined) {
+              throw new Error("Missing daemon event entry for accepted event");
+            }
+            return {
+              eventIndex: entry.eventIndex,
+              sequence: acceptedEvent.sequence,
+              threadId: acceptedEvent.threadId,
+            };
+          },
+        ),
         rejectedEvents,
       });
     },

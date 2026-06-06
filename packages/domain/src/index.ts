@@ -236,14 +236,12 @@ export {
   encodeClientTurnRequestIdAlphabetIndexes,
   encodeClientTurnRequestIdNumber,
   formatClientTurnRequestIdSuffix,
-  hostDaemonProducerEventIdSchema,
 } from "./protocol-ids.js";
 export type {
   ClientTurnRequestId,
   EncodeClientTurnRequestIdAlphabetIndexesArgs,
   EncodeClientTurnRequestIdNumberArgs,
   FormatClientTurnRequestIdSuffixArgs,
-  HostDaemonProducerEventId,
 } from "./protocol-ids.js";
 
 export {
@@ -259,15 +257,6 @@ export type {
   TagThreadNameArgs,
   UntagThreadNameArgs,
 } from "./thread-name-tags.js";
-
-export {
-  canonicalizeEventSpoolPayload,
-  canonicalizeProducerEventPayload,
-} from "./producer-event-payload.js";
-export type {
-  CanonicalizeEventSpoolPayloadArgs,
-  CanonicalizeProducerEventPayloadArgs,
-} from "./producer-event-payload.js";
 
 export {
   PERSONAL_PROJECT_ID,

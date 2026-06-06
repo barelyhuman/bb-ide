@@ -2,7 +2,6 @@ import type { Hono } from "hono";
 import { hc } from "hono/client";
 import {
   ENVIRONMENT_CHANGE_KINDS,
-  hostDaemonProducerEventIdSchema,
   hostTypeSchema,
   jsonValueSchema,
   pendingInteractionCreateSchema,
@@ -128,7 +127,6 @@ export type HostDaemonProjectAttachmentContentQuery = z.infer<
 
 export const hostDaemonEventEnvelopeSchema = z
   .object({
-    producerEventId: hostDaemonProducerEventIdSchema,
     threadId: z.string().min(1),
     event: threadEventSchema,
   })
@@ -151,7 +149,7 @@ export const hostDaemonEventRejectionReasonSchema = z.enum([
 
 export const hostDaemonRejectedEventSchema = z
   .object({
-    producerEventId: hostDaemonProducerEventIdSchema,
+    eventIndex: z.number().int().nonnegative(),
     threadId: z.string().min(1),
     reason: hostDaemonEventRejectionReasonSchema,
   })
@@ -165,7 +163,7 @@ export const hostDaemonEventBatchResponseSchema = z
     acceptedEvents: z.array(
       z
         .object({
-          producerEventId: hostDaemonProducerEventIdSchema,
+          eventIndex: z.number().int().nonnegative(),
           threadId: z.string().min(1),
           sequence: z.number().int().nonnegative(),
         })

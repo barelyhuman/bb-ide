@@ -117,6 +117,11 @@ interface ReplaceAppliedMigrationHashArgs {
   hash: string;
 }
 
+interface RunMigrationFileArgs {
+  db: DbConnection;
+  migrationPath: string;
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function requirePublishedMigrationWhen(tag: string): number {
@@ -228,40 +233,28 @@ function replaceAppliedMigrationHash(
     .run(args.hash, args.createdAt);
 }
 
-function runQueuedMessageSortKeyMigration(db: DbConnection): void {
-  const migrationSql = readFileSync(queuedMessageSortKeyMigrationPath, "utf-8");
+function runMigrationFile(args: RunMigrationFileArgs): void {
+  const migrationSql = readFileSync(args.migrationPath, "utf-8");
   const statements = migrationSql
     .split("--> statement-breakpoint")
     .map((statement) => statement.trim())
     .filter((statement) => statement.length > 0);
 
   for (const statement of statements) {
-    db.$client.exec(statement);
+    args.db.$client.exec(statement);
   }
+}
+
+function runQueuedMessageSortKeyMigration(db: DbConnection): void {
+  runMigrationFile({ db, migrationPath: queuedMessageSortKeyMigrationPath });
 }
 
 function runSidebarOrderingMigration(db: DbConnection): void {
-  const migrationSql = readFileSync(sidebarOrderingMigrationPath, "utf-8");
-  const statements = migrationSql
-    .split("--> statement-breakpoint")
-    .map((statement) => statement.trim())
-    .filter((statement) => statement.length > 0);
-
-  for (const statement of statements) {
-    db.$client.exec(statement);
-  }
+  runMigrationFile({ db, migrationPath: sidebarOrderingMigrationPath });
 }
 
 function runThreadPinningMigration(db: DbConnection): void {
-  const migrationSql = readFileSync(threadPinningMigrationPath, "utf-8");
-  const statements = migrationSql
-    .split("--> statement-breakpoint")
-    .map((statement) => statement.trim())
-    .filter((statement) => statement.length > 0);
-
-  for (const statement of statements) {
-    db.$client.exec(statement);
-  }
+  runMigrationFile({ db, migrationPath: threadPinningMigrationPath });
 }
 
 describe("migrate", () => {
@@ -397,6 +390,17 @@ describe("migrate", () => {
         .run();
       db.$client
         .prepare("ALTER TABLE threads DROP COLUMN reasoning_level_override")
+        .run();
+      db.$client
+        .prepare("ALTER TABLE events ADD producer_event_id text")
+        .run();
+      db.$client
+        .prepare("ALTER TABLE events ADD producer_event_payload_hash text")
+        .run();
+      db.$client
+        .prepare(
+          "CREATE UNIQUE INDEX events_producer_event_id_idx ON events (producer_event_id)",
+        )
         .run();
       db.$client.prepare("DROP INDEX projects_deleted_idx").run();
       db.$client.prepare("ALTER TABLE projects DROP COLUMN deleted_at").run();
@@ -835,6 +839,17 @@ describe("migrate", () => {
       db.$client
         .prepare(
           "ALTER TABLE hosts ADD command_cursor integer DEFAULT 0 NOT NULL",
+        )
+        .run();
+      db.$client
+        .prepare("ALTER TABLE events ADD producer_event_id text")
+        .run();
+      db.$client
+        .prepare("ALTER TABLE events ADD producer_event_payload_hash text")
+        .run();
+      db.$client
+        .prepare(
+          "CREATE UNIQUE INDEX events_producer_event_id_idx ON events (producer_event_id)",
         )
         .run();
       db.$client

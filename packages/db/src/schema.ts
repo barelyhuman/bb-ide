@@ -401,8 +401,6 @@ export const events = sqliteTable(
     type: text("type").$type<ThreadEventType>().notNull(),
     itemId: text("item_id"),
     itemKind: text("item_kind").$type<ThreadEventItemType>(),
-    producerEventId: text("producer_event_id"),
-    producerEventPayloadHash: text("producer_event_payload_hash"),
     data: text("data").notNull().default("{}"),
     createdAt: integer("created_at").notNull(),
   },
@@ -411,7 +409,6 @@ export const events = sqliteTable(
       table.threadId,
       table.sequence,
     ),
-    uniqueIndex("events_producer_event_id_idx").on(table.producerEventId),
     index("events_thread_type_item_kind_sequence_idx").on(
       table.threadId,
       table.type,

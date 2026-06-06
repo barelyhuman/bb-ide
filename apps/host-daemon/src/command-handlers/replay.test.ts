@@ -18,7 +18,7 @@ import {
   type ReplayCaptureManifest,
   type ReplayRawProviderEventRecord,
 } from "@bb/replay-capture";
-import type { BufferedEventInput } from "../event-buffer.js";
+import type { EventSinkInput } from "../event-sink.js";
 import type {
   EventSink,
   ReplayTaskRegistry,
@@ -75,7 +75,7 @@ function baseManifest(captureId: string): ReplayCaptureManifest {
   };
 }
 
-function captureEventSink(emitted: BufferedEventInput[]): EventSink {
+function captureEventSink(emitted: EventSinkInput[]): EventSink {
   return {
     emit: (event) => {
       emitted.push(event);
@@ -376,7 +376,7 @@ describe("runReplay", () => {
       ],
     });
 
-    const emitted: BufferedEventInput[] = [];
+    const emitted: EventSinkInput[] = [];
     const command: ReplayRunCommand = {
       type: "development.replay",
       operation: "run",
@@ -446,7 +446,7 @@ describe("runReplay", () => {
       ],
     });
 
-    const emitted: BufferedEventInput[] = [];
+    const emitted: EventSinkInput[] = [];
     const replayTasks: ReplayTaskRegistry = new Map();
     const command: ReplayRunCommand = {
       type: "development.replay",
@@ -499,7 +499,7 @@ describe("runReplay", () => {
       ],
     });
 
-    const emitted: BufferedEventInput[] = [];
+    const emitted: EventSinkInput[] = [];
     const replayTasks: ReplayTaskRegistry = new Map();
     const command: ReplayRunCommand = {
       type: "development.replay",
@@ -572,7 +572,7 @@ describe("runReplay", () => {
       }),
     });
 
-    const emitted: BufferedEventInput[] = [];
+    const emitted: EventSinkInput[] = [];
     const replayTasks: ReplayTaskRegistry = new Map();
     const command: ReplayRunCommand = {
       type: "development.replay",
@@ -664,7 +664,7 @@ describe("runReplay", () => {
       }),
     });
 
-    const emitted: BufferedEventInput[] = [];
+    const emitted: EventSinkInput[] = [];
     const replayTasks: ReplayTaskRegistry = new Map();
     const command: ReplayRunCommand = {
       type: "development.replay",
@@ -753,7 +753,7 @@ describe("runReplay", () => {
       speed: 10,
     };
     const replayTasks: ReplayTaskRegistry = new Map();
-    const emitted: BufferedEventInput[] = [];
+    const emitted: EventSinkInput[] = [];
 
     await expect(
       runReplay(command, {

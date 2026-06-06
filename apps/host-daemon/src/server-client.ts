@@ -26,7 +26,7 @@ import {
 } from "@bb/host-daemon-contract";
 import type { PendingInteractionCreate, ToolCallRequest } from "@bb/domain";
 import type { HostDaemonLogger } from "./logger.js";
-import type { EventPostResult } from "./event-buffer.js";
+import type { EventPostResult } from "./event-sink.js";
 import { runtimeErrorLogFields } from "./error-utils.js";
 import type {
   FetchedProjectAttachment,

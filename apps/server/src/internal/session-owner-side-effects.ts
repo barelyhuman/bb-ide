@@ -8,7 +8,10 @@ import {
   type SweepExpiredLeasesResult,
 } from "@bb/db";
 import type { HostDaemonActiveThread } from "@bb/host-daemon-contract";
-import { DAEMON_DISCONNECT_GRACE_MS } from "../constants.js";
+import {
+  DAEMON_ACTIVE_WORK_DISCONNECT_GRACE_MS,
+  DAEMON_DISCONNECT_GRACE_MS,
+} from "../constants.js";
 import type {
   AppDeps,
   LoggedPendingInteractionWorkSessionDeps,
@@ -55,7 +58,10 @@ export interface HandleDaemonSocketClosedArgs {
 
 interface CompleteDaemonDisconnectGraceArgs {
   hostId: string;
-  sessionId: string;
+}
+
+interface CompleteDaemonActiveWorkDisconnectGraceArgs {
+  hostId: string;
 }
 
 export interface HandleExpiredHostSessionLeasesArgs {
@@ -79,6 +85,8 @@ export async function handleHostSessionOpened(
     args.previousSession &&
     args.previousSession.id !== args.openedSession.id
   ) {
+    deps.hub.cancelPendingDaemonDisconnect(args.previousSession.id);
+
     if (args.previousSession.status === "active") {
       deps.hub.closeDaemonSession(args.previousSession.id, "replaced");
     }
@@ -92,6 +100,10 @@ export async function handleHostSessionOpened(
     });
 
     if (args.previousSession.instanceId !== args.openedSession.instanceId) {
+      interruptActiveThreadsForHost(deps, {
+        hostId: args.hostId,
+        reason: "host-daemon-restarted",
+      });
       // The restarted daemon lost its in-memory background-task state and the
       // CLI processes died with it — settle the persisted open items. This
       // also covers restarts inside the disconnect grace window, where the
@@ -125,14 +137,10 @@ export function handleDaemonSocketClosed(
     return;
   }
 
-  // Close the session immediately so the host status reflects the disconnect
-  // right away. Under the hard-cut live-RPC contract, daemon-owned active work
-  // is unrecoverable once the daemon socket disappears.
+  // Close the session immediately so host availability reflects the disconnect.
+  // Active turns are reconciled only after a same-process reconnect has had the
+  // live event window to drain, or when a different daemon instance registers.
   closeSession(deps.db, deps.hub, args.sessionId, "daemon-disconnect");
-  interruptActiveThreadsForHost(deps, {
-    hostId: session.hostId,
-    reason: "host-daemon-restarted",
-  });
 
   notifyHostThreadRuntimeStatusChanged(deps, session.hostId);
   deps.hub.scheduleDaemonDisconnect(
@@ -141,7 +149,14 @@ export function handleDaemonSocketClosed(
     () =>
       completeDaemonDisconnectGrace(deps, {
         hostId: session.hostId,
-        sessionId: args.sessionId,
+      }),
+  );
+  deps.hub.scheduleDaemonActiveWorkDisconnect(
+    args.sessionId,
+    DAEMON_ACTIVE_WORK_DISCONNECT_GRACE_MS,
+    () =>
+      completeDaemonActiveWorkDisconnectGrace(deps, {
+        hostId: session.hostId,
       }),
   );
 }
@@ -190,6 +205,20 @@ function completeDaemonDisconnectGrace(
   // the settle row (latest state row per item wins).
   settleDanglingBackgroundTasks(deps, { hostId: args.hostId });
   notifyHostThreadRuntimeStatusChanged(deps, args.hostId);
+}
+
+function completeDaemonActiveWorkDisconnectGrace(
+  deps: Pick<AppDeps, "db" | "hub" | "pendingInteractions">,
+  args: CompleteDaemonActiveWorkDisconnectGraceArgs,
+): void {
+  if (getActiveSession(deps.db, args.hostId)) {
+    return;
+  }
+
+  interruptActiveThreadsForHost(deps, {
+    hostId: args.hostId,
+    reason: "host-daemon-restarted",
+  });
 }
 
 function notifyHostThreadRuntimeStatusChanged(

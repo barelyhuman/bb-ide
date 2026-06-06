@@ -255,7 +255,6 @@ export {
   pruneTokenUsageEventsBeforeSequence,
   pruneResolvedItemDeltas,
   pruneThreadEventsBeforeSequence,
-  ProducerEventPayloadMismatchError,
 } from "./events.js";
 export type {
   AcceptedDaemonEvent,
@@ -288,7 +287,6 @@ export type {
   PruneTokenUsageEventsBeforeSequenceArgs,
   PruneResolvedItemDeltasArgs,
   PruneThreadEventsBeforeSequenceArgs,
-  ProducerEventPayloadMismatchDetails,
   StoredEventRow,
   StandardTimelineSegmentAnchorRow,
   ThreadTurnKey,

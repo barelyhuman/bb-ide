@@ -46,11 +46,23 @@ describe.sequential("fake provider active crash recovery integration", () => {
         harness.api,
         thread.id,
       );
-      expect(disconnectedThread.status).toBe("error");
-      expect(disconnectedThread.runtime.displayStatus).toBe("error");
+      if (disconnectedThread.status === "active") {
+        expect(disconnectedThread.runtime.displayStatus).toBe(
+          "host-reconnecting",
+        );
+      } else {
+        expect(disconnectedThread.status).toBe("error");
+        expect(disconnectedThread.runtime.displayStatus).toBe("error");
+      }
 
       await harness.startDaemon();
       await waitForHostConnected(harness.api, RECOVERY_TIMEOUT_MS);
+      await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "error",
+        RECOVERY_TIMEOUT_MS,
+      );
 
       await sendTextMessage(harness.api, thread.id, {
         text: "recovered after crash",

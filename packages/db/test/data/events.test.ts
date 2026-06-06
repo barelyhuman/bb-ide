@@ -39,7 +39,6 @@ import {
   pruneTokenUsageEventsBeforeSequence,
   pruneResolvedItemDeltas,
   pruneThreadEventsBeforeSequence,
-  ProducerEventPayloadMismatchError,
 } from "../../src/data/events.js";
 import { createEnvironment } from "../../src/data/environments.js";
 import { createProject } from "../../src/data/projects.js";
@@ -274,7 +273,7 @@ describe("events", () => {
     expect(JSON.parse(all[0]!.data)).toMatchObject({ message: "first" });
   });
 
-  it("appends daemon events with server-owned sequences and producer identities", () => {
+  it("appends daemon events with server-owned sequences", () => {
     const { db, thread } = setup();
 
     insertEvents(db, noopNotifier, [
@@ -291,16 +290,12 @@ describe("events", () => {
       (tx) =>
         appendDaemonEventsInTransaction(tx, [
           {
-            producerEventId: "hdevt_23456789abcdefghijkm",
-            producerEventPayloadHash: "hash-a",
             threadId: thread.id,
             type: "system/error",
             ...daemonThreadEventFields,
             data: JSON.stringify({ message: "first daemon" }),
           },
           {
-            producerEventId: "hdevt_23456789abcdefghijkn",
-            producerEventPayloadHash: "hash-b",
             threadId: thread.id,
             type: "system/error",
             ...daemonThreadEventFields,
@@ -313,12 +308,10 @@ describe("events", () => {
     expect(result).toEqual({
       acceptedEvents: [
         {
-          producerEventId: "hdevt_23456789abcdefghijkm",
           threadId: thread.id,
           sequence: 6,
         },
         {
-          producerEventId: "hdevt_23456789abcdefghijkn",
           threadId: thread.id,
           sequence: 7,
         },
@@ -326,16 +319,12 @@ describe("events", () => {
       insertedInputIndexes: [0, 1],
     });
     expect(listEvents(db, { threadId: thread.id })).toMatchObject([
-      { sequence: 5, producerEventId: null },
+      { sequence: 5 },
       {
         sequence: 6,
-        producerEventId: "hdevt_23456789abcdefghijkm",
-        producerEventPayloadHash: "hash-a",
       },
       {
         sequence: 7,
-        producerEventId: "hdevt_23456789abcdefghijkn",
-        producerEventPayloadHash: "hash-b",
       },
     ]);
   });
@@ -348,8 +337,6 @@ describe("events", () => {
         (tx) =>
           appendDaemonEventsInTransaction(tx, [
             {
-              producerEventId: "hdevt_23456789abcdefghijkt",
-              producerEventPayloadHash: "hash-missing-start",
               threadId: thread.id,
               type: "turn/completed",
               ...createTurnEventFields({ turnId: "turn_missing" }),
@@ -376,8 +363,6 @@ describe("events", () => {
         (tx) =>
           appendDaemonEventsInTransaction(tx, [
             {
-              producerEventId: "hdevt_23456789abcdefghijkv",
-              producerEventPayloadHash: "hash-before-start",
               threadId: thread.id,
               type: "turn/completed",
               ...createTurnEventFields({ turnId: "turn_late_start" }),
@@ -390,8 +375,6 @@ describe("events", () => {
               }),
             },
             {
-              producerEventId: "hdevt_23456789abcdefghijkw",
-              producerEventPayloadHash: "hash-late-start",
               threadId: thread.id,
               type: "turn/started",
               ...createTurnEventFields({ turnId: "turn_late_start" }),
@@ -416,8 +399,6 @@ describe("events", () => {
       (tx) =>
         appendDaemonEventsInTransaction(tx, [
           {
-            producerEventId: "hdevt_23456789abcdefghijkx",
-            producerEventPayloadHash: "hash-start",
             threadId: thread.id,
             type: "turn/started",
             ...createTurnEventFields({ turnId: "turn_ordered" }),
@@ -429,8 +410,6 @@ describe("events", () => {
             }),
           },
           {
-            producerEventId: "hdevt_23456789abcdefghijky",
-            producerEventPayloadHash: "hash-completed",
             threadId: thread.id,
             type: "turn/completed",
             ...createTurnEventFields({ turnId: "turn_ordered" }),
@@ -448,8 +427,8 @@ describe("events", () => {
 
     expect(result).toMatchObject({
       acceptedEvents: [
-        { producerEventId: "hdevt_23456789abcdefghijkx", sequence: 1 },
-        { producerEventId: "hdevt_23456789abcdefghijky", sequence: 2 },
+        { threadId: thread.id, sequence: 1 },
+        { threadId: thread.id, sequence: 2 },
       ],
       insertedInputIndexes: [0, 1],
     });
@@ -463,8 +442,6 @@ describe("events", () => {
       (tx) =>
         appendDaemonEventsInTransaction(tx, [
           {
-            producerEventId: "hdevt_23456789abcdefghijkz",
-            producerEventPayloadHash: "hash-prior-start",
             threadId: thread.id,
             type: "turn/started",
             ...createTurnEventFields({ turnId: "turn_prior" }),
@@ -483,8 +460,6 @@ describe("events", () => {
       (tx) =>
         appendDaemonEventsInTransaction(tx, [
           {
-            producerEventId: "hdevt_23456789abcdefghijk2",
-            producerEventPayloadHash: "hash-prior-completed",
             threadId: thread.id,
             type: "turn/completed",
             ...createTurnEventFields({ turnId: "turn_prior" }),
@@ -501,179 +476,10 @@ describe("events", () => {
     );
 
     expect(result).toMatchObject({
-      acceptedEvents: [
-        { producerEventId: "hdevt_23456789abcdefghijk2", sequence: 2 },
-      ],
+      acceptedEvents: [{ threadId: thread.id, sequence: 2 }],
       insertedInputIndexes: [0],
     });
     expect(listEvents(db, { threadId: thread.id })).toHaveLength(2);
-  });
-
-  it("accepts daemon turn-scoped retries idempotently by producerEventId and payload hash", () => {
-    const { db, thread } = setup();
-
-    db.transaction(
-      (tx) =>
-        appendDaemonEventsInTransaction(tx, [
-          {
-            producerEventId: "hdevt_23456789abcdefghijk3",
-            producerEventPayloadHash: "hash-retry-start",
-            threadId: thread.id,
-            type: "turn/started",
-            ...createTurnEventFields({ turnId: "turn_retry" }),
-            environmentId: null,
-            providerThreadId: "provider_thr_retry",
-            data: JSON.stringify({
-              providerThreadId: "provider_thr_retry",
-              turnId: "turn_retry",
-            }),
-          },
-          {
-            producerEventId: "hdevt_23456789abcdefghijk4",
-            producerEventPayloadHash: "hash-retry-completed",
-            threadId: thread.id,
-            type: "turn/completed",
-            ...createTurnEventFields({ turnId: "turn_retry" }),
-            environmentId: null,
-            providerThreadId: "provider_thr_retry",
-            data: JSON.stringify({
-              providerThreadId: "provider_thr_retry",
-              status: "completed",
-              turnId: "turn_retry",
-            }),
-          },
-        ]),
-      { behavior: "immediate" },
-    );
-
-    const retry = db.transaction(
-      (tx) =>
-        appendDaemonEventsInTransaction(tx, [
-          {
-            producerEventId: "hdevt_23456789abcdefghijk4",
-            producerEventPayloadHash: "hash-retry-completed",
-            threadId: thread.id,
-            type: "turn/completed",
-            ...createTurnEventFields({ turnId: "turn_retry" }),
-            environmentId: null,
-            providerThreadId: "provider_thr_retry",
-            data: JSON.stringify({
-              providerThreadId: "provider_thr_retry",
-              status: "completed",
-              turnId: "turn_retry",
-            }),
-          },
-        ]),
-      { behavior: "immediate" },
-    );
-
-    expect(retry).toEqual({
-      acceptedEvents: [
-        {
-          producerEventId: "hdevt_23456789abcdefghijk4",
-          threadId: thread.id,
-          sequence: 2,
-        },
-      ],
-      insertedInputIndexes: [],
-    });
-    expect(listEvents(db, { threadId: thread.id })).toHaveLength(2);
-  });
-
-  it("accepts daemon retries idempotently by producerEventId and payload hash", () => {
-    const { db, thread } = setup();
-
-    db.transaction(
-      (tx) =>
-        appendDaemonEventsInTransaction(tx, [
-          {
-            producerEventId: "hdevt_23456789abcdefghijkm",
-            producerEventPayloadHash: "hash-a",
-            threadId: thread.id,
-            type: "system/error",
-            ...daemonThreadEventFields,
-            data: JSON.stringify({ message: "first daemon" }),
-          },
-        ]),
-      { behavior: "immediate" },
-    );
-
-    const retry = db.transaction(
-      (tx) =>
-        appendDaemonEventsInTransaction(tx, [
-          {
-            producerEventId: "hdevt_23456789abcdefghijkm",
-            producerEventPayloadHash: "hash-a",
-            threadId: thread.id,
-            type: "system/error",
-            ...daemonThreadEventFields,
-            data: JSON.stringify({ message: "first daemon" }),
-          },
-          {
-            producerEventId: "hdevt_23456789abcdefghijkn",
-            producerEventPayloadHash: "hash-b",
-            threadId: thread.id,
-            type: "system/error",
-            ...daemonThreadEventFields,
-            data: JSON.stringify({ message: "second daemon" }),
-          },
-        ]),
-      { behavior: "immediate" },
-    );
-
-    expect(retry).toEqual({
-      acceptedEvents: [
-        {
-          producerEventId: "hdevt_23456789abcdefghijkm",
-          threadId: thread.id,
-          sequence: 1,
-        },
-        {
-          producerEventId: "hdevt_23456789abcdefghijkn",
-          threadId: thread.id,
-          sequence: 2,
-        },
-      ],
-      insertedInputIndexes: [1],
-    });
-    expect(listEvents(db, { threadId: thread.id })).toHaveLength(2);
-  });
-
-  it("rejects daemon producerEventId retries with a different payload hash", () => {
-    const { db, thread } = setup();
-
-    db.transaction(
-      (tx) =>
-        appendDaemonEventsInTransaction(tx, [
-          {
-            producerEventId: "hdevt_23456789abcdefghijkm",
-            producerEventPayloadHash: "hash-a",
-            threadId: thread.id,
-            type: "system/error",
-            ...daemonThreadEventFields,
-            data: JSON.stringify({ message: "first daemon" }),
-          },
-        ]),
-      { behavior: "immediate" },
-    );
-
-    expect(() =>
-      db.transaction(
-        (tx) =>
-          appendDaemonEventsInTransaction(tx, [
-            {
-              producerEventId: "hdevt_23456789abcdefghijkm",
-              producerEventPayloadHash: "hash-b",
-              threadId: thread.id,
-              type: "system/error",
-              ...daemonThreadEventFields,
-              data: JSON.stringify({ message: "second daemon" }),
-            },
-          ]),
-        { behavior: "immediate" },
-      ),
-    ).toThrow(ProducerEventPayloadMismatchError);
-    expect(listEvents(db, { threadId: thread.id })).toHaveLength(1);
   });
 
   it("persists neighboring daemon events when accepted input data is malformed", () => {
@@ -683,8 +489,6 @@ describe("events", () => {
       (tx) =>
         appendDaemonEventsInTransaction(tx, [
           {
-            producerEventId: "hdevt_23456789abcdefghijkm",
-            producerEventPayloadHash: "hash-turn-started",
             threadId: thread.id,
             type: "turn/started",
             ...daemonThreadEventFields,
@@ -693,8 +497,6 @@ describe("events", () => {
             data: JSON.stringify({ providerThreadId: "provider-thread-1" }),
           },
           {
-            producerEventId: "hdevt_3456789abcdefghijkmn",
-            producerEventPayloadHash: "hash-input-accepted",
             threadId: thread.id,
             type: "turn/input/accepted",
             ...daemonThreadEventFields,
@@ -703,8 +505,6 @@ describe("events", () => {
             data: "{malformed-json",
           },
           {
-            producerEventId: "hdevt_456789abcdefghijkmnp",
-            producerEventPayloadHash: "hash-system-error",
             threadId: thread.id,
             type: "system/error",
             ...daemonThreadEventFields,

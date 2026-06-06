@@ -5,7 +5,7 @@ import {
   hostDaemonEventBatchResponseSchema,
   type HostDaemonEventEnvelope,
 } from "@bb/host-daemon-contract";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { internalAuthHeaders } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import {
@@ -68,7 +68,7 @@ function setupEventRoute(args: SeedEventRouteArgs = {}) {
 }
 
 describe("internal event append ownership", () => {
-  it("assigns server-owned sequences and returns accepted producer events", async () => {
+  it("assigns server-owned sequences and returns accepted event indexes", async () => {
     const { environment, harness, session, thread } = await setupEventRoute();
     try {
       seedEvent(harness.deps, {
@@ -85,7 +85,6 @@ describe("internal event append ownership", () => {
         sessionId: session.id,
         events: [
           {
-            producerEventId: "hdevt_23456789abcdefghijkm",
             threadId: thread.id,
             event: {
               type: "system/error",
@@ -95,7 +94,6 @@ describe("internal event append ownership", () => {
             },
           },
           {
-            producerEventId: "hdevt_23456789abcdefghijkn",
             threadId: thread.id,
             event: {
               type: "system/error",
@@ -111,12 +109,12 @@ describe("internal event append ownership", () => {
       await expect(readJson(response)).resolves.toEqual({
         acceptedEvents: [
           {
-            producerEventId: "hdevt_23456789abcdefghijkm",
+            eventIndex: 0,
             threadId: thread.id,
             sequence: 4,
           },
           {
-            producerEventId: "hdevt_23456789abcdefghijkn",
+            eventIndex: 1,
             threadId: thread.id,
             sequence: 5,
           },
@@ -130,16 +128,12 @@ describe("internal event append ownership", () => {
           .where(eq(events.threadId, thread.id))
           .all(),
       ).toMatchObject([
-        { sequence: 3, producerEventId: null },
+        { sequence: 3 },
         {
           sequence: 4,
-          producerEventId: "hdevt_23456789abcdefghijkm",
-          producerEventPayloadHash: expect.any(String),
         },
         {
           sequence: 5,
-          producerEventId: "hdevt_23456789abcdefghijkn",
-          producerEventPayloadHash: expect.any(String),
         },
       ]);
     } finally {
@@ -156,7 +150,6 @@ describe("internal event append ownership", () => {
           sessionId: session.id,
           events: [
             {
-              producerEventId: "hdevt_23456789abcdefghijkp",
               threadId: thread.id,
               event: {
                 type: "system/error",
@@ -172,7 +165,6 @@ describe("internal event append ownership", () => {
           sessionId: session.id,
           events: [
             {
-              producerEventId: "hdevt_23456789abcdefghijkq",
               threadId: thread.id,
               event: {
                 type: "system/error",
@@ -201,7 +193,6 @@ describe("internal event append ownership", () => {
 
       const storedRows = harness.db
         .select({
-          producerEventId: events.producerEventId,
           sequence: events.sequence,
         })
         .from(events)
@@ -214,219 +205,7 @@ describe("internal event append ownership", () => {
           .map((row) => row.sequence)
           .sort((left, right) => left - right),
       ).toEqual([1, 2]);
-      expect(
-        storedRows
-          .map((row) => row.producerEventId)
-          .sort((left, right) => String(left).localeCompare(String(right))),
-      ).toEqual(["hdevt_23456789abcdefghijkp", "hdevt_23456789abcdefghijkq"]);
     } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("returns existing sequences for identical producer retries and appends new events in order", async () => {
-    const { harness, session, thread } = await setupEventRoute();
-    try {
-      const firstEvent: HostDaemonEventEnvelope = {
-        producerEventId: "hdevt_23456789abcdefghijkm",
-        threadId: thread.id,
-        event: {
-          type: "system/error",
-          threadId: thread.id,
-          scope: threadScope(),
-          message: "first daemon",
-        },
-      };
-      const firstResponse = await postEventBatch({
-        harness,
-        sessionId: session.id,
-        events: [firstEvent],
-      });
-      expect(firstResponse.status).toBe(200);
-
-      const retryResponse = await postEventBatch({
-        harness,
-        sessionId: session.id,
-        events: [
-          firstEvent,
-          {
-            producerEventId: "hdevt_23456789abcdefghijkn",
-            threadId: thread.id,
-            event: {
-              type: "system/error",
-              threadId: thread.id,
-              scope: threadScope(),
-              message: "second daemon",
-            },
-          },
-        ],
-      });
-
-      expect(retryResponse.status).toBe(200);
-      await expect(readJson(retryResponse)).resolves.toEqual({
-        acceptedEvents: [
-          {
-            producerEventId: "hdevt_23456789abcdefghijkm",
-            threadId: thread.id,
-            sequence: 1,
-          },
-          {
-            producerEventId: "hdevt_23456789abcdefghijkn",
-            threadId: thread.id,
-            sequence: 2,
-          },
-        ],
-        rejectedEvents: [],
-      });
-      expect(
-        harness.db
-          .select()
-          .from(events)
-          .where(eq(events.threadId, thread.id))
-          .all(),
-      ).toHaveLength(2);
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("treats semantically identical canonical payloads as the same retry", async () => {
-    const { harness, session, thread } = await setupEventRoute();
-    try {
-      const response = await postEventBatch({
-        harness,
-        sessionId: session.id,
-        events: [
-          {
-            producerEventId: "hdevt_23456789abcdefghijkm",
-            threadId: thread.id,
-            event: {
-              type: "provider/unhandled",
-              threadId: thread.id,
-              providerThreadId: "provider-thread",
-              providerId: "codex",
-              rawType: "raw",
-              rawEvent: {
-                jsonrpc: "2.0",
-                method: "test",
-                params: { z: true, a: "value" },
-              },
-              scope: threadScope(),
-            },
-          },
-        ],
-      });
-      expect(response.status).toBe(200);
-
-      const retryResponse = await postEventBatch({
-        harness,
-        sessionId: session.id,
-        events: [
-          {
-            producerEventId: "hdevt_23456789abcdefghijkm",
-            threadId: thread.id,
-            event: {
-              type: "provider/unhandled",
-              threadId: thread.id,
-              providerThreadId: "provider-thread",
-              providerId: "codex",
-              rawType: "raw",
-              rawEvent: {
-                jsonrpc: "2.0",
-                method: "test",
-                params: { a: "value", z: true },
-              },
-              scope: threadScope(),
-            },
-          },
-        ],
-      });
-
-      expect(retryResponse.status).toBe(200);
-      await expect(readJson(retryResponse)).resolves.toEqual({
-        acceptedEvents: [
-          {
-            producerEventId: "hdevt_23456789abcdefghijkm",
-            threadId: thread.id,
-            sequence: 1,
-          },
-        ],
-        rejectedEvents: [],
-      });
-      expect(
-        harness.db
-          .select()
-          .from(events)
-          .where(eq(events.threadId, thread.id))
-          .all(),
-      ).toHaveLength(1);
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("rejects producerEventId retries with mismatched payloads", async () => {
-    const { harness, session, thread } = await setupEventRoute();
-    const loggerError = vi.fn();
-    const originalLoggerError = harness.deps.logger.error;
-    harness.deps.logger.error = loggerError;
-    try {
-      const response = await postEventBatch({
-        harness,
-        sessionId: session.id,
-        events: [
-          {
-            producerEventId: "hdevt_23456789abcdefghijkm",
-            threadId: thread.id,
-            event: {
-              type: "system/error",
-              threadId: thread.id,
-              scope: threadScope(),
-              message: "first daemon",
-            },
-          },
-        ],
-      });
-      expect(response.status).toBe(200);
-
-      const mismatchResponse = await postEventBatch({
-        harness,
-        sessionId: session.id,
-        events: [
-          {
-            producerEventId: "hdevt_23456789abcdefghijkm",
-            threadId: thread.id,
-            event: {
-              type: "system/error",
-              threadId: thread.id,
-              scope: threadScope(),
-              message: "different daemon payload",
-            },
-          },
-        ],
-      });
-
-      expect(mismatchResponse.status).toBe(409);
-      await expect(readJson(mismatchResponse)).resolves.toEqual({
-        code: "producer_event_payload_mismatch",
-        message: "Producer event id was reused with a different payload",
-      });
-      expect(loggerError).toHaveBeenCalledWith(
-        expect.objectContaining({
-          producerEventId: "hdevt_23456789abcdefghijkm",
-          sessionId: session.id,
-        }),
-        "Producer event id payload mismatch",
-      );
-      expect(
-        harness.db
-          .select()
-          .from(events)
-          .where(eq(events.threadId, thread.id))
-          .all(),
-      ).toHaveLength(1);
-    } finally {
-      harness.deps.logger.error = originalLoggerError;
       await harness.cleanup();
     }
   });
@@ -439,7 +218,6 @@ describe("internal event append ownership", () => {
         sessionId: session.id,
         events: [
           {
-            producerEventId: "hdevt_23456789abcdefghijkm",
             threadId: "thr_missing",
             event: {
               type: "system/error",
@@ -449,7 +227,6 @@ describe("internal event append ownership", () => {
             },
           },
           {
-            producerEventId: "hdevt_23456789abcdefghijkn",
             threadId: thread.id,
             event: {
               type: "system/error",
@@ -465,14 +242,14 @@ describe("internal event append ownership", () => {
       await expect(readJson(response)).resolves.toEqual({
         acceptedEvents: [
           {
-            producerEventId: "hdevt_23456789abcdefghijkn",
+            eventIndex: 1,
             threadId: thread.id,
             sequence: 1,
           },
         ],
         rejectedEvents: [
           {
-            producerEventId: "hdevt_23456789abcdefghijkm",
+            eventIndex: 0,
             reason: "thread_not_owned_by_host",
             threadId: "thr_missing",
           },
@@ -505,7 +282,6 @@ describe("internal event append ownership", () => {
         sessionId: session.id,
         events: [
           {
-            producerEventId: "hdevt_23456789abcdefghijkm",
             threadId: thread.id,
             event: {
               type: "thread/name/updated",
@@ -516,7 +292,6 @@ describe("internal event append ownership", () => {
             },
           },
           {
-            producerEventId: "hdevt_23456789abcdefghijkn",
             threadId: "thr_missing",
             event: {
               type: "thread/name/updated",
@@ -527,7 +302,6 @@ describe("internal event append ownership", () => {
             },
           },
           {
-            producerEventId: "hdevt_23456789abcdefghijkp",
             threadId: secondThread.id,
             event: {
               type: "thread/name/updated",
@@ -544,19 +318,19 @@ describe("internal event append ownership", () => {
       await expect(readJson(response)).resolves.toEqual({
         acceptedEvents: [
           {
-            producerEventId: "hdevt_23456789abcdefghijkm",
+            eventIndex: 0,
             threadId: thread.id,
             sequence: 1,
           },
           {
-            producerEventId: "hdevt_23456789abcdefghijkp",
+            eventIndex: 2,
             threadId: secondThread.id,
             sequence: 1,
           },
         ],
         rejectedEvents: [
           {
-            producerEventId: "hdevt_23456789abcdefghijkn",
+            eventIndex: 1,
             reason: "thread_not_owned_by_host",
             threadId: "thr_missing",
           },

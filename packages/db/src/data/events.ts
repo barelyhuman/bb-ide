@@ -16,7 +16,6 @@ import {
 } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type {
-  HostDaemonProducerEventId,
   ClientTurnRequestId,
   StoredThreadEventDataForType,
   SystemThreadInterruptedReason,
@@ -66,8 +65,6 @@ export interface AppendDaemonEventInput {
   environmentId: string | null;
   itemId: string | null;
   itemKind: ThreadEventItemType | null;
-  producerEventId: HostDaemonProducerEventId;
-  producerEventPayloadHash: string;
   providerThreadId: string | null;
   scope: ThreadEventScope;
   threadId: string;
@@ -75,7 +72,6 @@ export interface AppendDaemonEventInput {
 }
 
 export interface AcceptedDaemonEvent {
-  producerEventId: HostDaemonProducerEventId;
   sequence: number;
   threadId: string;
 }
@@ -85,39 +81,11 @@ export interface AppendDaemonEventsResult {
   insertedInputIndexes: number[];
 }
 
-interface StoredProducerEventRow {
-  producerEventId: string;
-  producerEventPayloadHash: string | null;
-  sequence: number;
-  threadId: string;
-}
-
-interface AssertProducerPayloadMatchesArgs {
-  existingHash: string | null;
-  input: AppendDaemonEventInput;
-}
-
-export interface ProducerEventPayloadMismatchDetails {
-  existingHash: string | null;
-  producerEventId: HostDaemonProducerEventId;
-  receivedHash: string;
-}
-
 export interface MissingStoredTurnStartedDetails {
   eventType: ThreadEventType;
   scopeKind: ThreadEventScopeKind;
   threadId: string;
   turnId: string;
-}
-
-export class ProducerEventPayloadMismatchError extends Error {
-  readonly details: ProducerEventPayloadMismatchDetails;
-
-  constructor(details: ProducerEventPayloadMismatchDetails) {
-    super("Producer event id was reused with a different payload");
-    this.name = "ProducerEventPayloadMismatchError";
-    this.details = details;
-  }
 }
 
 export class MissingStoredTurnStartedError extends Error {
@@ -225,53 +193,6 @@ export function insertEvents(
   };
 }
 
-function listStoredProducerEventRows(
-  db: DbQueryConnection,
-  producerEventIds: readonly HostDaemonProducerEventId[],
-): StoredProducerEventRow[] {
-  if (producerEventIds.length === 0) {
-    return [];
-  }
-
-  const rows = db
-    .select({
-      producerEventId: events.producerEventId,
-      producerEventPayloadHash: events.producerEventPayloadHash,
-      sequence: events.sequence,
-      threadId: events.threadId,
-    })
-    .from(events)
-    .where(inArray(events.producerEventId, [...producerEventIds]))
-    .all();
-
-  const storedRows: StoredProducerEventRow[] = [];
-  for (const row of rows) {
-    if (row.producerEventId === null) {
-      continue;
-    }
-    storedRows.push({
-      producerEventId: row.producerEventId,
-      producerEventPayloadHash: row.producerEventPayloadHash,
-      sequence: row.sequence,
-      threadId: row.threadId,
-    });
-  }
-  return storedRows;
-}
-
-function assertProducerPayloadMatches(
-  args: AssertProducerPayloadMatchesArgs,
-): void {
-  if (args.existingHash === args.input.producerEventPayloadHash) {
-    return;
-  }
-  throw new ProducerEventPayloadMismatchError({
-    existingHash: args.existingHash,
-    producerEventId: args.input.producerEventId,
-    receivedHash: args.input.producerEventPayloadHash,
-  });
-}
-
 function buildThreadTurnKey(args: ThreadTurnKey): string {
   return `${args.threadId}\0${args.turnId}`;
 }
@@ -296,14 +217,10 @@ function listUniqueThreadTurnKeys(
 
 function collectDaemonTurnStartLookupKeys(
   eventInputs: readonly AppendDaemonEventInput[],
-  acceptedByProducerEventId: ReadonlyMap<string, AcceptedDaemonEvent>,
 ): ThreadTurnKey[] {
   const keys: ThreadTurnKey[] = [];
 
   for (const input of eventInputs) {
-    if (acceptedByProducerEventId.has(input.producerEventId)) {
-      continue;
-    }
     if (input.type === "turn/started") {
       continue;
     }
@@ -390,17 +307,6 @@ export function appendDaemonEventsInTransaction(
     };
   }
 
-  const existingRowsByProducerEventId = new Map<
-    string,
-    StoredProducerEventRow
-  >();
-  const uniqueProducerEventIds = [
-    ...new Set(eventInputs.map((input) => input.producerEventId)),
-  ];
-  for (const row of listStoredProducerEventRows(db, uniqueProducerEventIds)) {
-    existingRowsByProducerEventId.set(row.producerEventId, row);
-  }
-
   const threadIds = [...new Set(eventInputs.map((input) => input.threadId))];
   const highWaterMarks = getHighWaterMarks(db, threadIds);
   const nextSequencesByThreadId = new Map(
@@ -411,40 +317,13 @@ export function appendDaemonEventsInTransaction(
   );
   const acceptedEvents: AcceptedDaemonEvent[] = [];
   const insertedInputIndexes: number[] = [];
-  const acceptedByProducerEventId = new Map<
-    string,
-    AcceptedDaemonEvent & { producerEventPayloadHash: string | null }
-  >();
-
-  for (const row of existingRowsByProducerEventId.values()) {
-    acceptedByProducerEventId.set(row.producerEventId, {
-      producerEventId: row.producerEventId,
-      producerEventPayloadHash: row.producerEventPayloadHash,
-      sequence: row.sequence,
-      threadId: row.threadId,
-    });
-  }
 
   const startedTurnKeys = listStoredTurnStartedKeySet(
     db,
-    collectDaemonTurnStartLookupKeys(eventInputs, acceptedByProducerEventId),
+    collectDaemonTurnStartLookupKeys(eventInputs),
   );
   const now = Date.now();
   for (const [index, input] of eventInputs.entries()) {
-    const accepted = acceptedByProducerEventId.get(input.producerEventId);
-    if (accepted !== undefined) {
-      assertProducerPayloadMatches({
-        existingHash: accepted.producerEventPayloadHash,
-        input,
-      });
-      acceptedEvents.push({
-        producerEventId: input.producerEventId,
-        sequence: accepted.sequence,
-        threadId: accepted.threadId,
-      });
-      continue;
-    }
-
     assertDaemonTurnStartedForInput(input, startedTurnKeys);
 
     const sequence = nextSequencesByThreadId.get(input.threadId);
@@ -454,7 +333,7 @@ export function appendDaemonEventsInTransaction(
     const turnId = getThreadEventScopeTurnId(input.scope) ?? null;
     db.run(
       sql`INSERT INTO events
-        (id, thread_id, environment_id, scope_kind, turn_id, provider_thread_id, sequence, type, item_id, item_kind, producer_event_id, producer_event_payload_hash, data, created_at)
+        (id, thread_id, environment_id, scope_kind, turn_id, provider_thread_id, sequence, type, item_id, item_kind, data, created_at)
         VALUES (
           ${createEventId()},
           ${input.threadId},
@@ -466,24 +345,17 @@ export function appendDaemonEventsInTransaction(
           ${input.type},
           ${input.itemId},
           ${input.itemKind},
-          ${input.producerEventId},
-          ${input.producerEventPayloadHash},
           ${input.data},
           ${now}
         )`,
     );
 
     const acceptedEvent: AcceptedDaemonEvent = {
-      producerEventId: input.producerEventId,
       sequence,
       threadId: input.threadId,
     };
     acceptedEvents.push(acceptedEvent);
     insertedInputIndexes.push(index);
-    acceptedByProducerEventId.set(input.producerEventId, {
-      ...acceptedEvent,
-      producerEventPayloadHash: input.producerEventPayloadHash,
-    });
     if (input.type === "turn/started") {
       const turnId = getThreadEventScopeTurnId(input.scope);
       if (turnId !== undefined) {

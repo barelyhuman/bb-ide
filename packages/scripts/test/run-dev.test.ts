@@ -150,11 +150,6 @@ describe("run-dev", () => {
       "image",
       "utf8",
     );
-    await fs.writeFile(
-      path.join(legacyDataDir, "event-spool.before.sqlite"),
-      "spool",
-      "utf8",
-    );
     await fs.writeFile(path.join(legacyDataDir, "daemon.lock"), "lock", "utf8");
     await fs.writeFile(
       path.join(legacyDataDir, "dev-supervisors", "server.pid"),
@@ -171,7 +166,6 @@ describe("run-dev", () => {
         "auth-secret",
         "bb.db",
         "bb.db.backup-20260515-160305",
-        "event-spool.before.sqlite",
         "logs",
       ],
     });
@@ -201,51 +195,6 @@ describe("run-dev", () => {
         `Migrated legacy dev data into ${config.dataDir}`,
       ),
     );
-  });
-
-  it("migrates event spool SQLite WAL sidecars", async () => {
-    const homeDir = await makeTempDir("bb-dev-home-");
-    const legacyDataDir = path.join(homeDir, ".bb-dev");
-    const config = resolveDevInstanceConfig({
-      homeDir,
-      repoRoot: path.join(homeDir, "src", "bb"),
-    });
-    await fs.mkdir(legacyDataDir, { recursive: true });
-    await fs.writeFile(
-      path.join(legacyDataDir, "event-spool.sqlite"),
-      "spool",
-      "utf8",
-    );
-    await fs.writeFile(
-      path.join(legacyDataDir, "event-spool.sqlite-wal"),
-      "wal",
-      "utf8",
-    );
-    await fs.writeFile(
-      path.join(legacyDataDir, "event-spool.sqlite-shm"),
-      "shm",
-      "utf8",
-    );
-
-    await expect(migrateLegacyDevData({ config })).resolves.toEqual({
-      migratedEntries: [
-        "event-spool.sqlite",
-        "event-spool.sqlite-shm",
-        "event-spool.sqlite-wal",
-      ],
-    });
-    await expect(
-      fs.readFile(path.join(config.dataDir, "event-spool.sqlite"), "utf8"),
-    ).resolves.toBe("spool");
-    await expect(
-      fs.readFile(path.join(config.dataDir, "event-spool.sqlite-wal"), "utf8"),
-    ).resolves.toBe("wal");
-    await expect(
-      fs.readFile(path.join(config.dataDir, "event-spool.sqlite-shm"), "utf8"),
-    ).resolves.toBe("shm");
-    expect(
-      await pathExists(path.join(legacyDataDir, "event-spool.sqlite")),
-    ).toBe(false);
   });
 
   it("skips migration when the target instance already has data", async () => {

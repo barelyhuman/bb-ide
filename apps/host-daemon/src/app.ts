@@ -1,10 +1,10 @@
 import { CommandRouter } from "./command-router.js";
 import { createDaemon, type HostDaemon } from "./daemon.js";
 import {
-  createEventBuffer,
-  EventBufferDisposedError,
-  type EventBuffer,
-} from "./event-buffer.js";
+  createEventSink,
+  EventSinkDisposedError,
+  type EventSink,
+} from "./event-sink.js";
 import {
   InteractiveRequestRegistry,
   InteractiveRequestRegistryError,
@@ -84,7 +84,7 @@ export interface CreateHostDaemonAppOptions {
 
 export interface HostDaemonApp {
   daemon: HostDaemon;
-  eventBuffer: EventBuffer;
+  eventSink: EventSink;
   localApi: LocalApiServer | null;
   runtimeManager: RuntimeManager;
   terminalManager: TerminalManager;
@@ -126,18 +126,18 @@ export async function createHostDaemonApp(
   let flushPendingInteractiveInterruptsPromise: Promise<void> | null = null;
   let interactiveInterruptRetryTimeout: ReturnType<typeof setTimeout> | null =
     null;
-  let eventBuffer: EventBuffer;
+  let eventSink: EventSink;
 
   async function flushThreadEventsBeforeInteractiveRegistration(): Promise<void> {
     // Interactive registration creates server-owned turn-scoped timeline state,
     // so the server must first observe the provider turn/started for that turn.
-    await eventBuffer.flushRequired();
+    await eventSink.flushRequired();
   }
 
   async function flushThreadEventsBeforeToolCall(): Promise<void> {
     // Dynamic tool calls can append server-owned turn-scoped events, so the
-    // server must first observe any provider turn/started already in the spool.
-    await eventBuffer.flushRequired();
+    // server must first observe any provider turn/started already emitted.
+    await eventSink.flushRequired();
   }
 
   const serverClient = createServerClient({
@@ -250,8 +250,8 @@ export async function createHostDaemonApp(
     void flushPendingInteractiveInterrupts();
   }
 
-  eventBuffer = createEventBuffer({
-    dataDir: options.dataDir,
+  eventSink = createEventSink({
+    isSessionOpen: () => sessionState.value !== null,
     logger: options.logger,
     postEvents: (events) => serverClient.postEvents(events),
   });
@@ -297,19 +297,19 @@ export async function createHostDaemonApp(
     },
     onEvent: ({ environmentId, event }) => {
       try {
-        eventBuffer.push({
+        eventSink.emit({
           threadId: event.threadId,
           event,
         });
       } catch (error) {
-        if (error instanceof EventBufferDisposedError) {
+        if (error instanceof EventSinkDisposedError) {
           options.logger.warn(
             {
               environmentId,
               eventType: event.type,
               threadId: event.threadId,
             },
-            "Ignoring runtime event received after event buffer disposal",
+            "Ignoring runtime event received after event sink disposal",
           );
           return;
         }
@@ -530,8 +530,8 @@ export async function createHostDaemonApp(
     recordReplayCaptureTurnRequest: (input) =>
       replayCapture?.recordTurnRequest(input),
     eventSink: {
-      emit: (event) => eventBuffer.push(event),
-      flush: () => eventBuffer.flush(),
+      emit: (event) => eventSink.emit(event),
+      flush: () => eventSink.flush(),
     },
   });
 
@@ -578,13 +578,13 @@ export async function createHostDaemonApp(
       void appDataChangeReporter.replaceTrackedApplications({
         targets: session.trackedApplicationDataTargets,
       });
-      void eventBuffer.flush().catch((error) => {
+      void eventSink.flush().catch((error) => {
         options.logger.warn(
           {
             sessionId: session.sessionId,
             ...runtimeErrorLogFields(error),
           },
-          "Failed to flush buffered events after session opened",
+          "Failed to flush pending daemon events after session opened",
         );
       });
       void flushPendingInteractiveInterrupts();
@@ -622,17 +622,17 @@ export async function createHostDaemonApp(
     },
     logger: options.logger,
     releaseLock: options.releaseLock,
-    flushEventBuffer: async () => {
+    flushEvents: async () => {
       await abortReplayTasks();
-      await eventBuffer.flush();
+      await eventSink.flush();
     },
     shutdownRuntimes: async () => {
       eventLoopStallMonitor.stop();
       await localApi?.close();
       await terminalManager.shutdownAll();
       await runtimeManager.shutdownAll();
-      await eventBuffer.flush();
-      await eventBuffer.dispose();
+      await eventSink.flush();
+      await eventSink.dispose();
       await shutdownDefaultListModelsRuntimes();
       await replayCapture?.drain();
       await connection.shutdown();
@@ -651,7 +651,7 @@ export async function createHostDaemonApp(
 
   return {
     daemon,
-    eventBuffer,
+    eventSink,
     localApi,
     runtimeManager,
     terminalManager,

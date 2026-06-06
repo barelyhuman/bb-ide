@@ -16,7 +16,7 @@ export interface CreateDaemonOptions {
   identity: HostDaemonIdentity;
   logger: HostDaemonLogger;
   releaseLock: () => Promise<void>;
-  flushEventBuffer?: () => Promise<void>;
+  flushEvents?: () => Promise<void>;
   shutdownRuntimes?: () => Promise<void>;
   onStart?: () => Promise<void>;
   signalSource?: SignalSource;
@@ -66,8 +66,8 @@ export function createDaemon(options: CreateDaemonOptions): HostDaemon {
       let failure: Error | null = null;
       const steps = [
         {
-          name: "flushEventBuffer",
-          run: options.flushEventBuffer,
+          name: "flushEvents",
+          run: options.flushEvents,
         },
         {
           name: "shutdownRuntimes",
