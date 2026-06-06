@@ -8,9 +8,6 @@ import { normalizeCaughtError, runtimeErrorLogFields } from "./error-utils.js";
 import type { HostDaemonLogger } from "./logger.js";
 
 const DEFAULT_DEBOUNCE_MS = 100;
-const DEFAULT_MAX_QUEUED_EVENTS = 256;
-const DEFAULT_MAX_QUEUE_AGE_MS = 30_000;
-const DEFAULT_RECONNECT_RETRY_DELAY_MS = 250;
 
 export interface EventSinkInput {
   event: ThreadEvent;
@@ -27,8 +24,6 @@ export interface CreateEventSinkOptions {
   isSessionOpen: () => boolean;
   logger: Pick<HostDaemonLogger, "error" | "warn">;
   postEvents: (events: HostDaemonEventEnvelope[]) => Promise<EventPostResult>;
-  maxQueueAgeMs?: number;
-  reconnectRetryDelayMs?: number;
 }
 
 export interface EventSink {
@@ -38,22 +33,10 @@ export interface EventSink {
   dispose(): Promise<void>;
 }
 
-interface QueuedEvent {
-  envelope: HostDaemonEventEnvelope;
-  queuedAtMs: number;
-}
-
 interface RejectedEventSummary {
   eventIndex: number;
   reason: HostDaemonRejectedEvent["reason"];
   threadId: string;
-}
-
-export class EventSinkDeliveryError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "EventSinkDeliveryError";
-  }
 }
 
 export class EventSinkDisposedError extends Error {
@@ -108,21 +91,11 @@ function summarizeRejectedEvents(
   }));
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
 export function createEventSink(options: CreateEventSinkOptions): EventSink {
-  const maxQueueAgeMs = options.maxQueueAgeMs ?? DEFAULT_MAX_QUEUE_AGE_MS;
-  const reconnectRetryDelayMs =
-    options.reconnectRetryDelayMs ?? DEFAULT_RECONNECT_RETRY_DELAY_MS;
-  const queue: QueuedEvent[] = [];
+  const queue: HostDaemonEventEnvelope[] = [];
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let flushPromise: Promise<void> | null = null;
   let disposed = false;
-  let deliveryFailure: EventSinkDeliveryError | null = null;
 
   function clearScheduledFlush(): void {
     if (flushTimer === null) {
@@ -132,25 +105,8 @@ export function createEventSink(options: CreateEventSinkOptions): EventSink {
     flushTimer = null;
   }
 
-  function fail(message: string): EventSinkDeliveryError {
-    const error = new EventSinkDeliveryError(message);
-    deliveryFailure = error;
-    queue.length = 0;
-    clearScheduledFlush();
-    return error;
-  }
-
-  function assertUsable(): void {
-    if (disposed) {
-      throw new EventSinkDisposedError();
-    }
-    if (deliveryFailure !== null) {
-      throw deliveryFailure;
-    }
-  }
-
   function scheduleFlush(delayMs: number): void {
-    if (disposed || deliveryFailure !== null || flushPromise !== null) {
+    if (disposed || flushPromise !== null) {
       return;
     }
     if (flushTimer !== null) {
@@ -170,67 +126,23 @@ export function createEventSink(options: CreateEventSinkOptions): EventSink {
     }, delayMs);
   }
 
-  function assertAcceptedBatch(
-    response: EventPostResult,
-    batch: readonly HostDaemonEventEnvelope[],
-  ): void {
-    if (response.rejectedEvents.length > 0) {
-      throw fail("Daemon event batch was rejected by the server");
-    }
-
-    const acceptedEventIndexes = new Set<number>();
-    for (const acceptedEvent of response.acceptedEvents) {
-      const expectedEvent = batch[acceptedEvent.eventIndex];
-      if (!expectedEvent) {
-        throw fail("Server acknowledged an event index outside the batch");
-      }
-      if (acceptedEventIndexes.has(acceptedEvent.eventIndex)) {
-        throw fail("Server acknowledged a daemon event more than once");
-      }
-      if (expectedEvent.threadId !== acceptedEvent.threadId) {
-        throw fail("Server acknowledged a daemon event for the wrong thread");
-      }
-      acceptedEventIndexes.add(acceptedEvent.eventIndex);
-    }
-
-    if (acceptedEventIndexes.size !== batch.length) {
-      throw fail("Server did not acknowledge every daemon event in the batch");
-    }
-  }
-
-  async function waitForSessionAvailability(): Promise<void> {
-    const oldestEvent = queue[0];
-    if (!oldestEvent) {
-      return;
-    }
-    const queuedAgeMs = Date.now() - oldestEvent.queuedAtMs;
-    if (queuedAgeMs >= maxQueueAgeMs) {
-      throw fail(
-        `Daemon event delivery exceeded the ${maxQueueAgeMs}ms live reconnect window`,
-      );
-    }
-    await delay(Math.min(reconnectRetryDelayMs, maxQueueAgeMs - queuedAgeMs));
-  }
-
+  // Posts queued events while the session is open. Events that cannot be
+  // delivered right now — because the session is closed or the post failed —
+  // stay queued and are retried by the next flush (the next emit, or the
+  // reconnect that reopens the session). The queue lives only in memory, so a
+  // daemon crash drops anything still pending; that is an accepted tradeoff.
   async function drainQueue(): Promise<void> {
-    while (queue.length > 0) {
-      assertUsable();
-      if (!options.isSessionOpen()) {
-        await waitForSessionAvailability();
-        continue;
-      }
-
-      const batch = queue.map((entry) => entry.envelope);
+    while (queue.length > 0 && !disposed && options.isSessionOpen()) {
+      const batch = queue.slice();
       let response: EventPostResult;
       try {
         response = await options.postEvents(batch);
       } catch (error) {
-        const caughtError = normalizeCaughtError(error);
         options.logger.error(
-          runtimeErrorLogFields(caughtError),
-          "Failed to post daemon events to the server",
+          runtimeErrorLogFields(normalizeCaughtError(error)),
+          "Failed to post daemon events; will retry on the next flush",
         );
-        throw fail(caughtError.message);
+        return;
       }
 
       if (response.rejectedEvents.length > 0) {
@@ -241,13 +153,11 @@ export function createEventSink(options: CreateEventSinkOptions): EventSink {
           "Server rejected daemon events",
         );
       }
-      assertAcceptedBatch(response, batch);
       queue.splice(0, batch.length);
     }
   }
 
   async function flush(): Promise<void> {
-    assertUsable();
     clearScheduledFlush();
     if (flushPromise !== null) {
       await flushPromise;
@@ -264,18 +174,12 @@ export function createEventSink(options: CreateEventSinkOptions): EventSink {
 
   return {
     emit(input): void {
-      assertUsable();
-      if (queue.length >= DEFAULT_MAX_QUEUED_EVENTS) {
-        throw fail(
-          `Daemon event delivery queue exceeded ${DEFAULT_MAX_QUEUED_EVENTS}`,
-        );
+      if (disposed) {
+        throw new EventSinkDisposedError();
       }
       queue.push({
-        envelope: {
-          threadId: input.threadId,
-          event: input.event,
-        },
-        queuedAtMs: Date.now(),
+        threadId: input.threadId,
+        event: input.event,
       });
       scheduleFlush(
         shouldFlushThreadEventImmediately(input.event) ? 0 : DEFAULT_DEBOUNCE_MS,
