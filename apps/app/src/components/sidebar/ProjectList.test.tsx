@@ -35,6 +35,7 @@ import {
 } from "@/test/http-test-utils";
 import { wsManager } from "@/lib/ws";
 import { useRootComposeReuseEnvironment } from "@/lib/root-compose-selection";
+import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { encodeReuseValue } from "@/components/pickers/environment-picker-value";
 import { CHROME_SECTION_LABEL_CLASS } from "@/components/ui/chromeStyleTokens";
 import {
@@ -196,6 +197,12 @@ interface RootComposeReuseProbeProps {
   onValue: (value: string | null) => void;
 }
 
+interface ThreadPromptDraftSeederProps {
+  projectId: string;
+  threadId: string;
+  text: string;
+}
+
 function buildProjectListHandler(args: ProjectListHandlerArgs) {
   return (request: Request) => {
     const url = new URL(request.url);
@@ -261,6 +268,20 @@ function RootComposeReuseProbe({
   useEffect(() => {
     onValue(value);
   }, [onValue, value]);
+
+  return null;
+}
+
+function ThreadPromptDraftSeeder({
+  projectId,
+  threadId,
+  text,
+}: ThreadPromptDraftSeederProps) {
+  const promptDraft = usePromptDraftStorage({ projectId, threadId });
+
+  useEffect(() => {
+    promptDraft.setTextAndMentions(text, []);
+  }, [promptDraft.setTextAndMentions, text]);
 
   return null;
 }
@@ -503,6 +524,77 @@ describe("ProjectList", () => {
     fireEvent.click(screen.getByRole("button", { name: "Expand Project One" }));
 
     expect(screen.getByText("Project Thread")).toBeTruthy();
+  });
+
+  it("shows a draft indicator for a thread with follow-up prompt input", async () => {
+    const project = makeProjectResponse({
+      id: "project-1",
+      name: "Project One",
+    });
+    const thread = makeThreadListEntry(project.id, 1, {
+      id: "thread-with-draft",
+      title: "Project Thread",
+      titleFallback: "Project Thread",
+    });
+    const personalProject = makeProjectWithThreadsResponse({
+      id: PERSONAL_PROJECT_ID,
+      kind: "personal",
+      name: "Personal",
+      threads: [],
+    });
+    installProjectListFetchRoutes([
+      {
+        pathname: "/api/v1/sidebar-bootstrap",
+        handler: () =>
+          jsonResponse(
+            buildSidebarNavigationResponse({
+              personalProject,
+              projects: [project],
+              threadsByProjectId: new Map([[project.id, [thread]]]),
+            }),
+          ),
+      },
+      {
+        pathname: "/api/v1/projects",
+        handler: () => jsonResponse([project]),
+      },
+      {
+        pathname: "/api/v1/threads",
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            hostDaemonPort: null,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    await renderProjectList(
+      {},
+      {
+        extraUi: (
+          <ThreadPromptDraftSeeder
+            projectId={project.id}
+            threadId={thread.id}
+            text="Continue this review"
+          />
+        ),
+      },
+    );
+
+    const draftLink = await screen.findByRole("link", {
+      name: "Open Project Thread (unsubmitted draft)",
+    });
+    const threadRow = draftLink.closest("div");
+
+    expect(threadRow?.querySelector('[data-icon="Edit"]')).toBeTruthy();
   });
 
   it("lists global apps once in a top-level Apps section, not nested under managers", async () => {

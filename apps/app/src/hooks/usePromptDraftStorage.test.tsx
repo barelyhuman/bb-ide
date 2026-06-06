@@ -3,11 +3,18 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import type { PromptTextMention } from "@bb/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { usePromptDraftStorage } from "./usePromptDraftStorage";
+import {
+  usePromptDraftHasInput,
+  usePromptDraftStorage,
+} from "./usePromptDraftStorage";
 
 const PROJECT_DRAFT_SCOPE = {
   projectId: "proj-1",
   threadId: null,
+};
+const THREAD_DRAFT_SCOPE = {
+  projectId: "proj-1",
+  threadId: "thr-1",
 };
 
 afterEach(() => {
@@ -233,5 +240,24 @@ describe("usePromptDraftStorage", () => {
     });
 
     expect(window.localStorage.getItem(storageKey)).toBeNull();
+  });
+
+  it("reports whether a thread prompt draft has input", () => {
+    const draft = renderHook(() => usePromptDraftStorage(THREAD_DRAFT_SCOPE));
+    const hasInput = renderHook(() => usePromptDraftHasInput(THREAD_DRAFT_SCOPE));
+
+    expect(hasInput.result.current).toBe(false);
+
+    act(() => {
+      draft.result.current.setTextAndMentions("Continue the review", []);
+    });
+
+    expect(hasInput.result.current).toBe(true);
+
+    act(() => {
+      draft.result.current.clear();
+    });
+
+    expect(hasInput.result.current).toBe(false);
   });
 });

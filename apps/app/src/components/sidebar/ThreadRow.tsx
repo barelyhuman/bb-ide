@@ -94,6 +94,7 @@ interface ThreadRowProps {
   projectId: string;
   thread: ThreadListEntry;
   isActive: boolean;
+  hasComposerDraft: boolean;
   onProjectSelect?: () => void;
   options: ThreadRowOptions;
 }
@@ -213,6 +214,16 @@ function ManagerLeadingIcon() {
         aria-hidden="true"
       />
     </span>
+  );
+}
+
+function ThreadDraftIndicator() {
+  return (
+    <Icon
+      name="Edit"
+      className="pointer-events-none size-3.5 shrink-0 text-primary"
+      aria-hidden="true"
+    />
   );
 }
 
@@ -362,6 +373,7 @@ function ThreadRowComponent({
   projectId,
   thread,
   isActive,
+  hasComposerDraft,
   onProjectSelect,
   options,
 }: ThreadRowProps) {
@@ -414,6 +426,12 @@ function ThreadRowComponent({
   const trailingShowUnreadBadge = hasHiddenChildren
     ? showUnreadBadge || childActivity.unread
     : showUnreadBadge;
+  const linkLabel = hasComposerDraft
+    ? `Open ${threadTitle} (unsubmitted draft)`
+    : `Open ${threadTitle}`;
+  const linkTitle = hasComposerDraft
+    ? "Unsubmitted draft"
+    : `Open ${threadTitle}`;
   // Env-grouped children sit under a header that already shows the
   // worktree branch + icon, so suppress the redundant trailing icon.
   const environmentIcon = options.isEnvGrouped
@@ -468,8 +486,8 @@ function ThreadRowComponent({
           setConversationCollapsed(false);
           onProjectSelect?.();
         }}
-        aria-label={`Open ${threadTitle}`}
-        title={`Open ${threadTitle}`}
+        aria-label={linkLabel}
+        title={linkTitle}
         className="absolute inset-0 rounded-md outline-none ring-sidebar-ring focus-visible:ring-2"
       />
       {parentOptions && hasChildren ? (
@@ -486,6 +504,7 @@ function ThreadRowComponent({
       ) : null}
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="min-w-0 truncate">{threadTitle}</span>
+        {hasComposerDraft ? <ThreadDraftIndicator /> : null}
       </span>
       <span
         className={cn(

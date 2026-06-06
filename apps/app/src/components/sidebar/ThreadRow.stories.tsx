@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import type { ThreadListEntry } from "@bb/domain";
 import { makeThreadListEntry } from "../../../.ladle/story-fixtures";
 import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar.js";
@@ -38,6 +38,20 @@ const makeThread = (overrides: Partial<ThreadListEntry> = {}) =>
   makeThreadListEntry({ id: "thr_default", ...overrides });
 
 const noop = () => {};
+
+type StoryThreadRowProps = Omit<
+  ComponentProps<typeof ThreadRow>,
+  "hasComposerDraft"
+> & {
+  hasComposerDraft?: boolean;
+};
+
+function StoryThreadRow({
+  hasComposerDraft = false,
+  ...props
+}: StoryThreadRowProps) {
+  return <ThreadRow {...props} hasComposerDraft={hasComposerDraft} />;
+}
 
 const defaultOption: ThreadRowOptions = {
   kind: "default",
@@ -85,7 +99,7 @@ export function Overview() {
     <StoryCard>
       <StoryRow label="idle" hint="quiet thread, no leading icon">
         <SidebarStage>
-          <ThreadRow
+          <StoryThreadRow
             projectId="proj_demo"
             thread={makeThread()}
             isActive={false}
@@ -98,7 +112,7 @@ export function Overview() {
         hint="selected thread shows the sidebar-border background"
       >
         <SidebarStage>
-          <ThreadRow
+          <StoryThreadRow
             projectId="proj_demo"
             thread={makeThread()}
             isActive
@@ -111,7 +125,7 @@ export function Overview() {
         hint="runtime is active — far-right reserved slot shows the busy spinner"
       >
         <SidebarStage>
-          <ThreadRow
+          <StoryThreadRow
             projectId="proj_demo"
             thread={makeThread({
               status: "active",
@@ -130,7 +144,7 @@ export function Overview() {
         hint="needs attention — far-right reserved slot shows the attention dot"
       >
         <SidebarStage>
-          <ThreadRow
+          <StoryThreadRow
             projectId="proj_demo"
             thread={makeThread({
               status: "active",
@@ -150,7 +164,7 @@ export function Overview() {
         hint="latestAttentionAt > lastReadAt and not busy — far-right reserved slot shows the unread dot"
       >
         <SidebarStage>
-          <ThreadRow
+          <StoryThreadRow
             projectId="proj_demo"
             thread={makeThread({
               lastReadAt: 50,
@@ -162,11 +176,47 @@ export function Overview() {
         </SidebarStage>
       </StoryRow>
       <StoryRow
+        label="draft"
+        hint="unsubmitted follow-up draft — pencil sits beside the title while the trailing slot stays available"
+      >
+        <SidebarStage>
+          <StoryThreadRow
+            projectId="proj_demo"
+            thread={makeThread({
+              title: "Draft follow-up on release checklist",
+              titleFallback: "Draft follow-up on release checklist",
+            })}
+            hasComposerDraft
+            isActive={false}
+            options={defaultOption}
+          />
+        </SidebarStage>
+      </StoryRow>
+      <StoryRow
+        label="draft + unread"
+        hint="draft indicator remains visible next to title; unread dot still owns the status slot"
+      >
+        <SidebarStage>
+          <StoryThreadRow
+            projectId="proj_demo"
+            thread={makeThread({
+              title: "Review API migration notes",
+              titleFallback: "Review API migration notes",
+              lastReadAt: 50,
+              latestAttentionAt: 200,
+            })}
+            hasComposerDraft
+            isActive={false}
+            options={defaultOption}
+          />
+        </SidebarStage>
+      </StoryRow>
+      <StoryRow
         label="long title"
         hint="single-line truncate; title attr carries the full string"
       >
         <SidebarStage>
-          <ThreadRow
+          <StoryThreadRow
             projectId="proj_demo"
             thread={makeThread({
               title:
@@ -179,11 +229,30 @@ export function Overview() {
         </SidebarStage>
       </StoryRow>
       <StoryRow
+        label="long title + draft"
+        hint="title truncates before the draft icon, so the indicator does not get pushed offscreen"
+      >
+        <SidebarStage>
+          <StoryThreadRow
+            projectId="proj_demo"
+            thread={makeThread({
+              title:
+                "Write a careful follow-up about the intermittent sidebar grouping bug after the next deploy",
+              titleFallback:
+                "Write a careful follow-up about the intermittent sidebar grouping bug",
+            })}
+            hasComposerDraft
+            isActive={false}
+            options={defaultOption}
+          />
+        </SidebarStage>
+      </StoryRow>
+      <StoryRow
         label="env: managed worktree"
         hint="trailing icon hint for the workspace display kind"
       >
         <SidebarStage>
-          <ThreadRow
+          <StoryThreadRow
             projectId="proj_demo"
             thread={makeThread({
               environmentWorkspaceDisplayKind: "managed-worktree",
@@ -195,7 +264,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow label="env: unmanaged worktree">
         <SidebarStage>
-          <ThreadRow
+          <StoryThreadRow
             projectId="proj_demo"
             thread={makeThread({
               environmentWorkspaceDisplayKind: "unmanaged-worktree",
@@ -207,7 +276,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow label="env: unmanaged worktree">
         <SidebarStage>
-          <ThreadRow
+          <StoryThreadRow
             projectId="proj_demo"
             thread={makeThread({
               environmentWorkspaceDisplayKind: "unmanaged-worktree",
@@ -222,7 +291,7 @@ export function Overview() {
         hint="leading user icon, no chevron"
       >
         <SidebarStage>
-          <ThreadRow
+          <StoryThreadRow
             projectId="proj_demo"
             thread={managerThread}
             isActive={false}
@@ -235,7 +304,7 @@ export function Overview() {
         hint="manager row above its child — user icon swaps to a rotated chevron on hover, child text aligns with the manager title"
       >
         <SidebarStage>
-          <ThreadRow
+          <StoryThreadRow
             projectId="proj_demo"
             thread={managerThread}
             isActive={false}
@@ -244,7 +313,7 @@ export function Overview() {
               childCount: 4,
             })}
           />
-          <ThreadRow
+          <StoryThreadRow
             projectId="proj_demo"
             thread={childThread}
             isActive={false}
@@ -257,7 +326,7 @@ export function Overview() {
         hint="chevron points right (default) for a collapsed manager with hidden children"
       >
         <SidebarStage>
-          <ThreadRow
+          <StoryThreadRow
             projectId="proj_demo"
             thread={managerThread}
             isActive={false}
@@ -273,7 +342,7 @@ export function Overview() {
         hint="trailing slot shows the busy spinner when a hidden child is working"
       >
         <SidebarStage>
-          <ThreadRow
+          <StoryThreadRow
             projectId="proj_demo"
             thread={managerThread}
             isActive={false}
@@ -290,7 +359,7 @@ export function Overview() {
         hint="trailing slot shows the attention dot when a hidden child is blocked on the user"
       >
         <SidebarStage>
-          <ThreadRow
+          <StoryThreadRow
             projectId="proj_demo"
             thread={managerThread}
             isActive={false}
@@ -307,7 +376,7 @@ export function Overview() {
         hint="attention wins priority: the trailing slot shows the attention dot, not the spinner"
       >
         <SidebarStage>
-          <ThreadRow
+          <StoryThreadRow
             projectId="proj_demo"
             thread={managerThread}
             isActive={false}
@@ -327,7 +396,7 @@ export function Overview() {
         hint="far-right reserved slot shows the busy spinner"
       >
         <SidebarStage>
-          <ThreadRow
+          <StoryThreadRow
             projectId="proj_demo"
             thread={makeThread({
               ...childThread,
@@ -347,7 +416,7 @@ export function Overview() {
         hint="far-right reserved slot shows the attention dot"
       >
         <SidebarStage>
-          <ThreadRow
+          <StoryThreadRow
             projectId="proj_demo"
             thread={makeThread({
               ...childThread,

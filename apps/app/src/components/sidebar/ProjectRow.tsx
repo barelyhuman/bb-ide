@@ -31,6 +31,7 @@ import type { ThreadListEntry } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useCreateThreadInWorktree } from "@/hooks/useCreateThreadInWorktree";
+import { usePromptDraftHasInput } from "@/hooks/usePromptDraftStorage";
 import {
   useArchiveEnvironmentThreads,
   useUpdateEnvironment,
@@ -1047,11 +1048,16 @@ export const ThreadTreeNodeRow = memo(function ThreadTreeNodeRow({
     ],
   );
   const showChildren = !isCollapsed && hasChildren;
+  const hasComposerDraft = usePromptDraftHasInput({
+    projectId,
+    threadId: node.thread.id,
+  });
   const row = (
     <ThreadRow
       projectId={projectId}
       thread={node.thread}
       isActive={selectedThreadId === node.thread.id}
+      hasComposerDraft={hasComposerDraft}
       onProjectSelect={onProjectSelect}
       options={options}
     />

@@ -16,7 +16,7 @@ const PROMPT_DRAFT_STORAGE_PREFIX = "bb.promptbox.contents";
 const PROMPT_DRAFT_STORAGE_VERSION = "3";
 const PROMPT_DRAFT_PERSIST_DEBOUNCE_MS = 250;
 
-interface PromptDraftScope {
+export interface PromptDraftScope {
   projectId?: string | null;
   threadId?: string | null;
 }
@@ -378,5 +378,28 @@ export function usePromptDraftStorage(scope: PromptDraftScope) {
       setTextAndMentions,
       storageKey,
     ],
+  );
+}
+
+export function usePromptDraftHasInput(scope: PromptDraftScope): boolean {
+  const storageKey = useMemo(
+    () =>
+      getPromptDraftStorageKey({
+        projectId: scope.projectId,
+        threadId: scope.threadId,
+      }),
+    [scope.projectId, scope.threadId],
+  );
+
+  return useSyncExternalStore(
+    useCallback(
+      (listener) => subscribePromptDraft(storageKey, listener),
+      [storageKey],
+    ),
+    useCallback(
+      () => !isPromptDraftEmpty(readPromptDraft(storageKey)),
+      [storageKey],
+    ),
+    () => false,
   );
 }
