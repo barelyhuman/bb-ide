@@ -178,6 +178,7 @@ function makePendingSteerTimelineRow(): TimelineUserConversationRow {
     role: "user",
     text: "Please switch to the safer plan",
     attachments: null,
+    mentions: [],
     initiator: "user",
     senderThreadId: null,
     turnRequest: { kind: "steer", status: "pending" },
@@ -1845,7 +1846,7 @@ describe("CLI command output contracts", () => {
       json: {
         origin: "cli",
         projectId: "proj-1",
-        input: [{ type: "text", text: "hello" }],
+        input: [{ type: "text", text: "hello", mentions: [] }],
         environment: {
           type: "host",
           hostId: "host-test-001",
@@ -1888,7 +1889,7 @@ describe("CLI command output contracts", () => {
       json: {
         origin: "cli",
         projectId: PERSONAL_PROJECT_ID,
-        input: [{ type: "text", text: "hello" }],
+        input: [{ type: "text", text: "hello", mentions: [] }],
         environment: {
           type: "host",
           workspace: { type: "personal" },
@@ -1931,7 +1932,7 @@ describe("CLI command output contracts", () => {
       json: {
         origin: "cli",
         projectId: "proj-env",
-        input: [{ type: "text", text: "hello" }],
+        input: [{ type: "text", text: "hello", mentions: [] }],
         environment: {
           type: "host",
           hostId: "host-test-001",
@@ -1996,7 +1997,7 @@ describe("CLI command output contracts", () => {
         reasoningLevel: "high",
         permissionMode: "workspace-write",
         serviceTier: "fast",
-        input: [{ type: "text", text: "hello" }],
+        input: [{ type: "text", text: "hello", mentions: [] }],
         environment: {
           type: "host",
           hostId: "host-test-001",
@@ -2893,7 +2894,7 @@ describe("CLI command output contracts", () => {
         projectId: "proj-1",
         providerId: "codex",
         model: "gpt-5",
-        input: [{ type: "text", text: "hello" }],
+        input: [{ type: "text", text: "hello", mentions: [] }],
         parentThreadId: "thread-parent",
         environment: {
           type: "host",
@@ -3048,7 +3049,7 @@ describe("CLI command output contracts", () => {
         projectId: "proj-1",
         providerId: "codex",
         model: "gpt-5",
-        input: [{ type: "text", text: "hello" }],
+        input: [{ type: "text", text: "hello", mentions: [] }],
         environment: { type: "reuse", environmentId: "env-worktree-001" },
       },
     });
@@ -3103,7 +3104,7 @@ describe("CLI command output contracts", () => {
         projectId: "proj-1",
         providerId: "codex",
         model: "gpt-5",
-        input: [{ type: "text", text: "hello" }],
+        input: [{ type: "text", text: "hello", mentions: [] }],
         environment: {
           type: "host",
           hostId: "host-test-001",
@@ -4584,7 +4585,7 @@ describe("CLI JSON output contracts", () => {
     expect(post).toHaveBeenCalledWith({
       param: { id: "thread-execution-options" },
       json: {
-        input: [{ type: "text", text: "hello" }],
+        input: [{ type: "text", text: "hello", mentions: [] }],
         mode: "auto",
         model: "gpt-5.5",
         serviceTier: "fast",
@@ -4621,7 +4622,7 @@ describe("CLI JSON output contracts", () => {
     expect(post).toHaveBeenCalledWith({
       param: { id: "thread-receiver" },
       json: {
-        input: [{ type: "text", text: "hello from sender" }],
+        input: [{ type: "text", text: "hello from sender", mentions: [] }],
         mode: "auto",
         senderThreadId: "thread-sender",
       },
@@ -4655,7 +4656,7 @@ describe("CLI JSON output contracts", () => {
     expect(post).toHaveBeenCalledWith({
       param: { id: "thread-self" },
       json: {
-        input: [{ type: "text", text: "self note" }],
+        input: [{ type: "text", text: "self note", mentions: [] }],
         mode: "auto",
       },
     });
@@ -5076,6 +5077,7 @@ describe("CLI JSON output contracts", () => {
           role: "user",
           text: "Say hello",
           attachments: null,
+          mentions: [],
           initiator: "user",
           senderThreadId: null,
           turnRequest: { kind: "message", status: "accepted" },

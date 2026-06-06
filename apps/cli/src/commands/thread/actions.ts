@@ -340,7 +340,7 @@ async function postThreadMessage(
   const sdk = createCliBbSdk(args.getUrl());
   const response = await sdk.threads.send({
     threadId: args.threadId,
-    input: [{ type: "text", text: args.message }],
+    input: [{ type: "text", text: args.message, mentions: [] }],
     mode: args.mode,
     ...(args.model ? { model: args.model } : {}),
     ...(args.permissionMode ? { permissionMode: args.permissionMode } : {}),

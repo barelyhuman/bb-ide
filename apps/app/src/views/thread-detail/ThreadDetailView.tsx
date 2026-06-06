@@ -153,7 +153,6 @@ import {
   useToggleThreadSecondaryPanelSelection,
 } from "./threadSecondaryPanelSelection";
 import { useAppRoute } from "@/hooks/useAppRoute";
-import { threadDetailBootstrapResolvedMissingEnvironmentHost } from "./threadDetailBootstrapHostGate";
 import { resolveThreadComposerBootstrapReady } from "./threadDetailComposerBootstrapState";
 
 const EMPTY_MANAGER_THREADS: readonly ThreadListEntry[] = [];

@@ -201,7 +201,7 @@ export function registerSpawnCommand(
             projectId,
             ...(opts.provider ? { providerId: opts.provider } : {}),
             ...(opts.model ? { model: opts.model } : {}),
-            input: [{ type: "text", text: opts.prompt }],
+            input: [{ type: "text", text: opts.prompt, mentions: [] }],
             ...(reasoningLevel ? { reasoningLevel } : {}),
             ...(opts.title ? { title: opts.title } : {}),
             ...(serviceTier ? { serviceTier } : {}),
