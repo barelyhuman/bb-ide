@@ -230,6 +230,8 @@ const OPEN_FILE_ENTRY_ID = "file-search-result-open-file";
 
 const LAUNCHER_TILE_ICON_CLASS_DASHED =
   "flex size-4 shrink-0 items-center justify-center text-muted-foreground group-hover:text-foreground";
+const NEW_TAB_ACTION_MENU_SEPARATOR_CLASS =
+  "mx-2 my-1.5 w-auto bg-border-seam";
 
 // File-type identity comes from the glyph alone so recent rows stay as compact
 // as file-search results without per-type row coloring.
@@ -1036,9 +1038,10 @@ export function NewTabActionMenu({
           <Separator
             // A real (non-decorative) separator marks the boundary between the
             // open actions and the apps group, matching the app's menu divider
-            // convention. `-mx-1` bleeds it to the popout's padded edges.
+            // convention. Keep it inset to the row/content rail on the left,
+            // and use the same subtle seam token as horizontal top-nav dividers.
             decorative={false}
-            className="-mx-1 my-1.5 bg-muted"
+            className={NEW_TAB_ACTION_MENU_SEPARATOR_CLASS}
           />
           <LauncherSectionHeader
             label={FILE_SEARCH_SECTION_LABELS.apps}

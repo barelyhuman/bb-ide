@@ -282,6 +282,9 @@ describe("NewTabActionMenu", () => {
     // Apps get their own divided, titled section after Open browser.
     const divider = screen.getByRole("separator");
     const appsTitle = screen.getByText("Apps");
+    expect(divider.className).toContain("mx-2");
+    expect(divider.className).toContain("w-auto");
+    expect(divider.className).toContain("bg-border-seam");
     const openBrowser = screen.getByRole("button", { name: /Open browser/u });
     const appRow = screen.getByRole("button", { name: /Review Board/u });
     const orderedAfter = (a: Element, b: Element) =>
