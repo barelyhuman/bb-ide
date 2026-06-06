@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -11,6 +12,7 @@ import type { ThreadType } from "@bb/domain";
 import { Icon, type IconName } from "@/components/ui/icon.js";
 import { EmptyStatePanel } from "@/components/ui/empty-state.js";
 import { Input } from "@/components/ui/input.js";
+import { Separator } from "@/components/ui/separator.js";
 import { TruncateStart } from "@/components/ui/truncate-start.js";
 import { ResolvedAppIcon } from "./AppIcon";
 import {
@@ -667,6 +669,7 @@ export function NewTabFileSearch({
   onSelect,
 }: NewTabFileSearchProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const listboxId = useId();
   const [query, setQuery] = useState(initialQuery);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [isRecentExpanded, setIsRecentExpanded] = useState(false);
@@ -832,6 +835,11 @@ export function NewTabFileSearch({
   const activeEntryId = activeEntry
     ? getFileSearchEntryId(activeEntry)
     : undefined;
+  const isSearchDisabled = fileSearchSources.length === 0;
+  // The results listbox renders only when there is a searchable source and at
+  // least one option. Gate the combobox relationship on that so
+  // `aria-controls`/`aria-activedescendant` never point at an absent element.
+  const hasListbox = !isSearchDisabled && navigableEntries.length > 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -845,13 +853,18 @@ export function NewTabFileSearch({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={handleLauncherKeyDown}
-          disabled={fileSearchSources.length === 0}
+          disabled={isSearchDisabled}
+          // Combobox with a list autocomplete popup: one listbox holds the
+          // navigable Files/Recent options, and the highlighted row is the
+          // combobox's active descendant within that controlled listbox.
+          role="combobox"
           aria-label="Search files"
-          aria-activedescendant={activeEntryId}
+          aria-autocomplete="list"
+          aria-expanded={hasListbox}
+          aria-controls={hasListbox ? listboxId : undefined}
+          aria-activedescendant={hasListbox ? activeEntryId : undefined}
           placeholder={
-            fileSearchSources.length === 0
-              ? "No searchable file source"
-              : "Search files"
+            isSearchDisabled ? "No searchable file source" : "Search files"
           }
           className="h-8 pl-8 pr-8 text-xs focus-visible:ring-0"
         />
@@ -873,6 +886,7 @@ export function NewTabFileSearch({
           hasQuery={hasQuery}
           fileSearchError={fileSearchError}
           isLoading={isLoading}
+          listboxId={listboxId}
           nowMs={nowMs}
           onActivateIndex={setActiveIndex}
           onFileSelect={handleFileSelect}
@@ -990,68 +1004,79 @@ export function NewTabActionMenu({
     promptDraft,
   ]);
 
+  const hasInstalledApps = appSuggestions.length > 0;
+
   return (
-    <div
-      data-testid="new-tab-action-menu"
-      className="flex min-w-0 flex-col gap-3"
-    >
-      {appSuggestions.length > 0 ? (
-        <section>
+    <div data-testid="new-tab-action-menu" className="flex min-w-0 flex-col">
+      {/* Primary open actions lead the menu: Open file, then Open browser. */}
+      <div className="flex flex-col gap-px">
+        {showOpenFileEntry ? (
+          <OpenFileTile
+            id={OPEN_FILE_ENTRY_ID}
+            isActive={false}
+            onActivate={() => undefined}
+            onSelect={handleOpenFileSearch}
+          />
+        ) : null}
+        {showOpenBrowserEntry ? (
+          <OpenBrowserTile
+            id={OPEN_BROWSER_ENTRY_ID}
+            isActive={false}
+            onActivate={() => undefined}
+            onSelect={handleOpenBrowser}
+          />
+        ) : null}
+      </div>
+
+      {/* Installed apps get their own divided, titled section, present only
+          when at least one app exists. With no apps there is no divider or
+          title and Create App simply trails the open actions below. */}
+      {hasInstalledApps ? (
+        <>
+          <Separator
+            // A real (non-decorative) separator marks the boundary between the
+            // open actions and the apps group, matching the app's menu divider
+            // convention. `-mx-1` bleeds it to the popout's padded edges.
+            decorative={false}
+            className="-mx-1 my-1.5 bg-muted"
+          />
           <LauncherSectionHeader
             label={FILE_SEARCH_SECTION_LABELS.apps}
             className="pb-1"
           />
-          <div className="flex flex-col gap-px">
-            {appSuggestions.map((suggestion) => (
-              <AppResultRow
-                key={`app:${suggestion.applicationId}`}
-                id={getFileSearchResultId(suggestion)}
-                suggestion={suggestion}
-                isActive={false}
-                onActivate={() => undefined}
-                onSelect={handleAppSelect}
-              />
-            ))}
-          </div>
-        </section>
+        </>
       ) : null}
 
-      <section>
-        <div className="flex flex-col gap-px">
-          {showOpenFileEntry ? (
-            <OpenFileTile
-              id={OPEN_FILE_ENTRY_ID}
-              isActive={false}
-              onActivate={() => undefined}
-              onSelect={handleOpenFileSearch}
-            />
-          ) : null}
-          {showOpenBrowserEntry ? (
-            <OpenBrowserTile
-              id={OPEN_BROWSER_ENTRY_ID}
-              isActive={false}
-              onActivate={() => undefined}
-              onSelect={handleOpenBrowser}
-            />
-          ) : null}
-          {showCreateAppEntry ? (
-            <CreateAppTile
-              id={CREATE_APP_ENTRY_ID}
-              isActive={false}
-              onActivate={() => undefined}
-              onSelect={handleCreateAppPromptPrefill}
-            />
-          ) : null}
-        </div>
-      </section>
+      {/* Apps list followed by Create App. Create App is always the final row
+          in the menu, whether or not installed apps precede it. */}
+      <div className="flex flex-col gap-px">
+        {appSuggestions.map((suggestion) => (
+          <AppResultRow
+            key={`app:${suggestion.applicationId}`}
+            id={getFileSearchResultId(suggestion)}
+            suggestion={suggestion}
+            isActive={false}
+            onActivate={() => undefined}
+            onSelect={handleAppSelect}
+          />
+        ))}
+        {showCreateAppEntry ? (
+          <CreateAppTile
+            id={CREATE_APP_ENTRY_ID}
+            isActive={false}
+            onActivate={() => undefined}
+            onSelect={handleCreateAppPromptPrefill}
+          />
+        ) : null}
+      </div>
 
       {canSearchApps && apps.isLoading && appSuggestions.length === 0 ? (
-        <p className="px-2 py-1 text-xs text-muted-foreground">
+        <p className="px-2 pt-2 text-xs text-muted-foreground">
           Loading apps...
         </p>
       ) : null}
       {canSearchApps && apps.isError ? (
-        <p className="px-2 py-1 text-xs text-muted-foreground">
+        <p className="px-2 pt-2 text-xs text-muted-foreground">
           Couldn't load apps.
         </p>
       ) : null}
@@ -1073,6 +1098,8 @@ interface NewTabResultsProps {
   hasQuery: boolean;
   fileSearchError: boolean;
   isLoading: boolean;
+  /** Id of the single combobox listbox that wraps the Files/Recent option groups. */
+  listboxId: string;
   nowMs: number;
   onActivateIndex: (index: number) => void;
   onFileSelect: (suggestion: FilePathSearchSuggestion) => void;
@@ -1086,6 +1113,7 @@ function NewTabResults({
   hasQuery,
   fileSearchError,
   isLoading,
+  listboxId,
   nowMs,
   onActivateIndex,
   onFileSelect,
@@ -1105,6 +1133,12 @@ function NewTabResults({
   const hasRecentSectionPredecessor = hasSectionsAbove || showFileSearchMessage;
   const showEmptyMessage =
     !showFilesSection && !showRecentSection && !showLoading && !showError;
+  // The combobox popup is a single listbox spanning both groups, so the active
+  // descendant the input points at always resolves inside one controlled
+  // element. It renders only when a group has option rows; the loading/error
+  // message, the empty-recent card, and the show-more toggle are not options
+  // and stay outside the listbox.
+  const showListbox = showFilesSection || recentSection !== undefined;
 
   if (showEmptyMessage) {
     return (
@@ -1117,111 +1151,122 @@ function NewTabResults({
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto pb-1">
-      {showFilesSection && filesSection ? (
-        <section>
-          <LauncherSectionHeader
-            label={FILE_SEARCH_SECTION_LABELS.files}
-            sticky
-          />
-          <div
-            role="listbox"
-            aria-label={FILE_SEARCH_SECTION_LABELS.files}
-            className="flex flex-col gap-px"
-          >
-            {filesSection.items.map(({ entry, index }) => {
-              if (
-                entry.kind !== "suggestion" ||
-                entry.suggestion.entryKind !== "file"
-              ) {
-                return null;
-              }
-              const suggestion = entry.suggestion;
-              return (
-                <FileResultRow
-                  key={`${suggestion.source}:${suggestion.path}`}
-                  id={getFileSearchEntryId(entry)}
-                  suggestion={suggestion}
-                  isActive={index === activeIndex}
-                  onActivate={() => onActivateIndex(index)}
-                  onSelect={onFileSelect}
-                />
-              );
-            })}
-          </div>
-        </section>
-      ) : showFileSearchMessage ? (
-        <div>
-          <FileSearchMessage
-            iconName={showError ? "AlertCircle" : "Spinner"}
-            iconClassName={showLoading ? "animate-spin" : undefined}
-            message={showError ? "File search failed." : "Searching files..."}
-          />
+      {/* The loading/error message stands in for the Files group while no file
+          rows exist, so it leads the results just as that group would. */}
+      {showFileSearchMessage ? (
+        <FileSearchMessage
+          iconName={showError ? "AlertCircle" : "Spinner"}
+          iconClassName={showLoading ? "animate-spin" : undefined}
+          message={showError ? "File search failed." : "Searching files..."}
+        />
+      ) : null}
+
+      {showListbox ? (
+        <div id={listboxId} role="listbox" aria-label="File search results">
+          {showFilesSection && filesSection ? (
+            <section role="group" aria-label={FILE_SEARCH_SECTION_LABELS.files}>
+              <LauncherSectionHeader
+                label={FILE_SEARCH_SECTION_LABELS.files}
+                sticky
+              />
+              <div className="flex flex-col gap-px">
+                {filesSection.items.map(({ entry, index }) => {
+                  if (
+                    entry.kind !== "suggestion" ||
+                    entry.suggestion.entryKind !== "file"
+                  ) {
+                    return null;
+                  }
+                  const suggestion = entry.suggestion;
+                  return (
+                    <FileResultRow
+                      key={`${suggestion.source}:${suggestion.path}`}
+                      id={getFileSearchEntryId(entry)}
+                      suggestion={suggestion}
+                      isActive={index === activeIndex}
+                      onActivate={() => onActivateIndex(index)}
+                      onSelect={onFileSelect}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
+
+          {recentSection ? (
+            <section
+              role="group"
+              aria-label={FILE_SEARCH_SECTION_LABELS.recent}
+              className={cn(hasRecentSectionPredecessor && "mt-3")}
+            >
+              <LauncherSectionHeader
+                label={FILE_SEARCH_SECTION_LABELS.recent}
+                count={recent.count > 0 ? recent.count : undefined}
+                sticky
+                className={hasRecentSectionPredecessor ? "pt-2" : undefined}
+              />
+              <div className="flex flex-col gap-px">
+                {recentSection.items.map(({ entry, index }) => {
+                  if (entry.kind !== "recent") {
+                    return null;
+                  }
+                  return (
+                    <RecentResultRow
+                      key={`recent:${entry.item.source}:${entry.item.path}`}
+                      id={getFileSearchEntryId(entry)}
+                      item={entry.item}
+                      isActive={index === activeIndex}
+                      nowMs={nowMs}
+                      onActivate={() => onActivateIndex(index)}
+                      onSelect={onRecentSelect}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
         </div>
       ) : null}
 
-      {showRecentSection ? (
+      {recent.emptyHintVisible && recentSection === undefined ? (
+        // Empty Recent zero-state. It is a framed dashed placeholder card, not a
+        // selectable option, so it sits outside the listbox. This belongs to the
+        // Open file / search surface only; the browser new-tab and root + menu
+        // stay card-less.
         <section className={cn(hasRecentSectionPredecessor && "mt-3")}>
           <LauncherSectionHeader
             label={FILE_SEARCH_SECTION_LABELS.recent}
-            count={recent.count > 0 ? recent.count : undefined}
             sticky
             className={hasRecentSectionPredecessor ? "pt-2" : undefined}
           />
-          {recentSection ? (
-            <div
-              role="listbox"
-              aria-label={FILE_SEARCH_SECTION_LABELS.recent}
-              className="flex flex-col gap-px"
-            >
-              {recentSection.items.map(({ entry, index }) => {
-                if (entry.kind !== "recent") {
-                  return null;
-                }
-                return (
-                  <RecentResultRow
-                    key={`recent:${entry.item.source}:${entry.item.path}`}
-                    id={getFileSearchEntryId(entry)}
-                    item={entry.item}
-                    isActive={index === activeIndex}
-                    nowMs={nowMs}
-                    onActivate={() => onActivateIndex(index)}
-                    onSelect={onRecentSelect}
-                  />
-                );
-              })}
-            </div>
-          ) : (
-            // Framed dashed placeholder so the empty Recent surface reads as a
-            // dedicated zero-state card. This belongs to the Open file / search
-            // surface only; the browser new-tab and root + menu stay card-less.
-            <EmptyStatePanel className="py-4 text-xs">
-              Nothing referenced yet — plans, mockups, and files you open will
-              show up here.
-            </EmptyStatePanel>
-          )}
-          {recent.toggleVisible ? (
-            <button
-              type="button"
-              aria-expanded={recent.isExpanded}
-              onClick={recent.onToggleExpanded}
-              className="ml-1.5 mt-0.5 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground"
-            >
-              <Icon
-                name="ChevronDown"
-                className={cn(
-                  "size-3.5 transition-transform",
-                  recent.isExpanded && "rotate-180",
-                )}
-                aria-hidden
-              />
-              <span>
-                {recent.isExpanded
-                  ? "Show less"
-                  : `Show ${recent.showMoreCount} more`}
-              </span>
-            </button>
-          ) : null}
+          <EmptyStatePanel className="py-4 text-xs">
+            Nothing referenced yet — plans, mockups, and files you open will show
+            up here.
+          </EmptyStatePanel>
         </section>
+      ) : null}
+
+      {recent.toggleVisible ? (
+        <button
+          type="button"
+          aria-expanded={recent.isExpanded}
+          onClick={recent.onToggleExpanded}
+          className="ml-1.5 mt-0.5 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground"
+        >
+          <Icon
+            name="ChevronDown"
+            className={cn(
+              "size-3.5 transition-transform",
+              recent.isExpanded && "rotate-180",
+            )}
+            aria-hidden
+          />
+          <span>
+            {recent.isExpanded
+              ? "Show less"
+              : `Show ${recent.showMoreCount} more`}
+          </span>
+        </button>
       ) : null}
     </div>
   );

@@ -137,7 +137,7 @@ describe("NewTabPage", () => {
     ).toBeNull();
     expect(screen.queryByRole("option", { name: /Open file/u })).toBeNull();
     expect(screen.queryByRole("option", { name: /Open browser/u })).toBeNull();
-    const input = screen.getByRole("textbox", {
+    const input = screen.getByRole("combobox", {
       name: "Search files",
     });
     expect(document.activeElement).toBe(input);
@@ -194,7 +194,7 @@ describe("NewTabPage", () => {
       currentThreadType: "manager",
     });
 
-    const input = screen.getByRole("textbox", {
+    const input = screen.getByRole("combobox", {
       name: "Search files",
     });
     fireEvent.change(input, { target: { value: "status" } });
@@ -217,6 +217,16 @@ describe("NewTabPage", () => {
     expect(api.searchProjectPaths).not.toHaveBeenCalled();
     expect(api.listApps).not.toHaveBeenCalled();
     expect(api.listThreadStoragePaths).not.toHaveBeenCalled();
+
+    // With no searchable source the combobox is disabled and advertises no
+    // popup, so it never dangles aria-controls/activedescendant at an absent
+    // listbox.
+    const input = screen.getByRole("combobox", { name: "Search files" });
+    expect(input).toHaveProperty("disabled", true);
+    expect(input.getAttribute("aria-expanded")).toBe("false");
+    expect(input.getAttribute("aria-controls")).toBeNull();
+    expect(input.getAttribute("aria-activedescendant")).toBeNull();
+    expect(screen.queryByRole("listbox")).toBeNull();
   });
 });
 
@@ -249,8 +259,9 @@ describe("NewTabPage recent section", () => {
       currentThreadType: "manager",
     });
 
-    const recentList = await screen.findByRole("listbox", { name: "Recent" });
-    const recentOptions = within(recentList).getAllByRole("option");
+    // Recent is a labelled option group inside the single combobox listbox.
+    const recentGroup = await screen.findByRole("group", { name: "Recent" });
+    const recentOptions = within(recentGroup).getAllByRole("option");
     expect(recentOptions.map((option) => option.textContent ?? "")).toEqual([
       expect.stringContaining("swap-model.md"),
       expect.stringContaining("sidebar-mockup.html"),
@@ -258,14 +269,14 @@ describe("NewTabPage recent section", () => {
     ]);
 
     // Chip labels follow the artifact kind, not just the extension.
-    expect(within(recentList).getByText("Plan")).toBeTruthy();
-    expect(within(recentList).getByText("Mockup")).toBeTruthy();
-    expect(within(recentList).getByText("Source")).toBeTruthy();
+    expect(within(recentGroup).getByText("Plan")).toBeTruthy();
+    expect(within(recentGroup).getByText("Mockup")).toBeTruthy();
+    expect(within(recentGroup).getByText("Source")).toBeTruthy();
 
     // Right-aligned relative timestamps.
-    expect(within(recentList).getByText("2m ago")).toBeTruthy();
-    expect(within(recentList).getByText("1h ago")).toBeTruthy();
-    expect(within(recentList).getByText("Yesterday")).toBeTruthy();
+    expect(within(recentGroup).getByText("2m ago")).toBeTruthy();
+    expect(within(recentGroup).getByText("1h ago")).toBeTruthy();
+    expect(within(recentGroup).getByText("Yesterday")).toBeTruthy();
   });
 
   it("opens a recent item in the panel when its row is clicked", async () => {
@@ -339,7 +350,7 @@ describe("NewTabPage recent section", () => {
       currentThreadType: "manager",
     });
 
-    const input = screen.getByRole("textbox", { name: "Search files" });
+    const input = screen.getByRole("combobox", { name: "Search files" });
     const recentOption = await screen.findByRole("option", {
       name: /swap-model\.md/u,
     });

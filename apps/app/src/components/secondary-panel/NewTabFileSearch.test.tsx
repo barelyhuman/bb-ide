@@ -250,7 +250,7 @@ describe("NewTabActionMenu", () => {
     expect(screen.queryByText("Open")).toBeNull();
   });
 
-  it("orders action rows as Open file, Open browser, Create App", () => {
+  it("orders action rows as Open file, Open browser, Create App with no Apps section when no apps exist", () => {
     window.bbDesktop = createDesktopApiStub();
 
     renderActionMenu({ onOpenBrowser: vi.fn() });
@@ -258,6 +258,41 @@ describe("NewTabActionMenu", () => {
     expect(
       screen.getAllByRole("button").map((button) => button.textContent ?? ""),
     ).toEqual(["Open file", "Open browser", "Create App..."]);
+    // No installed apps ⇒ no divider and no Apps title; Create App still trails.
+    expect(screen.queryByRole("separator")).toBeNull();
+    expect(screen.queryByText("Apps")).toBeNull();
+  });
+
+  it("orders installed apps between the open actions and Create App, with a divider and Apps title", () => {
+    window.bbDesktop = createDesktopApiStub();
+    setAppSummaries([APP_SUGGESTION.app]);
+
+    renderActionMenu({ onOpenBrowser: vi.fn() });
+
+    // Open file, Open browser, the installed app rows, then Create App last.
+    expect(
+      screen.getAllByRole("button").map((button) => button.textContent ?? ""),
+    ).toEqual([
+      "Open file",
+      "Open browser",
+      expect.stringContaining("Review Board"),
+      "Create App...",
+    ]);
+
+    // Apps get their own divided, titled section after Open browser.
+    const divider = screen.getByRole("separator");
+    const appsTitle = screen.getByText("Apps");
+    const openBrowser = screen.getByRole("button", { name: /Open browser/u });
+    const appRow = screen.getByRole("button", { name: /Review Board/u });
+    const orderedAfter = (a: Element, b: Element) =>
+      Boolean(
+        a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    // Divider follows Open browser; the Apps title follows the divider; the app
+    // row follows the title.
+    expect(orderedAfter(openBrowser, divider)).toBe(true);
+    expect(orderedAfter(divider, appsTitle)).toBe(true);
+    expect(orderedAfter(appsTitle, appRow)).toBe(true);
   });
 
   it("keeps menu actions compact with native button semantics and non-ring focus", () => {
@@ -335,5 +370,41 @@ describe("NewTabFileSearch", () => {
     expect(
       screen.queryByRole("button", { name: "Back to new tab menu" }),
     ).toBeNull();
+  });
+
+  it("wires the search box to a single combobox listbox that holds the active option", () => {
+    setFileSearchSuggestions([FILE_SUGGESTION]);
+
+    renderLauncher();
+
+    const input = screen.getByRole("combobox", { name: "Search files" });
+    // Exactly one listbox: the combobox controls a single popup spanning the
+    // Files and Recent groups, so its active descendant always resolves within
+    // the one controlled element rather than a detached or ambiguous listbox.
+    const listboxes = screen.getAllByRole("listbox");
+    expect(listboxes).toHaveLength(1);
+    const listbox = listboxes[0];
+    expect(input.getAttribute("aria-expanded")).toBe("true");
+    expect(input.getAttribute("aria-controls")).toBe(listbox.id);
+
+    const activeId = input.getAttribute("aria-activedescendant");
+    expect(activeId).toBeTruthy();
+    expect(
+      within(listbox)
+        .getAllByRole("option")
+        .some((option) => option.id === activeId),
+    ).toBe(true);
+  });
+
+  it("groups Files and Recent as labelled option groups inside the one listbox", () => {
+    setFileSearchSuggestions([FILE_SUGGESTION]);
+
+    renderLauncher();
+
+    const listbox = screen.getByRole("listbox", {
+      name: "File search results",
+    });
+    const filesGroup = within(listbox).getByRole("group", { name: "Files" });
+    expect(within(filesGroup).getByRole("option", { name: /app\.ts/u })).toBeTruthy();
   });
 });

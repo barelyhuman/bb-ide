@@ -294,7 +294,12 @@ export function ThreadSecondaryPanel({
         >
           <div
             className="flex min-w-0 flex-1 items-center gap-1"
-            role="tablist"
+            // A toolbar, not a tablist: the Info/Diff controls and file tabs are
+            // toggle buttons (`aria-pressed`) rather than `role="tab"` widgets
+            // backed by tabpanels, so `role="tablist"` would be malformed. Toolbar
+            // semantics describe this compact row of view controls without
+            // claiming the unimplemented tab contract.
+            role="toolbar"
             aria-label="Secondary panel views"
           >
             <Button

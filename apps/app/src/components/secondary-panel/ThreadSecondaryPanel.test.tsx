@@ -270,6 +270,19 @@ describe("ThreadSecondaryPanel", () => {
     expect(strip.className).not.toContain("flex-1");
   });
 
+  it("exposes the panel view controls as a toolbar, not an unbacked tablist", () => {
+    renderPanel({ renderAsDrawer: false });
+
+    // The Info/Diff/file controls are toggle buttons (`aria-pressed`), not
+    // tabs backed by tabpanels, so the control row must carry toolbar
+    // semantics rather than pretending to be a tablist.
+    expect(
+      screen.getByRole("toolbar", { name: "Secondary panel views" }),
+    ).not.toBeNull();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.queryByRole("tab")).toBeNull();
+  });
+
   it("opens the new-tab action popout from the plus button", () => {
     renderPanel();
 
