@@ -1,16 +1,316 @@
-import { createEnvironment, getEnvironment } from "@bb/db";
+import { eq } from "drizzle-orm";
+import { createEnvironment, environments, getEnvironment } from "@bb/db";
 import { recordEnvironmentCleanupRequest } from "@bb/db/internal-environment-lifecycle";
 import { describe, expect, it } from "vitest";
 import {
+  runEnvironmentCleanupAdvance,
+  settleEnvironmentDestroyCommandResult,
+} from "../../src/services/environments/environment-cleanup-internal.js";
+import {
   MANAGED_ENVIRONMENT_ARCHIVE_CLEANUP_RECOVERY_INTERVAL_MS,
   runManagedEnvironmentArchiveCleanupRecoverySweep,
+  runStartupRecoverySweep,
 } from "../../src/services/system/periodic-sweeps.js";
+import {
+  listQueuedEnvironmentCommands,
+  waitForQueuedCommand,
+} from "../helpers/commands.js";
 import { seedHostSession, seedProjectWithSource } from "../helpers/seed.js";
 import { withTestHarness } from "../helpers/test-app.js";
 
 const SWEEP_START_MS = 4_000_000_000_000;
 
 describe("managed environment cleanup recovery sweep", () => {
+  it("retries stale destroying cleanup requests with a destroy command", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = createEnvironment(harness.db, harness.hub, {
+        hostId: host.id,
+        isGitRepo: false,
+        managed: true,
+        path: "/tmp/stale-destroying-environment",
+        projectId: project.id,
+        status: "destroying",
+        workspaceProvisionType: "managed-worktree",
+      });
+      recordEnvironmentCleanupRequest(harness.db, harness.hub, environment.id, {
+        requestedAt: SWEEP_START_MS,
+      });
+      const staleUpdatedAt = Date.now() - 1;
+      harness.db
+        .update(environments)
+        .set({ updatedAt: staleUpdatedAt })
+        .where(eq(environments.id, environment.id))
+        .run();
+
+      await runStartupRecoverySweep(harness.deps);
+
+      await waitForQueuedCommand(
+        harness,
+        (queued) =>
+          queued.command.type === "environment.destroy" &&
+          queued.command.environmentId === environment.id,
+      );
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "destroying",
+      );
+      expect(
+        listQueuedEnvironmentCommands(
+          harness,
+          "environment.destroy",
+          environment.id,
+        ),
+      ).toHaveLength(1);
+    });
+  });
+
+  it("ignores an older destroy failure after recovery has claimed a retry", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const workspacePath = "/tmp/stale-failure-after-retry";
+      const oldExecutionCreatedAt = Date.now() - 10_000;
+      const environment = createEnvironment(harness.db, harness.hub, {
+        hostId: host.id,
+        isGitRepo: false,
+        managed: true,
+        path: workspacePath,
+        projectId: project.id,
+        status: "destroying",
+        workspaceProvisionType: "managed-worktree",
+      });
+      recordEnvironmentCleanupRequest(harness.db, harness.hub, environment.id, {
+        requestedAt: SWEEP_START_MS,
+      });
+      harness.db
+        .update(environments)
+        .set({ updatedAt: oldExecutionCreatedAt })
+        .where(eq(environments.id, environment.id))
+        .run();
+
+      await runStartupRecoverySweep(harness.deps);
+      await waitForQueuedCommand(
+        harness,
+        (queued) =>
+          queued.command.type === "environment.destroy" &&
+          queued.command.environmentId === environment.id,
+      );
+
+      harness.db.transaction((tx) => {
+        const sideEffects = settleEnvironmentDestroyCommandResult({
+          command: {
+            type: "environment.destroy",
+            environmentId: environment.id,
+            workspaceContext: {
+              workspacePath,
+              workspaceProvisionType: "managed-worktree",
+            },
+          },
+          deps: {
+            ...harness.deps,
+            db: tx,
+            hub: harness.hub,
+          },
+          execution: {
+            createdAt: oldExecutionCreatedAt,
+            hostId: host.id,
+            id: "rpc-stale-destroy",
+          },
+          report: {
+            completedAt: Date.now(),
+            errorCode: "command_timeout",
+            errorMessage: "Timed out waiting for command result",
+            executionId: "rpc-stale-destroy",
+            ok: false,
+            type: "environment.destroy",
+          },
+        });
+        expect(sideEffects.postCommitActions).toHaveLength(0);
+      });
+
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "destroying",
+      );
+      expect(
+        listQueuedEnvironmentCommands(
+          harness,
+          "environment.destroy",
+          environment.id,
+        ),
+      ).toHaveLength(1);
+    });
+  });
+
+  it("settles a current destroy failure after cleanup request and updatedAt changes", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const workspacePath = "/tmp/current-failure-after-refresh";
+      const environment = createEnvironment(harness.db, harness.hub, {
+        hostId: host.id,
+        isGitRepo: false,
+        managed: true,
+        path: workspacePath,
+        projectId: project.id,
+        status: "ready",
+        workspaceProvisionType: "managed-worktree",
+      });
+      recordEnvironmentCleanupRequest(harness.db, harness.hub, environment.id, {
+        requestedAt: SWEEP_START_MS,
+      });
+
+      await runEnvironmentCleanupAdvance(harness.deps, {
+        environmentId: environment.id,
+      });
+      const destroyingEnvironment = getEnvironment(harness.db, environment.id);
+      if (!destroyingEnvironment?.destroyAttemptId) {
+        throw new Error("Expected a claimed destroy attempt");
+      }
+      const destroyAttemptId = destroyingEnvironment.destroyAttemptId;
+      const destroyAttemptUpdatedAt = destroyingEnvironment.updatedAt;
+
+      const duplicateRequest = recordEnvironmentCleanupRequest(
+        harness.db,
+        harness.hub,
+        environment.id,
+        {
+          requestedAt: SWEEP_START_MS + 1,
+        },
+      );
+      expect(duplicateRequest?.updatedAt).toBe(destroyAttemptUpdatedAt);
+      harness.db
+        .update(environments)
+        .set({ updatedAt: destroyAttemptUpdatedAt + 1 })
+        .where(eq(environments.id, environment.id))
+        .run();
+
+      harness.db.transaction((tx) => {
+        const sideEffects = settleEnvironmentDestroyCommandResult({
+          command: {
+            type: "environment.destroy",
+            environmentId: environment.id,
+            workspaceContext: {
+              workspacePath,
+              workspaceProvisionType: "managed-worktree",
+            },
+          },
+          deps: {
+            ...harness.deps,
+            db: tx,
+            hub: harness.hub,
+          },
+          execution: {
+            createdAt: destroyAttemptUpdatedAt,
+            hostId: host.id,
+            id: destroyAttemptId,
+          },
+          report: {
+            completedAt: Date.now(),
+            errorCode: "command_timeout",
+            errorMessage: "Timed out waiting for command result",
+            executionId: destroyAttemptId,
+            ok: false,
+            type: "environment.destroy",
+          },
+        });
+        expect(sideEffects.postCommitActions).toHaveLength(0);
+      });
+
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        cleanupRequestedAt: SWEEP_START_MS,
+        destroyAttemptId: null,
+        status: "ready",
+      });
+    });
+  });
+
+  it("marks stale destroying cleanup requests without paths as destroyed", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = createEnvironment(harness.db, harness.hub, {
+        hostId: host.id,
+        managed: true,
+        path: null,
+        projectId: project.id,
+        status: "destroying",
+        workspaceProvisionType: "managed-worktree",
+      });
+      recordEnvironmentCleanupRequest(harness.db, harness.hub, environment.id, {
+        requestedAt: SWEEP_START_MS,
+      });
+      const staleUpdatedAt = Date.now() - 1;
+      harness.db
+        .update(environments)
+        .set({ updatedAt: staleUpdatedAt })
+        .where(eq(environments.id, environment.id))
+        .run();
+
+      await runStartupRecoverySweep(harness.deps);
+
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "destroyed",
+      );
+      expect(
+        listQueuedEnvironmentCommands(
+          harness,
+          "environment.destroy",
+          environment.id,
+        ),
+      ).toHaveLength(0);
+    });
+  });
+
+  it("dedupes concurrent cleanup advances before dispatching destroy", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = createEnvironment(harness.db, harness.hub, {
+        hostId: host.id,
+        isGitRepo: false,
+        managed: true,
+        path: "/tmp/concurrent-cleanup-environment",
+        projectId: project.id,
+        status: "ready",
+        workspaceProvisionType: "managed-worktree",
+      });
+      recordEnvironmentCleanupRequest(harness.db, harness.hub, environment.id, {
+        requestedAt: SWEEP_START_MS,
+      });
+
+      await Promise.all([
+        runEnvironmentCleanupAdvance(harness.deps, {
+          environmentId: environment.id,
+        }),
+        runEnvironmentCleanupAdvance(harness.deps, {
+          environmentId: environment.id,
+        }),
+      ]);
+
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "destroying",
+      );
+      expect(
+        listQueuedEnvironmentCommands(
+          harness,
+          "environment.destroy",
+          environment.id,
+        ),
+      ).toHaveLength(1);
+    });
+  });
+
   it("throttles recovery without arming the throttle on empty sweeps", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
@@ -44,9 +344,9 @@ describe("managed environment cleanup recovery sweep", () => {
         SWEEP_START_MS + 1,
       );
 
-      expect(
-        getEnvironment(harness.db, firstEnvironment.id)?.status,
-      ).toBe("destroyed");
+      expect(getEnvironment(harness.db, firstEnvironment.id)?.status).toBe(
+        "destroyed",
+      );
 
       const throttledEnvironment = createEnvironment(harness.db, harness.hub, {
         hostId: host.id,
@@ -69,9 +369,9 @@ describe("managed environment cleanup recovery sweep", () => {
         SWEEP_START_MS + 10_000,
       );
 
-      expect(
-        getEnvironment(harness.db, throttledEnvironment.id)?.status,
-      ).toBe("ready");
+      expect(getEnvironment(harness.db, throttledEnvironment.id)?.status).toBe(
+        "ready",
+      );
 
       await runManagedEnvironmentArchiveCleanupRecoverySweep(
         harness.deps,
@@ -80,9 +380,9 @@ describe("managed environment cleanup recovery sweep", () => {
           MANAGED_ENVIRONMENT_ARCHIVE_CLEANUP_RECOVERY_INTERVAL_MS,
       );
 
-      expect(
-        getEnvironment(harness.db, throttledEnvironment.id)?.status,
-      ).toBe("destroyed");
+      expect(getEnvironment(harness.db, throttledEnvironment.id)?.status).toBe(
+        "destroyed",
+      );
     });
   });
 });

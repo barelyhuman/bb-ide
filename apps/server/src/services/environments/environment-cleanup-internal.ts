@@ -1,22 +1,23 @@
 import type { WorkspaceProvisionType } from "@bb/domain";
-import {
-  resolveEnvironmentMergeBaseBranch,
-  threadScope,
-} from "@bb/domain";
+import { resolveEnvironmentMergeBaseBranch, threadScope } from "@bb/domain";
 import {
   countLiveThreadsInEnvironment,
   getEnvironment,
   getActiveSession,
   hasPendingThreadShutdownInEnvironment,
   listLiveThreadsInEnvironment,
+  type RecoverStaleDestroyingEnvironmentCleanupResult,
   type DbNotifier,
   type DbConnection,
   type DbQueryConnection,
   type DbTransaction,
 } from "@bb/db";
 import {
+  claimEnvironmentDestroy,
   clearEnvironmentCleanupRequestRecord,
+  recoverStaleDestroyingEnvironmentCleanup,
   recordEnvironmentCleanupRequest,
+  restoreEnvironmentAfterDestroyAttemptFailure,
   setEnvironmentRecordDestroyed,
   setEnvironmentStatus,
 } from "@bb/db/internal-environment-lifecycle";
@@ -32,6 +33,7 @@ import {
 import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
 import { runLiveCommandAndWait } from "../hosts/live-command-wait.js";
 import {
+  createLiveHostCommandExecution,
   LIVE_DAEMON_COMMAND_TIMEOUT_MS,
   startLiveHostCommand,
 } from "../hosts/live-command.js";
@@ -58,6 +60,11 @@ interface RequestEnvironmentCleanupAdvanceArgs {
 
 interface RequestEnvironmentCleanupArgs {
   environmentId: string | null | undefined;
+}
+
+interface RecoverOrphanedEnvironmentDestroyRequestsArgs {
+  now?: number;
+  updatedBefore: number;
 }
 
 interface CancelPendingEnvironmentCleanupArgs {
@@ -93,6 +100,8 @@ interface EnvironmentCleanupReadDeps {
 interface EnvironmentCleanupWriteDeps extends EnvironmentCleanupReadDeps {
   hub: DbNotifier;
 }
+
+type EnvironmentCleanupRecoveryDeps = Pick<AppDeps, "db" | "hub">;
 
 interface EnvironmentCleanupCancellationDeps extends Omit<
   EnvironmentCleanupWriteDeps,
@@ -231,11 +240,12 @@ export function settleEnvironmentDestroyCommandResult(
       args.command.environmentId,
     );
     if (failedEnvironment && failedEnvironment.status === "destroying") {
-      setEnvironmentStatus(
+      restoreEnvironmentAfterDestroyAttemptFailure(
         args.deps.db,
         args.deps.hub,
-        args.command.environmentId,
         {
+          destroyAttemptId: args.execution.id,
+          environmentId: args.command.environmentId,
           status: failedEnvironment.path ? "ready" : "error",
         },
       );
@@ -257,7 +267,10 @@ export function settleEnvironmentDestroyCommandResult(
     return emptyCommandResultSideEffects();
   }
 
-  markLiveThreadsErroredAfterDestroySuccess(args.deps, args.command.environmentId);
+  markLiveThreadsErroredAfterDestroySuccess(
+    args.deps,
+    args.command.environmentId,
+  );
 
   return {
     postCommitActions: [
@@ -338,6 +351,7 @@ export function cancelPendingEnvironmentCleanup(
 function dispatchEnvironmentDestroy(
   deps: CommandResultSideEffectsDeps,
   environment: EnvironmentDestroyTarget,
+  execution: HostDaemonCommandExecutionRecord,
 ) {
   startLiveHostCommand(deps, {
     command: {
@@ -345,6 +359,7 @@ function dispatchEnvironmentDestroy(
       environmentId: environment.id,
       workspaceContext: workspaceContextFromPath(environment),
     },
+    execution,
     hostId: environment.hostId,
     timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
     onError: (error) => {
@@ -354,20 +369,6 @@ function dispatchEnvironmentDestroy(
       );
     },
   });
-}
-
-function dispatchDestroyAndMarkDestroying(
-  deps: CommandResultSideEffectsDeps,
-  environment: EnvironmentDestroyTarget & {
-    status: NonNullable<ReturnType<typeof getEnvironment>>["status"];
-  },
-): void {
-  dispatchEnvironmentDestroy(deps, environment);
-  if (environment.status !== "destroying") {
-    setEnvironmentStatus(deps.db, deps.hub, environment.id, {
-      status: "destroying",
-    });
-  }
 }
 
 export function wouldCleanupEnvironment(
@@ -391,7 +392,14 @@ export function wouldCleanupEnvironment(
   );
 }
 
-export async function advanceEnvironmentCleanup(
+export function recoverOrphanedEnvironmentDestroyRequests(
+  deps: EnvironmentCleanupRecoveryDeps,
+  args: RecoverOrphanedEnvironmentDestroyRequestsArgs,
+): RecoverStaleDestroyingEnvironmentCleanupResult {
+  return recoverStaleDestroyingEnvironmentCleanup(deps.db, deps.hub, args);
+}
+
+async function advanceEnvironmentCleanup(
   deps: CommandResultSideEffectsDeps,
   args: AdvanceEnvironmentCleanupArgs,
 ): Promise<void> {
@@ -459,13 +467,25 @@ export async function advanceEnvironmentCleanup(
     return;
   }
 
-  dispatchDestroyAndMarkDestroying(deps, {
-    hostId: refreshedEnvironment.hostId,
-    id: refreshedEnvironment.id,
-    path: refreshedEnvironment.path,
-    status: refreshedEnvironment.status,
-    workspaceProvisionType: refreshedEnvironment.workspaceProvisionType,
+  const execution = createLiveHostCommandExecution(refreshedEnvironment.hostId);
+  const claimedEnvironment = claimEnvironmentDestroy(deps.db, deps.hub, {
+    destroyAttemptId: execution.id,
+    environmentId: refreshedEnvironment.id,
   });
+  if (!claimedEnvironment || !claimedEnvironment.path) {
+    return;
+  }
+
+  dispatchEnvironmentDestroy(
+    deps,
+    {
+      hostId: claimedEnvironment.hostId,
+      id: claimedEnvironment.id,
+      path: claimedEnvironment.path,
+      workspaceProvisionType: claimedEnvironment.workspaceProvisionType,
+    },
+    execution,
+  );
 }
 
 export async function runEnvironmentCleanupAdvance(

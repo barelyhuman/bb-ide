@@ -11,7 +11,7 @@ import {
   COMPLETED_EVENT_OUTPUT_RETAINED_TAIL_CHARS,
   COMPLETED_EVENT_OUTPUT_TRUNCATION_THRESHOLD_CHARS,
   pruneClosedSessions,
-  sweepDestroyingEnvironments,
+  pruneDestroyedEnvironments,
   sweepExpiredLeases,
   sweepManagedEnvironments,
   truncateCompletedEventItemOutputs,
@@ -802,7 +802,7 @@ describe("sweepManagedEnvironments", () => {
     expect(candidates).toHaveLength(0);
   });
 
-  it("returns destroying environments with cleanup requested so sweeps can resume destroy queueing", () => {
+  it("returns destroying environments with cleanup requested so cleanup recovery can retry them", () => {
     const { db, host, project } = setup();
 
     const env = createEnvironment(db, noopNotifier, {
@@ -821,8 +821,56 @@ describe("sweepManagedEnvironments", () => {
   });
 });
 
-describe("sweepDestroyingEnvironments", () => {
-  it("hard-deletes stale destroying environments after the retention window", () => {
+describe("pruneDestroyedEnvironments", () => {
+  it("hard-deletes stale destroyed environments after the retention window", () => {
+    const { db, host, project } = setup();
+    const now = Date.now();
+
+    const staleEnvironment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      path: "/tmp/stale-destroyed",
+      managed: true,
+      workspaceProvisionType: "managed-worktree",
+      status: "destroyed",
+    });
+    const freshEnvironment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      path: "/tmp/fresh-destroyed",
+      managed: true,
+      workspaceProvisionType: "managed-worktree",
+      status: "destroyed",
+    });
+
+    db.update(environments)
+      .set({ updatedAt: now - 8 * 24 * 60 * 60_000 })
+      .where(eq(environments.id, staleEnvironment.id))
+      .run();
+
+    const spy: DbNotifier = {
+      notifyThread: vi.fn(),
+      notifyEnvironment: vi.fn(),
+      notifyHost: vi.fn(),
+      notifyProject: vi.fn(),
+      notifySystem: vi.fn(),
+    };
+
+    const result = pruneDestroyedEnvironments(db, spy, now);
+    expect(result.deleted).toBe(1);
+    expect(
+      db
+        .select()
+        .from(environments)
+        .all()
+        .map((row) => row.id),
+    ).toEqual([freshEnvironment.id]);
+    expect(spy.notifyEnvironment).toHaveBeenCalledWith(staleEnvironment.id, [
+      "environment-deleted",
+    ]);
+  });
+
+  it("does not hard-delete stale destroying environments", () => {
     const { db, host, project } = setup();
     const now = Date.now();
 
@@ -830,14 +878,6 @@ describe("sweepDestroyingEnvironments", () => {
       projectId: project.id,
       hostId: host.id,
       path: "/tmp/stale-destroying",
-      managed: true,
-      workspaceProvisionType: "managed-worktree",
-      status: "destroying",
-    });
-    const freshEnvironment = createEnvironment(db, noopNotifier, {
-      projectId: project.id,
-      hostId: host.id,
-      path: "/tmp/fresh-destroying",
       managed: true,
       workspaceProvisionType: "managed-worktree",
       status: "destroying",
@@ -856,17 +896,12 @@ describe("sweepDestroyingEnvironments", () => {
       notifySystem: vi.fn(),
     };
 
-    const result = sweepDestroyingEnvironments(db, spy, now);
-    expect(result.deleted).toBe(1);
+    const result = pruneDestroyedEnvironments(db, spy, now);
+    expect(result.deleted).toBe(0);
     expect(
-      db
-        .select()
-        .from(environments)
-        .all()
-        .map((row) => row.id),
-    ).toEqual([freshEnvironment.id]);
-    expect(spy.notifyEnvironment).toHaveBeenCalledWith(staleEnvironment.id, [
-      "environment-deleted",
-    ]);
+      db.select().from(environments).where(eq(environments.id, staleEnvironment.id)).get()
+        ?.status,
+    ).toBe("destroying");
+    expect(spy.notifyEnvironment).not.toHaveBeenCalled();
   });
 });

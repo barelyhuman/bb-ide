@@ -250,6 +250,7 @@ describe("environments", () => {
     expect(requestedAgain).toMatchObject({
       cleanupRequestedAt: 123,
       cleanupMode: "safe",
+      updatedAt: requested?.updatedAt,
     });
     expect(cleared).toMatchObject({
       cleanupRequestedAt: null,

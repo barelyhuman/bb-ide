@@ -41,7 +41,6 @@ import type {
   LoggedWorkSessionDeps,
 } from "../../types.js";
 import {
-  advanceEnvironmentCleanup,
   requestEnvironmentCleanup,
   requestEnvironmentCleanupAdvance,
   runEnvironmentCleanupAdvance,
@@ -1443,7 +1442,7 @@ export async function finalizeStoppedThreadAndAdvanceCleanup(
     threadBeforeFinalize?.environmentId ??
     null;
   if (environmentId) {
-    await advanceEnvironmentCleanup(deps, { environmentId });
+    await runEnvironmentCleanupAdvance(deps, { environmentId });
   }
   return true;
 }

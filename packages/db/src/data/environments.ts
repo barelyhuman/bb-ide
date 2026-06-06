@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray, ne, sql, lt, isNotNull } from "drizzle-orm";
 import type {
   DiscoveredWorkspaceProperties,
   EnvironmentChangeKind,
@@ -168,6 +168,27 @@ export interface RequestEnvironmentCleanupInput {
 export interface ClaimManagedEnvironmentReprovisionArgs {
   environmentId: string;
   now?: number;
+}
+
+export interface ClaimEnvironmentDestroyArgs {
+  destroyAttemptId: string;
+  environmentId: string;
+}
+
+export interface RestoreEnvironmentAfterDestroyAttemptFailureArgs {
+  destroyAttemptId: string;
+  environmentId: string;
+  status: Extract<EnvironmentStatus, "error" | "ready">;
+}
+
+export interface RecoverStaleDestroyingEnvironmentCleanupArgs {
+  updatedBefore: number;
+  now?: number;
+}
+
+export interface RecoverStaleDestroyingEnvironmentCleanupResult {
+  destroyed: number;
+  restored: number;
 }
 
 export interface ListRetiredLoadedEnvironmentIdsOnHostArgs {
@@ -407,6 +428,13 @@ export function recordEnvironmentCleanupRequest(
     return null;
   }
 
+  if (
+    existing.cleanupRequestedAt !== null &&
+    existing.cleanupMode === "safe"
+  ) {
+    return existing;
+  }
+
   return updateEnvironmentCleanupRecord(db, notifier, id, {
     cleanupRequestedAt:
       existing.cleanupRequestedAt ?? input.requestedAt ?? Date.now(),
@@ -439,7 +467,12 @@ export function setEnvironmentRecordDestroyed(
   };
   const updated = db
     .update(environments)
-    .set({ ...cleanup, status: "destroyed", updatedAt: Date.now() })
+    .set({
+      ...cleanup,
+      destroyAttemptId: null,
+      status: "destroyed",
+      updatedAt: Date.now(),
+    })
     .where(eq(environments.id, id))
     .returning()
     .get();
@@ -460,6 +493,148 @@ export function setEnvironmentRecordDestroyed(
   }
 
   return updated;
+}
+
+export function claimEnvironmentDestroy(
+  db: DbConnection,
+  notifier: DbNotifier,
+  args: ClaimEnvironmentDestroyArgs,
+) {
+  const now = Date.now();
+  const claimed = db
+    .update(environments)
+    .set({
+      destroyAttemptId: args.destroyAttemptId,
+      status: "destroying",
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(environments.id, args.environmentId),
+        eq(environments.managed, true),
+        eq(environments.status, "ready"),
+        isNotNull(environments.cleanupRequestedAt),
+        isNotNull(environments.path),
+        sql`NOT EXISTS (
+          SELECT 1 FROM threads
+          WHERE threads.environment_id = ${environments.id}
+          AND threads.archived_at IS NULL
+          AND threads.deleted_at IS NULL
+        )`,
+        sql`NOT EXISTS (
+          SELECT 1 FROM threads
+          WHERE threads.environment_id = ${environments.id}
+          AND threads.stop_requested_at IS NOT NULL
+        )`,
+      ),
+    )
+    .returning()
+    .get();
+
+  if (claimed) {
+    notifier.notifyEnvironment(args.environmentId, ["status-changed"]);
+  }
+
+  return claimed ?? null;
+}
+
+export function restoreEnvironmentAfterDestroyAttemptFailure(
+  db: EnvironmentWriteConnection,
+  notifier: DbNotifier,
+  args: RestoreEnvironmentAfterDestroyAttemptFailureArgs,
+) {
+  const existing = getEnvironment(db, args.environmentId);
+  if (
+    !existing ||
+    existing.status !== "destroying" ||
+    existing.destroyAttemptId !== args.destroyAttemptId
+  ) {
+    return null;
+  }
+
+  const updated = db
+    .update(environments)
+    .set({
+      destroyAttemptId: null,
+      status: args.status,
+      updatedAt: Date.now(),
+    })
+    .where(
+      and(
+        eq(environments.id, args.environmentId),
+        eq(environments.status, "destroying"),
+        eq(environments.destroyAttemptId, args.destroyAttemptId),
+      ),
+    )
+    .returning()
+    .get();
+
+  if (!updated) {
+    return null;
+  }
+
+  notifier.notifyEnvironment(args.environmentId, ["status-changed"]);
+  return updated;
+}
+
+export function recoverStaleDestroyingEnvironmentCleanup(
+  db: DbConnection,
+  notifier: DbNotifier,
+  args: RecoverStaleDestroyingEnvironmentCleanupArgs,
+): RecoverStaleDestroyingEnvironmentCleanupResult {
+  const now = args.now ?? Date.now();
+  const staleRows = db
+    .select()
+    .from(environments)
+    .where(
+      and(
+        eq(environments.managed, true),
+        eq(environments.status, "destroying"),
+        isNotNull(environments.cleanupRequestedAt),
+        lt(environments.updatedAt, args.updatedBefore),
+      ),
+    )
+    .all();
+
+  let destroyed = 0;
+  let restored = 0;
+  for (const environment of staleRows) {
+    if (environment.path === null) {
+      const updated = setEnvironmentRecordDestroyed(
+        db,
+        notifier,
+        environment.id,
+      );
+      if (updated) {
+        destroyed += 1;
+      }
+      continue;
+    }
+
+    const updated = db
+      .update(environments)
+      .set({
+        destroyAttemptId: null,
+        status: "ready",
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(environments.id, environment.id),
+          eq(environments.status, "destroying"),
+          isNotNull(environments.cleanupRequestedAt),
+        ),
+      )
+      .returning()
+      .get();
+
+    if (updated) {
+      restored += 1;
+      notifier.notifyEnvironment(environment.id, ["status-changed"]);
+    }
+  }
+
+  return { destroyed, restored };
 }
 
 export function claimManagedEnvironmentReprovisionRecord(

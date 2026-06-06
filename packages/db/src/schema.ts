@@ -200,6 +200,7 @@ export const environments = sqliteTable(
     mergeBaseBranch: text("merge_base_branch"),
     cleanupRequestedAt: integer("cleanup_requested_at"),
     cleanupMode: text("cleanup_mode").$type<EnvironmentCleanupMode>(),
+    destroyAttemptId: text("destroy_attempt_id"),
     workspaceProvisionType: text("workspace_provision_type")
       .$type<WorkspaceProvisionType>()
       .notNull(),

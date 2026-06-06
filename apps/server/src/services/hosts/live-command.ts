@@ -24,6 +24,7 @@ export interface RunLiveHostCommandArgs<
   TType extends HostDaemonDurableCommandType,
 > {
   command: Extract<HostDaemonCommand, { type: TType }>;
+  execution?: HostDaemonCommandExecutionRecord;
   hostId: string;
   timeoutMs: number;
 }
@@ -134,7 +135,9 @@ async function applyLiveHostCommandReport<
   await runPostCommitActions(deps, sideEffects.postCommitActions);
 }
 
-function createExecution(hostId: string): HostDaemonCommandExecutionRecord {
+export function createLiveHostCommandExecution(
+  hostId: string,
+): HostDaemonCommandExecutionRecord {
   return {
     createdAt: Date.now(),
     hostId,
@@ -148,7 +151,8 @@ export async function runLiveHostCommand<
   deps: CommandResultSideEffectsDeps,
   args: RunLiveHostCommandArgs<TType>,
 ): Promise<HostDaemonCommandResult<TType>> {
-  const execution = createExecution(args.hostId);
+  const execution =
+    args.execution ?? createLiveHostCommandExecution(args.hostId);
   try {
     const result = await callHostOnlineRpc(deps, {
       command: args.command,
@@ -167,12 +171,13 @@ export async function runLiveHostCommand<
     });
     return result;
   } catch (error) {
-    const normalized = error instanceof Error ? error : new Error(String(error));
+    const normalized =
+      error instanceof Error ? error : new Error(String(error));
     const failureReport = buildLiveHostCommandFailureReport({
-        command: args.command,
-        completedAt: Date.now(),
-        error: normalized,
-        execution,
+      command: args.command,
+      completedAt: Date.now(),
+      error: normalized,
+      execution,
     });
     try {
       await applyLiveHostCommandReport(deps, {
@@ -194,12 +199,15 @@ export async function runLiveHostCommand<
   }
 }
 
-export function startLiveHostCommand<TType extends HostDaemonDurableCommandType>(
+export function startLiveHostCommand<
+  TType extends HostDaemonDurableCommandType,
+>(
   deps: CommandResultSideEffectsDeps,
   args: StartLiveHostCommandArgs<TType>,
 ): void {
   void runLiveHostCommand(deps, args).catch((error) => {
-    const normalized = error instanceof Error ? error : new Error(String(error));
+    const normalized =
+      error instanceof Error ? error : new Error(String(error));
     args.onError?.(normalized);
   });
 }

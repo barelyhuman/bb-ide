@@ -16,8 +16,8 @@ import type {
 } from "../../types.js";
 import { deleteProjectAttachments } from "./attachments.js";
 import {
-  advanceEnvironmentCleanup,
   requestEnvironmentCleanup,
+  runEnvironmentCleanupAdvance,
 } from "../environments/environment-cleanup-internal.js";
 import { deferAfterResponse } from "../lib/response-deferral.js";
 import {
@@ -197,7 +197,7 @@ export async function advanceProjectDeletion(
     requestEnvironmentCleanup(deps, {
       environmentId: environment.id,
     });
-    await advanceEnvironmentCleanup(deps, {
+    await runEnvironmentCleanupAdvance(deps, {
       environmentId: environment.id,
     });
   }

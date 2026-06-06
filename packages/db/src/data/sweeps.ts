@@ -4,7 +4,6 @@ import {
   sql,
   lt,
   ne,
-  or,
   inArray,
 } from "drizzle-orm";
 import { type ThreadEventItemType } from "@bb/domain";
@@ -17,7 +16,7 @@ import {
 } from "../schema.js";
 
 /** Destroyed environments are hard-deleted after 7 days. */
-const DESTROYING_ENVIRONMENT_TTL_MS = 7 * 24 * 60 * 60_000;
+const DESTROYED_ENVIRONMENT_TTL_MS = 7 * 24 * 60 * 60_000;
 
 /** Closed daemon session rows are retained briefly for debugging/history. */
 export const CLOSED_SESSION_ROW_RETENTION_MS = 7 * 24 * 60 * 60_000;
@@ -434,7 +433,7 @@ export function sweepManagedEnvironments(db: DbConnection) {
   return rows;
 }
 
-export function sweepDestroyingEnvironments(
+export function pruneDestroyedEnvironments(
   db: DbConnection,
   notifier: DbNotifier,
   now?: number,
@@ -445,11 +444,8 @@ export function sweepDestroyingEnvironments(
     .from(environments)
     .where(
       and(
-        or(
-          eq(environments.status, "destroying"),
-          eq(environments.status, "destroyed"),
-        ),
-        lt(environments.updatedAt, currentTime - DESTROYING_ENVIRONMENT_TTL_MS),
+        eq(environments.status, "destroyed"),
+        lt(environments.updatedAt, currentTime - DESTROYED_ENVIRONMENT_TTL_MS),
       ),
     )
     .all()

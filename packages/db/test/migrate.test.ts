@@ -248,6 +248,12 @@ function dropEnvironmentNameColumn(db: DbConnection): void {
   db.$client.prepare("ALTER TABLE environments DROP COLUMN name").run();
 }
 
+function dropEnvironmentDestroyAttemptIdColumn(db: DbConnection): void {
+  db.$client
+    .prepare("ALTER TABLE environments DROP COLUMN destroy_attempt_id")
+    .run();
+}
+
 function readIndexNames(args: ReadIndexNamesArgs): string[] {
   return args.db.$client
     .prepare<TableNameParameters, IndexNameRow>(
@@ -983,9 +989,7 @@ describe("migrate", () => {
       seedPre0014ThreadSchedulesSchema(db);
       db.$client.prepare("DROP INDEX projects_deleted_idx").run();
       db.$client.prepare("ALTER TABLE projects DROP COLUMN deleted_at").run();
-      db.$client
-        .prepare("ALTER TABLE events ADD producer_event_id text")
-        .run();
+      db.$client.prepare("ALTER TABLE events ADD producer_event_id text").run();
       db.$client
         .prepare("ALTER TABLE events ADD producer_event_payload_hash text")
         .run();
@@ -1370,9 +1374,7 @@ describe("migrate", () => {
       db.$client
         .prepare("ALTER TABLE threads DROP COLUMN reasoning_level_override")
         .run();
-      db.$client
-        .prepare("ALTER TABLE events ADD producer_event_id text")
-        .run();
+      db.$client.prepare("ALTER TABLE events ADD producer_event_id text").run();
       db.$client
         .prepare("ALTER TABLE events ADD producer_event_payload_hash text")
         .run();
@@ -1712,6 +1714,7 @@ describe("migrate", () => {
         )
         .run("main-0001-hash", publishedTerminalSessionUserInputWhen);
       dropEnvironmentNameColumn(db);
+      dropEnvironmentDestroyAttemptIdColumn(db);
 
       expect(
         readIndexNames({ db, tableName: "host_daemon_sessions" }),
@@ -1881,9 +1884,7 @@ describe("migrate", () => {
           "ALTER TABLE hosts ADD command_cursor integer DEFAULT 0 NOT NULL",
         )
         .run();
-      db.$client
-        .prepare("ALTER TABLE events ADD producer_event_id text")
-        .run();
+      db.$client.prepare("ALTER TABLE events ADD producer_event_id text").run();
       db.$client
         .prepare("ALTER TABLE events ADD producer_event_payload_hash text")
         .run();
@@ -1964,6 +1965,7 @@ describe("migrate", () => {
         )
         .run(threadSchedulesMigrationWhen);
       dropEnvironmentNameColumn(db);
+      dropEnvironmentDestroyAttemptIdColumn(db);
       db.$client
         .prepare(
           `
@@ -2154,6 +2156,7 @@ describe("migrate", () => {
         )
         .run(terminalSessionRuntimeStateHonestyWhen);
       dropEnvironmentNameColumn(db);
+      dropEnvironmentDestroyAttemptIdColumn(db);
 
       migrate(db);
 
