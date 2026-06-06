@@ -17,7 +17,7 @@ interface AnsweredQuestionRowProps {
 export function QuestionWorkRowBody({ row }: QuestionWorkRowBodyProps) {
   // `resolving` and `answered` both have a recorded answer set — the
   // projection wires `row.answers` from the resolution as soon as the user
-  // submits. Pending, interrupted, and expired states are fully described by
+  // submits. Pending and interrupted states are fully described by
   // the row title (see `mapQuestionTitle` in @bb/thread-view), so their body
   // collapses out and the row renders title-only like web-search/web-fetch.
   if (row.lifecycle !== "answered" && row.lifecycle !== "resolving") {

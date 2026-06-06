@@ -134,7 +134,6 @@ const pendingInteractionColumns: ExpectedColumn[] = [
     notNull: true,
     primaryKey: false,
   },
-  { name: "session_id", type: "text", notNull: true, primaryKey: false },
   { name: "status", type: "text", notNull: true, primaryKey: false },
   { name: "payload", type: "text", notNull: true, primaryKey: false },
   { name: "resolution", type: "text", notNull: false, primaryKey: false },

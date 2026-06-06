@@ -44,7 +44,6 @@ export const eventProjectionPermissionGrantLifecycleValues = [
   "granted",
   "denied",
   "interrupted",
-  "expired",
 ] as const;
 export type EventProjectionPermissionGrantLifecycle =
   (typeof eventProjectionPermissionGrantLifecycleValues)[number];
@@ -53,7 +52,6 @@ export const eventProjectionUserQuestionLifecycleValues = [
   "resolving",
   "answered",
   "interrupted",
-  "expired",
 ] as const;
 export type EventProjectionUserQuestionLifecycle =
   (typeof eventProjectionUserQuestionLifecycleValues)[number];

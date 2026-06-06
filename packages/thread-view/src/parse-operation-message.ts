@@ -206,8 +206,6 @@ function permissionGrantLifecycle(
       return decoded.resolution?.decision === "deny" ? "denied" : "granted";
     case "interrupted":
       return "interrupted";
-    case "expired":
-      return "expired";
     default:
       return assertNever(decoded.status);
   }
@@ -225,8 +223,6 @@ function permissionGrantLifecycleStatus(
       return "completed";
     case "interrupted":
       return "interrupted";
-    case "expired":
-      return "error";
     default:
       return assertNever(lifecycle);
   }
@@ -287,8 +283,6 @@ function userQuestionLifecycle(
       return "answered";
     case "interrupted":
       return "interrupted";
-    case "expired":
-      return "expired";
     default:
       return assertNever(decoded.status);
   }
@@ -305,8 +299,6 @@ function userQuestionLifecycleStatus(
       return "completed";
     case "interrupted":
       return "interrupted";
-    case "expired":
-      return "error";
     default:
       return assertNever(lifecycle);
   }

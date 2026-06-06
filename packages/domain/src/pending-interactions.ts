@@ -5,7 +5,6 @@ export const pendingInteractionStatusSchema = z.enum([
   "resolving",
   "resolved",
   "interrupted",
-  "expired",
 ]);
 export type PendingInteractionStatus = z.infer<
   typeof pendingInteractionStatusSchema

@@ -86,7 +86,7 @@ interface PermissionGrantLifecycleEventArgs {
   interactionId?: string;
   resolution?: ApprovalPendingInteractionResolution | null;
   seq: number;
-  status?: "pending" | "resolving" | "resolved" | "interrupted" | "expired";
+  status?: "pending" | "resolving" | "resolved" | "interrupted";
   statusReason?: string | null;
   toolName?: string | null;
 }
@@ -125,7 +125,7 @@ interface UserQuestionLifecycleEventArgs {
   questionPrompt?: string;
   resolution?: UserQuestionPendingInteractionResolution | null;
   seq: number;
-  status?: "pending" | "resolving" | "resolved" | "interrupted" | "expired";
+  status?: "pending" | "resolving" | "resolved" | "interrupted";
   statusReason?: string | null;
 }
 
@@ -1374,16 +1374,10 @@ describe("buildThreadTimelineFromEvents", () => {
       status: "interrupted",
       statusReason: "Thread stopped by user request",
     },
-    {
-      expectedLifecycle: "expired",
-      expectedStatus: "error",
-      status: "expired",
-      statusReason: "Pending interaction expired",
-    },
   ] satisfies Array<{
-    expectedLifecycle: "interrupted" | "expired";
-    expectedStatus: "error" | "interrupted";
-    status: "interrupted" | "expired";
+    expectedLifecycle: "interrupted";
+    expectedStatus: "interrupted";
+    status: "interrupted";
     statusReason: string;
   }>)(
     "preserves permission grant $status status reason on timeline rows",
@@ -1468,25 +1462,12 @@ describe("buildThreadTimelineFromEvents", () => {
       status: "interrupted",
       statusReason: "Thread stopped by user request",
     },
-    {
-      expectedAnswers: null,
-      expectedLifecycle: "expired",
-      expectedStatus: "error",
-      resolution: null,
-      status: "expired",
-      statusReason: "Pending interaction expired",
-    },
   ] satisfies Array<{
     expectedAnswers: UserQuestionPendingInteractionResolution["answers"] | null;
-    expectedLifecycle:
-      | "pending"
-      | "resolving"
-      | "answered"
-      | "interrupted"
-      | "expired";
-    expectedStatus: "pending" | "completed" | "interrupted" | "error";
+    expectedLifecycle: "pending" | "resolving" | "answered" | "interrupted";
+    expectedStatus: "pending" | "completed" | "interrupted";
     resolution: UserQuestionPendingInteractionResolution | null;
-    status: "pending" | "resolving" | "resolved" | "interrupted" | "expired";
+    status: "pending" | "resolving" | "resolved" | "interrupted";
     statusReason: string | null;
   }>)(
     "projects user-question $expectedLifecycle lifecycle rows",
@@ -1581,16 +1562,10 @@ describe("buildThreadTimelineFromEvents", () => {
       status: "interrupted",
       statusReason: "Thread stopped by user request",
     },
-    {
-      expectedLifecycle: "expired",
-      expectedStatus: "error",
-      status: "expired",
-      statusReason: "Pending interaction expired",
-    },
   ] satisfies Array<{
-    expectedLifecycle: "interrupted" | "expired";
-    expectedStatus: "interrupted" | "error";
-    status: "interrupted" | "expired";
+    expectedLifecycle: "interrupted";
+    expectedStatus: "interrupted";
+    status: "interrupted";
     statusReason: string;
   }>)(
     "preserves terminal user-question $status rows after late resolving events",

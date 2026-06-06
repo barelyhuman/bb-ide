@@ -14,7 +14,6 @@ export interface CreatePendingInteractionInput {
   providerId: string;
   providerRequestId: string;
   providerThreadId: string;
-  sessionId: string;
   threadId: string;
   turnId: string;
 }
@@ -36,7 +35,7 @@ export interface SetPendingInteractionTerminalStateArgs {
   id: string;
   resolution: string | null;
   resolvedAt?: number;
-  status: "expired" | "interrupted" | "resolved";
+  status: "interrupted" | "resolved";
   statusReason: string | null;
 }
 
@@ -126,16 +125,15 @@ export function createPendingInteraction(
 
   return db
     .insert(pendingInteractions)
-      .values({
-        id: createPendingInteractionId(),
-        threadId: input.threadId,
+    .values({
+      id: createPendingInteractionId(),
+      threadId: input.threadId,
       turnId: input.turnId,
       providerId: input.providerId,
-        providerThreadId: input.providerThreadId,
-        providerRequestId: input.providerRequestId,
-        sessionId: input.sessionId,
-        status: "pending",
-        payload: input.payload,
+      providerThreadId: input.providerThreadId,
+      providerRequestId: input.providerRequestId,
+      status: "pending",
+      payload: input.payload,
       resolution: null,
       statusReason: null,
       createdAt: now,

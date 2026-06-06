@@ -189,22 +189,23 @@ const permissionGrantInterrupted: TimelineRow = approvalRow({
   toolName: "bash",
 });
 
-// Permission-grant, expired — no resolution arrived in time; the gate timed
-// out and recorded the reason.
-const permissionGrantExpired: TimelineRow = approvalRow({
-  id: "thr_yn2i6jeaca:approval:toolu_expired",
+// Permission-grant, interrupted — the daemon/session stopped before the user
+// could answer, so the lifecycle records the explicit interruption reason.
+const permissionGrantInterruptedBySession: TimelineRow = approvalRow({
+  id: "thr_yn2i6jeaca:approval:toolu_interrupted_session",
   threadId: "thr_yn2i6jeaca",
   turnId: "019dd501-9af2-7c10-b6e3-21bd9c3e7e80",
   sourceSeqStart: 950,
   sourceSeqEnd: 950,
   startedAt: 1777345600000,
   createdAt: 1777345630000,
-  status: "completed",
+  status: "interrupted",
   interactionId: "pi_6b7c8d9e",
   approvalKind: "permission-grant",
-  lifecycle: "expired",
+  lifecycle: "interrupted",
   grantScope: null,
-  statusReason: "Expired after 30s",
+  statusReason:
+    "Host daemon session expired while awaiting user interaction; retry the thread to continue",
   itemId: "toolu_01EoPNLPpnjDWJvvVChb8cc9",
   toolName: "TodoWrite",
 });
@@ -304,13 +305,13 @@ export function Overview() {
           </TimelineStage>
         </StoryRow>
         <StoryRow
-          label="permission-grant — expired"
-          hint='lifecycle=expired, statusReason="Expired after 30s"'
+          label="permission-grant — interrupted session"
+          hint="lifecycle=interrupted, session expired while awaiting interaction"
         >
           <TimelineStage>
             <ThreadTimelineRows
               {...baseProps}
-              timelineRows={[permissionGrantExpired]}
+              timelineRows={[permissionGrantInterruptedBySession]}
             />
           </TimelineStage>
         </StoryRow>

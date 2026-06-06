@@ -211,7 +211,6 @@ describe("slow query index plans", () => {
       providerId: "codex",
       providerThreadId: "provider-thread-query-plan",
       providerRequestId: "request-query-plan",
-      sessionId: "session-query-plan",
       payload: "{}",
     });
     logger.clear();

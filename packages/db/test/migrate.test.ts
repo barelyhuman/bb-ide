@@ -115,6 +115,20 @@ interface OperationBackfillInterruptedEventRow {
   type: string;
 }
 
+interface MigratedPendingInteractionStatusRow {
+  id: string;
+  resolvedAt: number | null;
+  status: string;
+  statusReason: string | null;
+  updatedAt: number;
+}
+
+interface MigratedPendingInteractionEventStatusRow {
+  id: string;
+  status: string | null;
+  statusReason: string | null;
+}
+
 interface PersonalProjectMigrationRow {
   count: number;
 }
@@ -184,6 +198,12 @@ const threadPinningMigrationPath = resolve(
   "..",
   "drizzle",
   "0008_thread_pinning.sql",
+);
+const pendingInteractionSchemaHonestyMigrationPath = resolve(
+  __dirname,
+  "..",
+  "drizzle",
+  "0019_pending_interactions_schema_honesty.sql",
 );
 
 function closeConnection(db: DbConnection): void {
@@ -484,6 +504,228 @@ describe("migrate", () => {
           )
           .run(),
       ).toThrow();
+    } finally {
+      closeConnection(db);
+    }
+  });
+
+  it("normalizes legacy expired pending interactions and drops session_id", () => {
+    const db = createConnection(":memory:");
+
+    try {
+      db.$client.exec(`
+        CREATE TABLE pending_interactions (
+          id text PRIMARY KEY NOT NULL,
+          thread_id text NOT NULL,
+          turn_id text NOT NULL,
+          provider_id text NOT NULL,
+          provider_thread_id text NOT NULL,
+          provider_request_id text NOT NULL,
+          session_id text NOT NULL,
+          status text NOT NULL,
+          payload text NOT NULL,
+          resolution text,
+          status_reason text,
+          created_at integer NOT NULL,
+          resolved_at integer,
+          updated_at integer NOT NULL
+        );
+        INSERT INTO pending_interactions (
+          id,
+          thread_id,
+          turn_id,
+          provider_id,
+          provider_thread_id,
+          provider_request_id,
+          session_id,
+          status,
+          payload,
+          resolution,
+          status_reason,
+          created_at,
+          resolved_at,
+          updated_at
+        )
+        VALUES
+          (
+            'pi_expired_without_reason',
+            'thr_legacy_pending',
+            'turn_legacy_pending_1',
+            'codex',
+            'provider-thread-legacy-pending',
+            'request-legacy-pending-1',
+            'session-legacy-pending',
+            'expired',
+            '{}',
+            NULL,
+            NULL,
+            10,
+            NULL,
+            20
+          ),
+          (
+            'pi_expired_with_reason',
+            'thr_legacy_pending',
+            'turn_legacy_pending_2',
+            'codex',
+            'provider-thread-legacy-pending',
+            'request-legacy-pending-2',
+            'session-legacy-pending',
+            'expired',
+            '{}',
+            NULL,
+            'Already expired',
+            30,
+            50,
+            40
+          ),
+          (
+            'pi_interrupted',
+            'thr_legacy_pending',
+            'turn_legacy_pending_3',
+            'codex',
+            'provider-thread-legacy-pending',
+            'request-legacy-pending-3',
+            'session-legacy-pending',
+            'interrupted',
+            '{}',
+            NULL,
+            'Manual stop',
+            60,
+            70,
+            80
+          );
+        CREATE TABLE events (
+          id text PRIMARY KEY NOT NULL,
+          type text NOT NULL,
+          data text NOT NULL
+        );
+        INSERT INTO events (id, type, data)
+        VALUES
+          (
+            'evt_expired_permission_grant',
+            'system/permissionGrant/lifecycle',
+            '{"status":"expired","statusReason":"Already expired"}'
+          ),
+          (
+            'evt_expired_user_question',
+            'system/userQuestion/lifecycle',
+            '{"status":"expired"}'
+          ),
+          (
+            'evt_interrupted_permission_grant',
+            'system/permissionGrant/lifecycle',
+            '{"status":"interrupted","statusReason":"Manual stop"}'
+          ),
+          (
+            'evt_other_expired',
+            'system/operation',
+            '{"status":"expired"}'
+          );
+      `);
+
+      runMigrationFile({
+        db,
+        migrationPath: pendingInteractionSchemaHonestyMigrationPath,
+      });
+
+      const rows = db.$client
+        .prepare<[], MigratedPendingInteractionStatusRow>(
+          `
+            SELECT
+              id,
+              status,
+              status_reason AS statusReason,
+              resolved_at AS resolvedAt,
+              updated_at AS updatedAt
+            FROM pending_interactions
+            ORDER BY id
+          `,
+        )
+        .all();
+
+      expect(rows).toEqual([
+        {
+          id: "pi_expired_with_reason",
+          status: "interrupted",
+          statusReason: "Already expired",
+          resolvedAt: 50,
+          updatedAt: 50,
+        },
+        {
+          id: "pi_expired_without_reason",
+          status: "interrupted",
+          statusReason: "Pending interaction expired",
+          resolvedAt: 20,
+          updatedAt: 20,
+        },
+        {
+          id: "pi_interrupted",
+          status: "interrupted",
+          statusReason: "Manual stop",
+          resolvedAt: 70,
+          updatedAt: 80,
+        },
+      ]);
+      const pendingInteractionColumns = db.$client
+        .prepare<[], TableNameRow>(
+          `
+            SELECT name
+            FROM pragma_table_info('pending_interactions')
+            ORDER BY cid
+          `,
+        )
+        .all()
+        .map((row) => row.name);
+      expect(pendingInteractionColumns).toEqual([
+        "id",
+        "thread_id",
+        "turn_id",
+        "provider_id",
+        "provider_thread_id",
+        "provider_request_id",
+        "status",
+        "payload",
+        "resolution",
+        "status_reason",
+        "created_at",
+        "resolved_at",
+        "updated_at",
+      ]);
+      const eventRows = db.$client
+        .prepare<[], MigratedPendingInteractionEventStatusRow>(
+          `
+            SELECT
+              id,
+              json_extract(data, '$.status') AS status,
+              json_extract(data, '$.statusReason') AS statusReason
+            FROM events
+            ORDER BY id
+          `,
+        )
+        .all();
+      expect(eventRows).toEqual([
+        {
+          id: "evt_expired_permission_grant",
+          status: "interrupted",
+          statusReason: "Already expired",
+        },
+        {
+          id: "evt_expired_user_question",
+          status: "interrupted",
+          statusReason: "Pending interaction expired",
+        },
+        {
+          id: "evt_interrupted_permission_grant",
+          status: "interrupted",
+          statusReason: "Manual stop",
+        },
+        {
+          id: "evt_other_expired",
+          status: "expired",
+          statusReason: null,
+        },
+      ]);
     } finally {
       closeConnection(db);
     }
@@ -908,6 +1150,11 @@ describe("migrate", () => {
           "ALTER TABLE host_daemon_sessions ADD COLUMN last_heartbeat_at integer",
         )
         .run();
+      db.$client
+        .prepare(
+          "ALTER TABLE pending_interactions ADD COLUMN session_id text NOT NULL DEFAULT 'legacy-session'",
+        )
+        .run();
       db.$client.prepare("DELETE FROM __drizzle_migrations").run();
       db.$client
         .prepare<InsertMigrationParameters>(
@@ -1112,6 +1359,11 @@ describe("migrate", () => {
       db.$client
         .prepare(
           "ALTER TABLE host_daemon_sessions ADD COLUMN last_heartbeat_at integer",
+        )
+        .run();
+      db.$client
+        .prepare(
+          "ALTER TABLE pending_interactions ADD COLUMN session_id text NOT NULL DEFAULT 'legacy-session'",
         )
         .run();
       db.$client

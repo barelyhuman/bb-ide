@@ -42,7 +42,6 @@ function registerPendingInteraction(
   deps: Pick<AppDeps, "db" | "hub">,
   lifecycle: PendingInteractionLifecycle,
   interaction: PendingInteractionCreate,
-  sessionId: string,
 ) {
   seedTurnStarted(deps, {
     threadId: interaction.threadId,
@@ -51,7 +50,6 @@ function registerPendingInteraction(
   });
   return lifecycle.registerPendingInteraction({
     interaction,
-    sessionId,
   });
 }
 
@@ -63,194 +61,201 @@ interface InvalidUserQuestionResolutionCase {
   resolution: PendingInteractionResolution;
 }
 
-const invalidUserQuestionResolutionCases: InvalidUserQuestionResolutionCase[] = [
-  {
-    id: "wrong-kind",
-    name: "wrong resolution kind",
-    createPayload: () => createUserQuestionPayload(),
-    resolution: {
-      decision: "deny",
+const invalidUserQuestionResolutionCases: InvalidUserQuestionResolutionCase[] =
+  [
+    {
+      id: "wrong-kind",
+      name: "wrong resolution kind",
+      createPayload: () => createUserQuestionPayload(),
+      resolution: {
+        decision: "deny",
+      },
+      expectedMessage:
+        "Approval resolutions can only resolve approval interactions",
     },
-    expectedMessage: "Approval resolutions can only resolve approval interactions",
-  },
-  {
-    id: "unknown-question",
-    name: "unknown question id",
-    createPayload: () => createUserQuestionPayload(),
-    resolution: {
-      kind: "user_answer",
-      answers: {
-        "missing-question": {
-          selected: ["staging"],
-        },
-        "question-1": {
-          selected: ["staging"],
+    {
+      id: "unknown-question",
+      name: "unknown question id",
+      createPayload: () => createUserQuestionPayload(),
+      resolution: {
+        kind: "user_answer",
+        answers: {
+          "missing-question": {
+            selected: ["staging"],
+          },
+          "question-1": {
+            selected: ["staging"],
+          },
         },
       },
+      expectedMessage: "Answer references unknown question 'missing-question'",
     },
-    expectedMessage: "Answer references unknown question 'missing-question'",
-  },
-  {
-    id: "missing-answer",
-    name: "missing answer",
-    createPayload: () => createUserQuestionPayload(),
-    resolution: {
-      kind: "user_answer",
-      answers: {},
+    {
+      id: "missing-answer",
+      name: "missing answer",
+      createPayload: () => createUserQuestionPayload(),
+      resolution: {
+        kind: "user_answer",
+        answers: {},
+      },
+      expectedMessage: "Missing answer for question 'question-1'",
     },
-    expectedMessage: "Missing answer for question 'question-1'",
-  },
-  {
-    id: "duplicate-selections",
-    name: "duplicate selections",
-    createPayload: () => createUserQuestionPayload(),
-    resolution: {
-      kind: "user_answer",
-      answers: {
-        "question-1": {
-          selected: ["staging", "staging"],
+    {
+      id: "duplicate-selections",
+      name: "duplicate selections",
+      createPayload: () => createUserQuestionPayload(),
+      resolution: {
+        kind: "user_answer",
+        answers: {
+          "question-1": {
+            selected: ["staging", "staging"],
+          },
         },
       },
+      expectedMessage:
+        "Answer for question 'question-1' contains duplicate selections",
     },
-    expectedMessage: "Answer for question 'question-1' contains duplicate selections",
-  },
-  {
-    id: "single-select-multiple",
-    name: "multiple selections for single-select",
-    createPayload: () => createUserQuestionPayload(),
-    resolution: {
-      kind: "user_answer",
-      answers: {
-        "question-1": {
-          selected: ["staging", "production"],
+    {
+      id: "single-select-multiple",
+      name: "multiple selections for single-select",
+      createPayload: () => createUserQuestionPayload(),
+      resolution: {
+        kind: "user_answer",
+        answers: {
+          "question-1": {
+            selected: ["staging", "production"],
+          },
         },
       },
+      expectedMessage: "Question 'question-1' accepts only one selected option",
     },
-    expectedMessage: "Question 'question-1' accepts only one selected option",
-  },
-  {
-    id: "unavailable-option",
-    name: "unavailable selected option",
-    createPayload: () => createUserQuestionPayload(),
-    resolution: {
-      kind: "user_answer",
-      answers: {
-        "question-1": {
-          selected: ["qa"],
+    {
+      id: "unavailable-option",
+      name: "unavailable selected option",
+      createPayload: () => createUserQuestionPayload(),
+      resolution: {
+        kind: "user_answer",
+        answers: {
+          "question-1": {
+            selected: ["qa"],
+          },
         },
       },
+      expectedMessage:
+        "Answer for question 'question-1' selected an unavailable option",
     },
-    expectedMessage:
-      "Answer for question 'question-1' selected an unavailable option",
-  },
-  {
-    id: "more-selections-than-options",
-    name: "more selections than available options",
-    createPayload: () =>
-      createUserQuestionPayload({
-        multiSelect: true,
-      }),
-    resolution: {
-      kind: "user_answer",
-      answers: {
-        "question-1": {
-          selected: ["staging", "production", "qa"],
+    {
+      id: "more-selections-than-options",
+      name: "more selections than available options",
+      createPayload: () =>
+        createUserQuestionPayload({
+          multiSelect: true,
+        }),
+      resolution: {
+        kind: "user_answer",
+        answers: {
+          "question-1": {
+            selected: ["staging", "production", "qa"],
+          },
         },
       },
+      expectedMessage:
+        "Answer for question 'question-1' selects more options than are available",
     },
-    expectedMessage:
-      "Answer for question 'question-1' selects more options than are available",
-  },
-  {
-    id: "too-many-selections",
-    name: "too many selections",
-    createPayload: () =>
-      createUserQuestionPayload({
-        multiSelect: true,
-      }),
-    resolution: {
-      kind: "user_answer",
-      answers: {
-        "question-1": {
-          selected: Array.from(
-            { length: USER_QUESTION_MAX_SELECTED + 1 },
-            (_, index) => `option-${index}`,
-          ),
+    {
+      id: "too-many-selections",
+      name: "too many selections",
+      createPayload: () =>
+        createUserQuestionPayload({
+          multiSelect: true,
+        }),
+      resolution: {
+        kind: "user_answer",
+        answers: {
+          "question-1": {
+            selected: Array.from(
+              { length: USER_QUESTION_MAX_SELECTED + 1 },
+              (_, index) => `option-${index}`,
+            ),
+          },
         },
       },
+      expectedMessage: `User question selected choices cannot exceed ${USER_QUESTION_MAX_SELECTED}`,
     },
-    expectedMessage: `User question selected choices cannot exceed ${USER_QUESTION_MAX_SELECTED}`,
-  },
-  {
-    id: "free-text-disallowed",
-    name: "free text disallowed",
-    createPayload: () => createUserQuestionPayload({ allowFreeText: false }),
-    resolution: {
-      kind: "user_answer",
-      answers: {
-        "question-1": {
-          selected: ["staging"],
-          freeText: "Use staging first.",
+    {
+      id: "free-text-disallowed",
+      name: "free text disallowed",
+      createPayload: () => createUserQuestionPayload({ allowFreeText: false }),
+      resolution: {
+        kind: "user_answer",
+        answers: {
+          "question-1": {
+            selected: ["staging"],
+            freeText: "Use staging first.",
+          },
         },
       },
+      expectedMessage:
+        "Question 'question-1' does not accept free-text answers",
     },
-    expectedMessage: "Question 'question-1' does not accept free-text answers",
-  },
-  {
-    id: "empty-answer",
-    name: "empty answer",
-    createPayload: () => createUserQuestionPayload(),
-    resolution: {
-      kind: "user_answer",
-      answers: {
-        "question-1": {
-          selected: [],
+    {
+      id: "empty-answer",
+      name: "empty answer",
+      createPayload: () => createUserQuestionPayload(),
+      resolution: {
+        kind: "user_answer",
+        answers: {
+          "question-1": {
+            selected: [],
+          },
         },
       },
+      expectedMessage:
+        "Question 'question-1' must include a selected option or free-text answer",
     },
-    expectedMessage:
-      "Question 'question-1' must include a selected option or free-text answer",
-  },
-  {
-    id: "blank-free-text",
-    name: "blank free text",
-    createPayload: () => createUserQuestionPayload(),
-    resolution: {
-      kind: "user_answer",
-      answers: {
-        "question-1": {
-          selected: [],
-          freeText: "   ",
+    {
+      id: "blank-free-text",
+      name: "blank free text",
+      createPayload: () => createUserQuestionPayload(),
+      resolution: {
+        kind: "user_answer",
+        answers: {
+          "question-1": {
+            selected: [],
+            freeText: "   ",
+          },
         },
       },
+      expectedMessage: "User question free text cannot be blank",
     },
-    expectedMessage: "User question free text cannot be blank",
-  },
-  {
-    id: "oversized-free-text",
-    name: "oversized free text",
-    createPayload: () => createUserQuestionPayload(),
-    resolution: {
-      kind: "user_answer",
-      answers: {
-        "question-1": {
-          selected: [],
-          freeText: "x".repeat(USER_QUESTION_MAX_FREE_TEXT_LENGTH + 1),
+    {
+      id: "oversized-free-text",
+      name: "oversized free text",
+      createPayload: () => createUserQuestionPayload(),
+      resolution: {
+        kind: "user_answer",
+        answers: {
+          "question-1": {
+            selected: [],
+            freeText: "x".repeat(USER_QUESTION_MAX_FREE_TEXT_LENGTH + 1),
+          },
         },
       },
+      expectedMessage: `User question free text cannot exceed ${USER_QUESTION_MAX_FREE_TEXT_LENGTH} characters`,
     },
-    expectedMessage: `User question free text cannot exceed ${USER_QUESTION_MAX_FREE_TEXT_LENGTH} characters`,
-  },
-];
+  ];
 
 describe("public thread interaction routes", () => {
   it("lists, gets, and resolves thread-owned interactions", async () => {
     await withTestHarness(async (harness) => {
-      const { session, project, environment, thread } = seedThreadFixture(harness, {
-        session: {
-        id: "host-public-thread-interactions",
-      },
-      });
+      const { session, project, environment, thread } = seedThreadFixture(
+        harness,
+        {
+          session: {
+            id: "host-public-thread-interactions",
+          },
+        },
+      );
       const otherThread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
@@ -272,7 +277,6 @@ describe("public thread interaction routes", () => {
             cwd: "/tmp/project",
           }),
         },
-        session.id,
       );
       if (registered.outcome === "rejected") {
         throw new Error(
@@ -383,6 +387,7 @@ describe("public thread interaction routes", () => {
           command.type === "interactive.resolve" &&
           command.interactionId === registered.interaction.id,
       );
+      expect(queuedResolve.row.sessionId).toBe(session.id);
       const commandResultResponse = await reportQueuedCommandSuccess(
         harness,
         queuedResolve,
@@ -400,10 +405,10 @@ describe("public thread interaction routes", () => {
 
   it("rejects unavailable command decisions and malformed provider-specific resolutions", async () => {
     await withTestHarness(async (harness) => {
-      const { session, thread } = seedThreadFixture(harness, {
+      const { thread } = seedThreadFixture(harness, {
         session: {
-        id: "host-public-thread-invalid-resolution",
-      },
+          id: "host-public-thread-invalid-resolution",
+        },
       });
 
       const commandApproval = registerPendingInteraction(
@@ -423,7 +428,6 @@ describe("public thread interaction routes", () => {
             availableDecisions: ["allow_once", "deny"],
           }),
         },
-        session.id,
       );
       if (commandApproval.outcome === "rejected") {
         throw new Error(
@@ -495,10 +499,10 @@ describe("public thread interaction routes", () => {
 
   it("resolves permission requests and rejects grants outside the requested scope", async () => {
     await withTestHarness(async (harness) => {
-      const { session, thread } = seedThreadFixture(harness, {
+      const { thread } = seedThreadFixture(harness, {
         session: {
-        id: "host-public-thread-permission-resolution",
-      },
+          id: "host-public-thread-permission-resolution",
+        },
       });
 
       const permissionRequest = registerPendingInteraction(
@@ -523,7 +527,6 @@ describe("public thread interaction routes", () => {
             },
           }),
         },
-        session.id,
       );
       if (permissionRequest.outcome === "rejected") {
         throw new Error(
@@ -593,7 +596,6 @@ describe("public thread interaction routes", () => {
             },
           }),
         },
-        session.id,
       );
       if (deniedPermissionRequest.outcome === "rejected") {
         throw new Error(
@@ -652,7 +654,6 @@ describe("public thread interaction routes", () => {
             },
           }),
         },
-        session.id,
       );
       if (invalidPermissionRequest.outcome === "rejected") {
         throw new Error(
@@ -690,10 +691,10 @@ describe("public thread interaction routes", () => {
 
   it("rejects provider-specific command approval amendment resolutions", async () => {
     await withTestHarness(async (harness) => {
-      const { session, thread } = seedThreadFixture(harness, {
+      const { thread } = seedThreadFixture(harness, {
         session: {
-        id: "host-public-thread-amendment-resolution",
-      },
+          id: "host-public-thread-amendment-resolution",
+        },
       });
 
       const commandApproval = registerPendingInteraction(
@@ -713,7 +714,6 @@ describe("public thread interaction routes", () => {
             availableDecisions: ["allow_once", "deny"],
           }),
         },
-        session.id,
       );
       if (commandApproval.outcome === "rejected") {
         throw new Error(
@@ -750,7 +750,7 @@ describe("public thread interaction routes", () => {
     "rejects invalid user-question resolutions: $name",
     async (testCase) => {
       await withTestHarness(async (harness) => {
-        const { host, session } = seedHostSession(harness.deps, {
+        const { host } = seedHostSession(harness.deps, {
           id: `host-public-thread-question-${testCase.id}`,
         });
         const { project } = seedProjectWithSource(harness.deps, {
@@ -777,7 +777,6 @@ describe("public thread interaction routes", () => {
             providerRequestId: `request-question-${testCase.id}`,
             payload: testCase.createPayload(),
           },
-          session.id,
         );
         if (userQuestion.outcome === "rejected") {
           throw new Error(
@@ -816,7 +815,7 @@ describe("public thread interaction routes", () => {
 
   it("rejects send and queued-message send while a thread awaits user interaction", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-public-thread-blocked-send",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -856,7 +855,6 @@ describe("public thread interaction routes", () => {
             cwd: "/tmp/project",
           }),
         },
-        session.id,
       );
       if (pending.outcome === "rejected") {
         throw new Error(
@@ -1004,10 +1002,10 @@ describe("public thread interaction routes", () => {
 
   it("resolves file-change interactions through thread routes", async () => {
     await withTestHarness(async (harness) => {
-      const { session, thread } = seedThreadFixture(harness, {
+      const { thread } = seedThreadFixture(harness, {
         session: {
-        id: "host-public-thread-extra-interactions",
-      },
+          id: "host-public-thread-extra-interactions",
+        },
       });
 
       const fileChange = registerPendingInteraction(
@@ -1024,7 +1022,6 @@ describe("public thread interaction routes", () => {
             reason: "Approve file changes",
           }),
         },
-        session.id,
       );
       if (fileChange.outcome === "rejected") {
         throw new Error(
@@ -1053,10 +1050,10 @@ describe("public thread interaction routes", () => {
 
   it("projects pending-interaction lifecycle updates into the thread timeline", async () => {
     await withTestHarness(async (harness) => {
-      const { session, environment, thread } = seedThreadFixture(harness, {
+      const { environment, thread } = seedThreadFixture(harness, {
         session: {
-        id: "host-public-thread-interaction-timeline",
-      },
+          id: "host-public-thread-interaction-timeline",
+        },
         thread: { status: "active" },
       });
       appendThreadEvent(harness.deps, {
@@ -1086,7 +1083,6 @@ describe("public thread interaction routes", () => {
             cwd: "/tmp/project",
           }),
         },
-        session.id,
       );
       if (registered.outcome === "rejected") {
         throw new Error(
@@ -1136,10 +1132,10 @@ describe("public thread interaction routes", () => {
 
   it("projects denied command approvals into target-specific timeline rows", async () => {
     await withTestHarness(async (harness) => {
-      const { session, environment, thread } = seedThreadFixture(harness, {
+      const { environment, thread } = seedThreadFixture(harness, {
         session: {
-        id: "host-public-thread-interaction-denied-timeline",
-      },
+          id: "host-public-thread-interaction-denied-timeline",
+        },
         thread: { status: "active" },
       });
       appendThreadEvent(harness.deps, {
@@ -1169,7 +1165,6 @@ describe("public thread interaction routes", () => {
             cwd: "/tmp/project",
           }),
         },
-        session.id,
       );
       if (registered.outcome === "rejected") {
         throw new Error(
@@ -1219,10 +1214,10 @@ describe("public thread interaction routes", () => {
 
   it("projects file-change approvals into item-specific timeline rows without diffs", async () => {
     await withTestHarness(async (harness) => {
-      const { session, environment, thread } = seedThreadFixture(harness, {
+      const { environment, thread } = seedThreadFixture(harness, {
         session: {
-        id: "host-public-thread-interaction-file-timeline",
-      },
+          id: "host-public-thread-interaction-file-timeline",
+        },
         thread: { status: "active" },
       });
       appendThreadEvent(harness.deps, {
@@ -1251,7 +1246,6 @@ describe("public thread interaction routes", () => {
             writeScope: "/tmp/project",
           }),
         },
-        session.id,
       );
       if (registered.outcome === "rejected") {
         throw new Error(
@@ -1282,10 +1276,10 @@ describe("public thread interaction routes", () => {
 
   it("projects permission-grant approvals into typed lifecycle timeline rows", async () => {
     await withTestHarness(async (harness) => {
-      const { session, environment, thread } = seedThreadFixture(harness, {
+      const { environment, thread } = seedThreadFixture(harness, {
         session: {
-        id: "host-public-thread-interaction-permission-timeline",
-      },
+          id: "host-public-thread-interaction-permission-timeline",
+        },
         thread: { status: "active" },
       });
       appendThreadEvent(harness.deps, {
@@ -1318,7 +1312,6 @@ describe("public thread interaction routes", () => {
             },
           }),
         },
-        session.id,
       );
       if (registered.outcome === "rejected") {
         throw new Error(

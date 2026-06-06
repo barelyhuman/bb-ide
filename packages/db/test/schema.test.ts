@@ -76,7 +76,7 @@ describe("db rebuild schema", () => {
       )
       .all();
 
-    expect(columns).toHaveLength(14);
+    expect(columns).toHaveLength(13);
     expect(columns).toEqual(
       expect.arrayContaining([
         { name: "id", type: "text", notNull: 1, primaryKey: 1 },
@@ -90,7 +90,6 @@ describe("db rebuild schema", () => {
           notNull: 1,
           primaryKey: 0,
         },
-        { name: "session_id", type: "text", notNull: 1, primaryKey: 0 },
         { name: "status", type: "text", notNull: 1, primaryKey: 0 },
         { name: "payload", type: "text", notNull: 1, primaryKey: 0 },
         { name: "resolution", type: "text", notNull: 0, primaryKey: 0 },

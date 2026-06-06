@@ -26,7 +26,7 @@ export function isWorkRowExpandable(row: TimelineViewWorkRow): boolean {
       return true;
     case "question":
       // Resolving and answered rows both carry a recorded answer in their
-      // body. Pending/interrupted/expired stay title-only. Matches the
+      // body. Pending/interrupted stay title-only. Matches the
       // body-collapse rule in QuestionWorkRowBody.
       return row.lifecycle === "answered" || row.lifecycle === "resolving";
     case "command":

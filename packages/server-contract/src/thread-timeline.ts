@@ -330,14 +330,12 @@ export const timelinePermissionGrantApprovalLifecycleValues = [
   "granted",
   "denied",
   "interrupted",
-  "expired",
 ] as const;
 export const timelineQuestionLifecycleValues = [
   "pending",
   "resolving",
   "answered",
   "interrupted",
-  "expired",
 ] as const;
 export const timelinePermissionGrantApprovalGrantScopeValues = [
   "turn",

@@ -104,7 +104,6 @@ export function registerInternalInteractiveRequestRoutes(
 
       const registered = deps.pendingInteractions.registerPendingInteraction({
         interaction: payload.interaction,
-        sessionId: payload.sessionId,
       });
       if (registered.outcome === "rejected") {
         return context.json({

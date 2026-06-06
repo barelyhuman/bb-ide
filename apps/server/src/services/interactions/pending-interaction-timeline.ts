@@ -291,7 +291,6 @@ function appendPermissionGrantLifecycleTimelineEvent(
     case "resolving":
     case "resolved":
     case "interrupted":
-    case "expired":
       appendPermissionGrantTimelineEvent(deps, interaction, subject);
       return;
   }
@@ -307,7 +306,6 @@ function appendPermissionGrantLifecycleTimelineEventInTransaction(
     case "resolving":
     case "resolved":
     case "interrupted":
-    case "expired":
       appendPermissionGrantTimelineEventInTransaction(
         deps,
         interaction,
@@ -349,7 +347,6 @@ function appendItemLifecycleTimelineEvent(
       }
       return;
     case "interrupted":
-    case "expired":
       appendApprovalSubjectItemEvent(
         deps,
         interaction,
@@ -393,7 +390,6 @@ function appendItemLifecycleTimelineEventInTransaction(
       }
       return;
     case "interrupted":
-    case "expired":
       appendApprovalSubjectItemEventInTransaction(
         deps,
         interaction,

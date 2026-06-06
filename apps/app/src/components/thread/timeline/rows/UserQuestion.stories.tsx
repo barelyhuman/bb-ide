@@ -106,12 +106,13 @@ const interruptedQuestion = questionRow({
   statusReason: "The turn was interrupted before the question was answered.",
 });
 
-const expiredQuestion = questionRow({
+const interruptedSessionQuestion = questionRow({
   ...questionBaseArgs,
-  id: "thr_question_story:question:expired",
-  lifecycle: "expired",
-  status: "completed",
-  statusReason: "Expired before an answer was submitted.",
+  id: "thr_question_story:question:interrupted-session",
+  lifecycle: "interrupted",
+  status: "interrupted",
+  statusReason:
+    "Host daemon session expired while awaiting user interaction; retry the thread to continue",
 });
 
 export function Overview() {
@@ -159,12 +160,15 @@ export function Overview() {
           />
         </TimelineStage>
       </StoryRow>
-      <StoryRow label="expired" hint="question timed out unresolved">
+      <StoryRow
+        label="interrupted session"
+        hint="question interrupted before answer"
+      >
         <TimelineStage>
           <ThreadTimelineRows
             {...baseProps}
-            timelineRows={[expiredQuestion]}
-            initialExpanded={new Set([expiredQuestion.id])}
+            timelineRows={[interruptedSessionQuestion]}
+            initialExpanded={new Set([interruptedSessionQuestion.id])}
           />
         </TimelineStage>
       </StoryRow>

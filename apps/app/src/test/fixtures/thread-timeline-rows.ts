@@ -329,9 +329,8 @@ function permissionGrantLifecycleFromStatus(
       return "pending";
     case "completed":
       return "granted";
-    case "error":
-      return "expired";
     case "interrupted":
+    case "error":
       return "interrupted";
   }
 }
@@ -344,9 +343,8 @@ function questionLifecycleFromStatus(
       return "pending";
     case "completed":
       return "answered";
-    case "error":
-      return "expired";
     case "interrupted":
+    case "error":
       return "interrupted";
   }
 }
@@ -362,8 +360,6 @@ function questionStatusFromLifecycle(
       return "completed";
     case "interrupted":
       return "interrupted";
-    case "expired":
-      return "error";
   }
 }
 
@@ -867,8 +863,7 @@ export function approvalRow({
       lifecycle === "resolving" ||
       lifecycle === "granted" ||
       lifecycle === "denied" ||
-      lifecycle === "interrupted" ||
-      lifecycle === "expired"
+      lifecycle === "interrupted"
         ? lifecycle
         : permissionGrantLifecycleFromStatus(status),
     grantScope,

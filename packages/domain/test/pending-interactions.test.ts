@@ -187,6 +187,35 @@ describe("pending interaction schemas", () => {
     });
   });
 
+  it("rejects expired pending interaction status", () => {
+    const result = pendingInteractionSchema.safeParse({
+      id: "pi_expired_legacy",
+      threadId: "thr_expired_legacy",
+      turnId: "turn_expired_legacy",
+      providerId: "claude-code",
+      providerThreadId: "provider-thread-expired-legacy",
+      providerRequestId: "request-expired-legacy",
+      status: "expired",
+      payload: {
+        kind: "user_question",
+        questions: [
+          {
+            id: "q1",
+            prompt: "Which branch should I update?",
+            multiSelect: false,
+            allowFreeText: true,
+          },
+        ],
+      },
+      resolution: null,
+      statusReason: "Pending interaction expired",
+      createdAt: 1,
+      resolvedAt: 2,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it("rejects malformed user question payloads and answer shapes", () => {
     expect(() =>
       pendingInteractionCreateSchema.parse({

@@ -259,8 +259,6 @@ function permissionGrantApprovalRow({
         return "completed";
       case "interrupted":
         return "interrupted";
-      case "expired":
-        return "error";
     }
   })();
   return {
@@ -551,13 +549,6 @@ describe("buildTimelineRowTitle", () => {
       shimmer: false,
       expectedSegments: ["Permission grant interrupted:", "Bash"],
     },
-    {
-      decorationTexts: [],
-      expectedPlain: "Permission grant expired: Bash",
-      lifecycle: "expired",
-      shimmer: false,
-      expectedSegments: ["Permission grant expired:", "Bash"],
-    },
   ] satisfies Array<{
     decorationTexts: string[];
     expectedPlain: string;
@@ -596,24 +587,13 @@ describe("buildTimelineRowTitle", () => {
         "Permission grant interrupted: Bash (Thread stopped by user request)",
       lifecycle: "interrupted",
     },
-    {
-      expectedPlain:
-        "Permission grant expired: Bash (Pending interaction expired)",
-      lifecycle: "expired",
-    },
   ] satisfies Array<{
     expectedPlain: string;
-    lifecycle: Extract<
-      PermissionGrantApprovalLifecycle,
-      "expired" | "interrupted"
-    >;
+    lifecycle: Extract<PermissionGrantApprovalLifecycle, "interrupted">;
   }>)(
     "renders permission grant $lifecycle status reason",
     ({ expectedPlain, lifecycle }) => {
-      const statusReason =
-        lifecycle === "interrupted"
-          ? "Thread stopped by user request"
-          : "Pending interaction expired";
+      const statusReason = "Thread stopped by user request";
       const title = buildTimelineRowTitle(
         permissionGrantApprovalRow({ lifecycle, statusReason }),
         DEFAULT_OPTIONS,

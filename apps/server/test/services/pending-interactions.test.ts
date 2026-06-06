@@ -29,7 +29,6 @@ function registerPendingInteraction(
   deps: Pick<AppDeps, "db" | "hub">,
   lifecycle: PendingInteractionLifecycle,
   interaction: PendingInteractionCreate,
-  sessionId: string,
 ) {
   seedTurnStarted(deps, {
     threadId: interaction.threadId,
@@ -38,14 +37,13 @@ function registerPendingInteraction(
   });
   return lifecycle.registerPendingInteraction({
     interaction,
-    sessionId,
   });
 }
 
 describe("pending interaction lifecycle", () => {
   it("includes project and pending state metadata in interaction change notifications", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-notification-metadata",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -77,7 +75,6 @@ describe("pending interaction lifecycle", () => {
             cwd: "/tmp/project",
           }),
         },
-        session.id,
       );
       if (created.outcome === "rejected") {
         throw new Error(
@@ -121,7 +118,7 @@ describe("pending interaction lifecycle", () => {
         machineAuth: harness.deps.machineAuth,
         terminalSessions: harness.deps.terminalSessions,
       });
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-corrupt-list",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -136,24 +133,19 @@ describe("pending interaction lifecycle", () => {
         environmentId: environment.id,
       });
 
-      const corrupt = registerPendingInteraction(
-        harness.deps,
-        lifecycle,
-        {
-          threadId: thread.id,
-          turnId: "turn-corrupt-list-1",
-          providerId: "codex",
-          providerThreadId: "provider-thread-corrupt-list",
-          providerRequestId: "request-corrupt-list-1",
-          payload: createCommandApprovalPayload({
-            itemId: "item-corrupt-list-1",
-            reason: "Needs approval",
-            command: "git push",
-            cwd: "/tmp/project",
-          }),
-        },
-        session.id,
-      );
+      const corrupt = registerPendingInteraction(harness.deps, lifecycle, {
+        threadId: thread.id,
+        turnId: "turn-corrupt-list-1",
+        providerId: "codex",
+        providerThreadId: "provider-thread-corrupt-list",
+        providerRequestId: "request-corrupt-list-1",
+        payload: createCommandApprovalPayload({
+          itemId: "item-corrupt-list-1",
+          reason: "Needs approval",
+          command: "git push",
+          cwd: "/tmp/project",
+        }),
+      });
       if (corrupt.outcome === "rejected") {
         throw new Error(
           `Expected interaction registration to succeed: ${corrupt.reason}`,
@@ -170,24 +162,19 @@ describe("pending interaction lifecycle", () => {
         .where(eq(pendingInteractionTable.id, corrupt.interaction.id))
         .run();
 
-      const valid = registerPendingInteraction(
-        harness.deps,
-        lifecycle,
-        {
-          threadId: thread.id,
-          turnId: "turn-corrupt-list-2",
-          providerId: "codex",
-          providerThreadId: "provider-thread-corrupt-list",
-          providerRequestId: "request-corrupt-list-2",
-          payload: createCommandApprovalPayload({
-            itemId: "item-corrupt-list-2",
-            reason: "Needs approval",
-            command: "git status",
-            cwd: "/tmp/project",
-          }),
-        },
-        session.id,
-      );
+      const valid = registerPendingInteraction(harness.deps, lifecycle, {
+        threadId: thread.id,
+        turnId: "turn-corrupt-list-2",
+        providerId: "codex",
+        providerThreadId: "provider-thread-corrupt-list",
+        providerRequestId: "request-corrupt-list-2",
+        payload: createCommandApprovalPayload({
+          itemId: "item-corrupt-list-2",
+          reason: "Needs approval",
+          command: "git status",
+          cwd: "/tmp/project",
+        }),
+      });
       if (valid.outcome === "rejected") {
         throw new Error(
           `Expected interaction registration to succeed: ${valid.reason}`,
@@ -215,7 +202,7 @@ describe("pending interaction lifecycle", () => {
 
   it("resolves user-question interactions with user answers", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-user-question-answer",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -242,7 +229,6 @@ describe("pending interaction lifecycle", () => {
           providerRequestId: "request-user-question-answer",
           payload: createUserQuestionPayload(),
         },
-        session.id,
       );
       if (created.outcome === "rejected") {
         throw new Error(
@@ -282,7 +268,7 @@ describe("pending interaction lifecycle", () => {
 
   it("interrupts pending user-question interactions without orphaning state", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-user-question-interrupted",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -309,7 +295,6 @@ describe("pending interaction lifecycle", () => {
           providerRequestId: "request-user-question-interrupted",
           payload: createUserQuestionPayload(),
         },
-        session.id,
       );
       if (created.outcome === "rejected") {
         throw new Error(
@@ -343,7 +328,7 @@ describe("pending interaction lifecycle", () => {
 
   it("rejects reused provider request ids after the original interaction is terminal", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-terminal-dedupe",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -374,7 +359,6 @@ describe("pending interaction lifecycle", () => {
             cwd: "/tmp/project",
           }),
         },
-        session.id,
       );
       if (created.outcome === "rejected") {
         throw new Error(
@@ -410,7 +394,6 @@ describe("pending interaction lifecycle", () => {
               availableDecisions: ["allow_once", "deny"],
             }),
           },
-          session.id,
         ),
       ).toEqual({
         outcome: "rejected",
@@ -422,7 +405,7 @@ describe("pending interaction lifecycle", () => {
 
   it("deduplicates active provider requests across daemon sessions when payloads match", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-reconnect-dedupe",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -454,7 +437,6 @@ describe("pending interaction lifecycle", () => {
         harness.deps,
         harness.deps.pendingInteractions,
         interaction,
-        session.id,
       );
       if (created.outcome === "rejected") {
         throw new Error(
@@ -466,7 +448,6 @@ describe("pending interaction lifecycle", () => {
         harness.deps,
         harness.deps.pendingInteractions,
         interaction,
-        "session-after-reconnect",
       );
 
       expect(duplicate).toEqual({
@@ -503,7 +484,6 @@ describe("pending interaction lifecycle", () => {
           providerRequestId: "request-same-instance-reconnect",
           payload: createUserQuestionPayload(),
         },
-        session.id,
       );
       if (created.outcome === "rejected") {
         throw new Error(
@@ -541,7 +521,7 @@ describe("pending interaction lifecycle", () => {
 
   it("rejects active provider request reuse with a different payload", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-reconnect-payload-mismatch",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -573,7 +553,6 @@ describe("pending interaction lifecycle", () => {
         harness.deps,
         harness.deps.pendingInteractions,
         baseInteraction,
-        session.id,
       );
       if (created.outcome === "rejected") {
         throw new Error(
@@ -594,7 +573,6 @@ describe("pending interaction lifecycle", () => {
               cwd: "/tmp/project",
             }),
           },
-          "session-after-reconnect",
         ),
       ).toEqual({
         outcome: "rejected",
@@ -606,7 +584,7 @@ describe("pending interaction lifecycle", () => {
 
   it("rejects interactions from providers that do not own the thread", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-provider-mismatch",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -640,7 +618,6 @@ describe("pending interaction lifecycle", () => {
               availableDecisions: ["allow_once", "deny"],
             }),
           },
-          session.id,
         ),
       ).toEqual({
         outcome: "rejected",
@@ -651,7 +628,7 @@ describe("pending interaction lifecycle", () => {
 
   it("treats reordered permission grants as idempotent resolution retries", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-idempotent-permissions",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -688,7 +665,6 @@ describe("pending interaction lifecycle", () => {
             },
           }),
         },
-        session.id,
       );
       if (created.outcome === "rejected") {
         throw new Error(
@@ -763,7 +739,7 @@ describe("pending interaction lifecycle", () => {
 
   it("rejects permission allow resolutions that grant nothing", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-empty-grant",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -797,7 +773,6 @@ describe("pending interaction lifecycle", () => {
             },
           }),
         },
-        session.id,
       );
       if (created.outcome === "rejected") {
         throw new Error(
@@ -829,7 +804,7 @@ describe("pending interaction lifecycle", () => {
 
   it("allows command approvals to grant explicit session permissions for session decisions", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-command-grant",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -863,7 +838,6 @@ describe("pending interaction lifecycle", () => {
             },
           }),
         },
-        session.id,
       );
       if (created.outcome === "rejected") {
         throw new Error(
@@ -897,7 +871,7 @@ describe("pending interaction lifecycle", () => {
 
   it("rejects narrowed command session approval grants", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-narrowed-command-grant",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -934,7 +908,6 @@ describe("pending interaction lifecycle", () => {
             },
           }),
         },
-        session.id,
       );
       if (created.outcome === "rejected") {
         throw new Error(
@@ -959,7 +932,7 @@ describe("pending interaction lifecycle", () => {
 
   it("rejects session command approvals without granted permissions", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-null-session-grant",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -993,7 +966,6 @@ describe("pending interaction lifecycle", () => {
             },
           }),
         },
-        session.id,
       );
       if (created.outcome === "rejected") {
         throw new Error(
@@ -1015,7 +987,7 @@ describe("pending interaction lifecycle", () => {
 
   it("rejects file-change approvals that try to grant write-scope permissions", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-file-change-grant",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -1046,7 +1018,6 @@ describe("pending interaction lifecycle", () => {
             availableDecisions: ["allow_once", "allow_for_session", "deny"],
           }),
         },
-        session.id,
       );
       if (created.outcome === "rejected") {
         throw new Error(
@@ -1074,7 +1045,7 @@ describe("pending interaction lifecycle", () => {
 
   it("rejects a second active interaction on the same thread", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-concurrent-reject",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -1105,7 +1076,6 @@ describe("pending interaction lifecycle", () => {
             cwd: "/tmp/project",
           }),
         },
-        session.id,
       );
       if (created.outcome === "rejected") {
         throw new Error(
@@ -1128,7 +1098,6 @@ describe("pending interaction lifecycle", () => {
               reason: "Needs file write approval",
             }),
           },
-          session.id,
         ),
       ).toEqual({
         outcome: "rejected",
@@ -1139,7 +1108,7 @@ describe("pending interaction lifecycle", () => {
 
   it("rejects command approvals with no available decisions", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-empty-decisions",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -1172,7 +1141,6 @@ describe("pending interaction lifecycle", () => {
               availableDecisions: [],
             }),
           },
-          session.id,
         ),
       ).toEqual({
         outcome: "rejected",
@@ -1183,7 +1151,7 @@ describe("pending interaction lifecycle", () => {
 
   it("rejects resolving interrupted interactions", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-resolve-interrupted",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -1214,7 +1182,6 @@ describe("pending interaction lifecycle", () => {
             cwd: "/tmp/project",
           }),
         },
-        session.id,
       );
       if (created.outcome === "rejected") {
         throw new Error(
@@ -1250,7 +1217,7 @@ describe("pending interaction lifecycle", () => {
         machineAuth: harness.deps.machineAuth,
         terminalSessions: harness.deps.terminalSessions,
       });
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-no-expiry",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -1281,7 +1248,6 @@ describe("pending interaction lifecycle", () => {
             cwd: "/tmp/project",
           }),
         },
-        session.id,
       );
       if (created.outcome === "rejected") {
         throw new Error(

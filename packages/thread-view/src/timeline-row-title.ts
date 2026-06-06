@@ -47,7 +47,6 @@ export type TimelineTitleTone = "default" | "summary";
 export type TimelineStatusDecorationStatus =
   | "denied"
   | "error"
-  | "expired"
   | "interrupted";
 
 /**
@@ -949,18 +948,6 @@ function mapPermissionGrantApprovalTitle(
           reasonSegment,
         ]),
       });
-    case "expired":
-      return makeTitle({
-        segments: filterNull([
-          toolName !== null
-            ? segment("Permission grant expired:")
-            : segment("Permission grant expired"),
-          toolName !== null
-            ? segment(toolName, { em: true, truncate: true })
-            : null,
-          reasonSegment,
-        ]),
-      });
     default:
       return assertNever(row.lifecycle);
   }
@@ -1057,11 +1044,6 @@ function mapQuestionTitle(row: TimelineQuestionViewWorkRow): TimelineTitle {
       return makeTitle({
         segments: [segment("Asked"), subject],
         decorations: [statusDecoration("interrupted", null)],
-      });
-    case "expired":
-      return makeTitle({
-        segments: [segment("Asked"), subject],
-        decorations: [statusDecoration("expired", null)],
       });
     default:
       return assertNever(row.lifecycle);

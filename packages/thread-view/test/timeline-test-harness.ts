@@ -238,7 +238,7 @@ interface PermissionGrantLifecycleArgs extends DefaultTurnEventOptions {
   providerId?: string;
   providerRequestId?: string;
   resolution?: ApprovalPendingInteractionResolution | null;
-  status?: "pending" | "resolving" | "resolved" | "interrupted" | "expired";
+  status?: "pending" | "resolving" | "resolved" | "interrupted";
   statusReason?: string | null;
   toolName?: string;
 }

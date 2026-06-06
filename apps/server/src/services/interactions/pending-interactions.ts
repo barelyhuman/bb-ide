@@ -63,7 +63,6 @@ export type RegisterPendingInteractionResult =
 
 interface RegisterPendingInteractionArgs {
   interaction: PendingInteractionCreate;
-  sessionId: string;
 }
 
 interface ResolvePendingInteractionArgs {
@@ -351,7 +350,6 @@ export class PendingInteractionLifecycle {
           providerId: interaction.providerId,
           providerThreadId: interaction.providerThreadId,
           providerRequestId: interaction.providerRequestId,
-          sessionId: args.sessionId,
           payload,
         }),
       };

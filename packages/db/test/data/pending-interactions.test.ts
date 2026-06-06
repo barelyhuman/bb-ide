@@ -85,7 +85,6 @@ describe("pending interactions", () => {
       providerId: "codex",
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-1",
-      sessionId: "session-1",
       payload: commandApprovalPayload("git push", "item-1"),
     });
 
@@ -102,7 +101,7 @@ describe("pending interactions", () => {
     );
   });
 
-  it("rejects duplicate provider request identities across sessions", () => {
+  it("rejects duplicate provider request identities", () => {
     const { db, siblingThread, thread } = setup();
     const created = createPendingInteraction(db, {
       threadId: thread.id,
@@ -110,7 +109,6 @@ describe("pending interactions", () => {
       providerId: "codex",
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-1",
-      sessionId: "session-1",
       payload: commandApprovalPayload("git push", "item-1"),
     });
 
@@ -121,7 +119,6 @@ describe("pending interactions", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-1",
         providerRequestId: "request-1",
-        sessionId: "session-2",
         payload: commandApprovalPayload("git status", "item-2"),
       }),
     ).toThrow();
@@ -143,7 +140,6 @@ describe("pending interactions", () => {
       providerId: "codex",
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-1",
-      sessionId: "session-1",
       payload: commandApprovalPayload("git push", "item-1"),
     });
     const newer = createPendingInteraction(db, {
@@ -152,7 +148,6 @@ describe("pending interactions", () => {
       providerId: "codex",
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-2",
-      sessionId: "session-1",
       payload: fileChangeApprovalPayload("item-2"),
     });
 
@@ -185,7 +180,6 @@ describe("pending interactions", () => {
       providerId: "codex",
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-1",
-      sessionId: "session-1",
       payload: commandApprovalPayload("git push", "item-1"),
     });
     createPendingInteraction(db, {
@@ -194,7 +188,6 @@ describe("pending interactions", () => {
       providerId: "claude-code",
       providerThreadId: "provider-thread-2",
       providerRequestId: "request-2",
-      sessionId: "session-1",
       payload: commandApprovalPayload("rm -rf build", "item-2"),
     });
 
@@ -239,7 +232,6 @@ describe("pending interactions", () => {
         providerId: "codex",
         providerThreadId: `provider-thread-batched-interrupt-provider-${index}`,
         providerRequestId: `request-batched-interrupt-provider-${index}`,
-        sessionId: "session-1",
         payload: commandApprovalPayload(
           "git push",
           `item-batched-interrupt-provider-${index}`,
@@ -282,7 +274,6 @@ describe("pending interactions", () => {
         providerId: "codex",
         providerThreadId: `provider-thread-batched-interrupt-thread-${index}`,
         providerRequestId: `request-batched-interrupt-thread-${index}`,
-        sessionId: "session-1",
         payload: commandApprovalPayload(
           "git push",
           `item-batched-interrupt-thread-${index}`,
