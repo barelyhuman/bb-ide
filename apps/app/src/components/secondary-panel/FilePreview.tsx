@@ -283,7 +283,7 @@ function FilePreviewHeader({
   // out of flow so the body's `pt-4` controls the initial gap, not this strip.
   return (
     <div className="sticky top-0 z-10">
-      <div className="flex h-9 items-center gap-2 border-b border-border bg-background px-4">
+      <div className="flex h-9 items-center gap-2 border-b border-border-seam bg-background px-4">
         <div className="flex min-w-0 items-center gap-1">
           <TruncateStart
             className="min-w-0 font-mono text-xs font-medium leading-5 text-foreground"
