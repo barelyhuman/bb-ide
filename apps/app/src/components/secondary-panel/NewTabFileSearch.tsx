@@ -1047,8 +1047,9 @@ export function NewTabActionMenu({
         </>
       ) : null}
 
-      {/* Apps list followed by Create App. Create App is always the final row
-          in the menu, whether or not installed apps precede it. */}
+      {/* Apps list, then any app-load status, then Create App. Create App is
+          always the final row, so the Loading/Couldn't-load notice sits above
+          it in every app state rather than trailing it. */}
       <div className="flex flex-col gap-px">
         {appSuggestions.map((suggestion) => (
           <AppResultRow
@@ -1060,6 +1061,16 @@ export function NewTabActionMenu({
             onSelect={handleAppSelect}
           />
         ))}
+        {canSearchApps && apps.isLoading && appSuggestions.length === 0 ? (
+          <p className="px-2 py-1 text-xs text-muted-foreground">
+            Loading apps...
+          </p>
+        ) : null}
+        {canSearchApps && apps.isError ? (
+          <p className="px-2 py-1 text-xs text-muted-foreground">
+            Couldn't load apps.
+          </p>
+        ) : null}
         {showCreateAppEntry ? (
           <CreateAppTile
             id={CREATE_APP_ENTRY_ID}
@@ -1069,17 +1080,6 @@ export function NewTabActionMenu({
           />
         ) : null}
       </div>
-
-      {canSearchApps && apps.isLoading && appSuggestions.length === 0 ? (
-        <p className="px-2 pt-2 text-xs text-muted-foreground">
-          Loading apps...
-        </p>
-      ) : null}
-      {canSearchApps && apps.isError ? (
-        <p className="px-2 pt-2 text-xs text-muted-foreground">
-          Couldn't load apps.
-        </p>
-      ) : null}
     </div>
   );
 }

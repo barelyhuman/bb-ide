@@ -295,6 +295,60 @@ describe("NewTabActionMenu", () => {
     expect(orderedAfter(appsTitle, appRow)).toBe(true);
   });
 
+  it("keeps Create App last while apps are loading", () => {
+    appsQueryMockState.isLoading = true;
+    appsQueryMockState.data = undefined;
+
+    renderActionMenu();
+
+    const menu = screen.getByTestId("new-tab-action-menu");
+    const createApp = screen.getByRole("button", { name: "Create App..." });
+    const status = screen.getByText("Loading apps...");
+
+    // The loading notice renders above Create App, never after it, so Create
+    // App stays visually last in the loading state.
+    expect(
+      Boolean(
+        status.compareDocumentPosition(createApp) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    expect(
+      Boolean(
+        createApp.compareDocumentPosition(status) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(false);
+    expect(within(menu).getAllByRole("button").at(-1)).toBe(createApp);
+  });
+
+  it("keeps Create App last when apps fail to load", () => {
+    appsQueryMockState.isError = true;
+    appsQueryMockState.data = undefined;
+
+    renderActionMenu();
+
+    const menu = screen.getByTestId("new-tab-action-menu");
+    const createApp = screen.getByRole("button", { name: "Create App..." });
+    const status = screen.getByText("Couldn't load apps.");
+
+    // The error notice renders above Create App, never after it, so Create App
+    // stays visually last in the error state.
+    expect(
+      Boolean(
+        status.compareDocumentPosition(createApp) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    expect(
+      Boolean(
+        createApp.compareDocumentPosition(status) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(false);
+    expect(within(menu).getAllByRole("button").at(-1)).toBe(createApp);
+  });
+
   it("keeps menu actions compact with native button semantics and non-ring focus", () => {
     window.bbDesktop = createDesktopApiStub();
 
