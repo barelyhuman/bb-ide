@@ -213,6 +213,84 @@ describe("thread provisioning recovery", () => {
     });
   });
 
+  it("does not fail a thread start that settled before the first turn started event", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-settled-start-before-turn",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/settled-start-before-turn",
+        status: "ready",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+      const requestedContext = createMetadataPendingContext({
+        clientRequestId: encodeClientTurnRequestIdNumber({ value: 1 }),
+        environmentIntent: {
+          type: "reuse",
+          environmentId: environment.id,
+        },
+        execution: THREAD_START_EXECUTION,
+        input: textInput("start before first turn event"),
+        titleProvided: true,
+      });
+      const attachedContext = createEnvironmentAttachedContext(
+        createEnvironmentPendingContext(requestedContext, { branchSlug: null }),
+        { attachedEnvironmentId: environment.id },
+      );
+      const workspaceReadyEventSequence = appendThreadProvisioningEvent(
+        harness.deps,
+        {
+          threadId: thread.id,
+          environmentId: environment.id,
+          provisioningId: attachedContext.state.provisioningId,
+          status: "active",
+          entries: buildCwdBranchEntries({
+            path: "/tmp/settled-start-before-turn",
+            branchName: null,
+          }),
+        },
+      );
+      rememberActiveThreadProvisionContext({
+        threadId: thread.id,
+        context: createWorkspaceReadyContext(attachedContext, {
+          workspaceReadyEventSequence,
+        }),
+      });
+
+      await runThreadLifecycleSweep(harness.deps);
+      const startCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" && command.threadId === thread.id,
+      );
+
+      await reportQueuedCommandSuccess(harness, startCommand, {
+        providerThreadId: "provider-settled-start-before-turn",
+      });
+      await advanceThreadProvisioning(harness.deps, {
+        threadId: thread.id,
+      });
+
+      expect(getThread(harness.db, thread.id)).toMatchObject({
+        status: "active",
+      });
+      expect(
+        listEvents(harness.db, { threadId: thread.id }).map(
+          (event) => event.type,
+        ),
+      ).not.toContain("system/error");
+    });
+  });
+
   it("starts an errored pre-start thread when retry happens after the environment is ready", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {

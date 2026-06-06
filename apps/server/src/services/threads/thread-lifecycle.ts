@@ -1,6 +1,7 @@
 import {
   and,
   eq,
+  gte,
   inArray,
   isNotNull,
   isNull,
@@ -144,6 +145,16 @@ export function hasLiveThreadStartInFlight(threadId: string): boolean {
 }
 
 interface CompleteThreadStartArgs {
+  threadId: string;
+}
+
+interface ThreadStartSuccessActivationArgs {
+  commandStartedAt: number;
+  thread: Thread;
+}
+
+interface HasThreadInterruptedEventAtOrAfterArgs {
+  createdAt: number;
   threadId: string;
 }
 
@@ -545,6 +556,51 @@ function hasExpectedTurnCompletedEvent(
   );
 }
 
+function hasThreadInterruptedEventAtOrAfter(
+  deps: ThreadLifecycleReadDeps,
+  args: HasThreadInterruptedEventAtOrAfterArgs,
+): boolean {
+  return (
+    deps.db
+      .select({ id: events.id })
+      .from(events)
+      .where(
+        and(
+          eq(events.threadId, args.threadId),
+          eq(events.type, "system/thread/interrupted"),
+          gte(events.createdAt, args.createdAt),
+        ),
+      )
+      .limit(1)
+      .get() !== undefined
+  );
+}
+
+function canActivateThreadAfterSuccessfulStart(
+  deps: ThreadLifecycleReadDeps,
+  args: ThreadStartSuccessActivationArgs,
+): boolean {
+  if (
+    args.thread.deletedAt !== null ||
+    args.thread.archivedAt !== null ||
+    args.thread.stopRequestedAt !== null
+  ) {
+    return false;
+  }
+  if (
+    !isPreStartThreadStatus(args.thread.status) &&
+    args.thread.status !== "idle" &&
+    args.thread.status !== "error"
+  ) {
+    return false;
+  }
+
+  return !hasThreadInterruptedEventAtOrAfter(deps, {
+    createdAt: args.commandStartedAt,
+    threadId: args.thread.id,
+  });
+}
+
 function settleThreadCommandFailure(
   args: SettleThreadCommandFailureArgs,
 ): CommandResultSideEffectsResult {
@@ -624,6 +680,20 @@ export function settleThreadStartCommandResult(
       });
     }
     return { postCommitActions };
+  }
+  if (
+    currentThread &&
+    canActivateThreadAfterSuccessfulStart(args.deps, {
+      commandStartedAt: args.execution.createdAt,
+      thread: currentThread,
+    })
+  ) {
+    tryTransitionInTransaction(
+      args.deps.db,
+      args.deps.hub,
+      currentThread.id,
+      "active",
+    );
   }
   const threadTitle = thread.title;
   if (threadTitle && shouldSyncTitle) {

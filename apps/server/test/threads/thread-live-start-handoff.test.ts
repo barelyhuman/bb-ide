@@ -219,4 +219,77 @@ describe("live thread start handoff", () => {
       }
     });
   });
+
+  it("does not reactivate a stopped thread when a late thread start succeeds", async () => {
+    await withTestHarness(async (harness) => {
+      const fixture = await startLiveThreadStartRpc({
+        harness,
+        requestIdValue: 4,
+      });
+
+      requestThreadStopForCurrentState(
+        harness.deps,
+        fixture.thread,
+        fixture.environment,
+      );
+      const stopCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.stop" &&
+          command.threadId === fixture.thread.id,
+      );
+      await reportQueuedCommandSuccess(harness, stopCommand, {});
+      expect(getThread(harness.db, fixture.thread.id)).toMatchObject({
+        status: "idle",
+        stopRequestedAt: null,
+      });
+
+      await reportQueuedCommandSuccess(harness, fixture.startCommand, {
+        providerThreadId: "provider-stopped-late-start",
+      });
+
+      expect(getThread(harness.db, fixture.thread.id)).toMatchObject({
+        archivedAt: null,
+        status: "idle",
+        stopRequestedAt: null,
+      });
+    });
+  });
+
+  it("does not reactivate an archived thread when a late thread start succeeds", async () => {
+    await withTestHarness(async (harness) => {
+      const fixture = await startLiveThreadStartRpc({
+        harness,
+        requestIdValue: 5,
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${fixture.thread.id}/archive`,
+        { method: "POST" },
+      );
+      expect(response.status).toBe(200);
+      const stopCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.stop" &&
+          command.threadId === fixture.thread.id,
+      );
+      await reportQueuedCommandSuccess(harness, stopCommand, {});
+      expect(getThread(harness.db, fixture.thread.id)).toMatchObject({
+        archivedAt: expect.any(Number),
+        status: "idle",
+        stopRequestedAt: null,
+      });
+
+      await reportQueuedCommandSuccess(harness, fixture.startCommand, {
+        providerThreadId: "provider-archived-late-start",
+      });
+
+      expect(getThread(harness.db, fixture.thread.id)).toMatchObject({
+        archivedAt: expect.any(Number),
+        status: "idle",
+        stopRequestedAt: null,
+      });
+    });
+  });
 });
