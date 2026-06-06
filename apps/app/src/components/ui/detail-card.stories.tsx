@@ -1,11 +1,7 @@
-import type { Host } from "@bb/domain";
 import { Button } from "./button";
 import { DetailCard, DetailRow } from "./detail-card";
 import { Input } from "./input";
-import { LocalhostBadge } from "./localhost-badge";
-import { HostStatusBadge } from "../HostStatusIndicator";
 import { BranchPicker } from "../pickers/BranchPicker";
-import { HostPicker } from "../pickers/HostPicker";
 import { OptionPicker } from "../pickers/OptionPicker";
 import {
   WorkspaceChangesList,
@@ -19,28 +15,6 @@ export default {
 };
 
 const noop = () => {};
-
-const mockHosts: Host[] = [
-  {
-    id: "local",
-    name: "Michael’s MacBook Pro",
-    type: "persistent",
-    status: "connected",
-    lastSeenAt: 0,
-    createdAt: 0,
-    updatedAt: 0,
-  },
-  {
-    id: "remote-build",
-    name: "remote-build-box",
-    type: "persistent",
-    status: "connected",
-    lastSeenAt: 0,
-    createdAt: 0,
-    updatedAt: 0,
-  },
-];
-const isLocalHost = (id: string | null | undefined) => id === "local";
 
 const mockModelOptions = [
   { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
@@ -95,13 +69,6 @@ export function Overview() {
                 <Icon name="X" />
               </Button>
             </div>
-          </DetailRow>
-          <DetailRow label="Host" valueClassName="min-w-0 truncate">
-            <span className="flex items-center gap-1.5">
-              <span className="truncate">Michael’s MacBook Pro</span>
-              <LocalhostBadge />
-              <HostStatusBadge connected />
-            </span>
           </DetailRow>
           <DetailRow label="Environment" valueClassName="min-w-0 truncate">
             Direct
@@ -168,15 +135,6 @@ export function Overview() {
               value="claude-sonnet-4-6"
               options={mockModelOptions}
               onChange={noop}
-            />
-          </DetailRow>
-          <DetailRow label="Host" valueClassName="min-w-0">
-            <HostPicker
-              hosts={mockHosts}
-              eligibleHosts={mockHosts}
-              selectedHostId="local"
-              onChange={noop}
-              isLocalHost={isLocalHost}
             />
           </DetailRow>
         </DetailCard>

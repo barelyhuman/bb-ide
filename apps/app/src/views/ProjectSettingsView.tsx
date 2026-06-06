@@ -5,7 +5,6 @@ import {
   findLocalPathProjectSourceForHost,
   isLocalPathProjectSource,
   type LocalPathProjectSource,
-  type ProjectSource,
 } from "@bb/domain";
 import { Button } from "@/components/ui/button.js";
 import { PageShell } from "@/components/ui/page-shell.js";
@@ -35,19 +34,11 @@ import {
   stripProjectThreads,
   useSidebarNavigation,
 } from "@/hooks/queries/project-queries";
-import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { invalidateProjectSourceQueries } from "@/hooks/cache-owners/mutation-cache-effects";
 import * as api from "@/lib/api";
 
 interface DeleteProjectSourceMutationRequest {
   sourceId: string;
-}
-
-function sourceLabel(
-  source: ProjectSource,
-  hostNameById: Map<string, string>,
-): string {
-  return hostNameById.get(source.hostId) ?? source.hostId;
 }
 
 export function ProjectSettingsView() {
@@ -58,7 +49,6 @@ export function ProjectSettingsView() {
     [sidebarNavigationQuery.data],
   );
   const isLoading = sidebarNavigationQuery.isFetching && projects === undefined;
-  const { data: hosts = [] } = useEffectiveHosts();
   const queryClient = useQueryClient();
 
   const [deleteTarget, setDeleteTarget] =
@@ -84,10 +74,6 @@ export function ProjectSettingsView() {
   const project = projects?.find((p) => p.id === projectId);
   const projectSources = project?.sources;
   const sources = useMemo(() => projectSources ?? [], [projectSources]);
-  const hostNameById = useMemo(
-    () => new Map(hosts.map((h) => [h.id, h.name])),
-    [hosts],
-  );
 
   const projectName = project?.name ?? "";
   const localSourcePickerPending =
@@ -193,23 +179,19 @@ export function ProjectSettingsView() {
                   const isInvalid =
                     isLocalDaemonSource &&
                     isLocalPathMissing(pathExistence, source.path);
-                  const hostName = isLocalPathProjectSource(source)
-                    ? (hostNameById.get(source.hostId) ?? source.hostId)
-                    : "";
                   return (
                     <ProjectSourceRow
                       key={source.id}
                       source={source}
-                      isLocalhostSource={isLocalDaemonSource}
+                      canEditLocalPath={isLocalDaemonSource}
                       isLocalPathInvalid={isInvalid}
-                      hostName={hostName}
                       isEditPending={localSourcePickerPending}
                       isOnlySource={sources.length <= 1}
                       onEditLocalPath={openEditLocalSourcePicker}
                       onRemove={(target) =>
                         setDeleteTarget({
                           id: target.id,
-                          label: sourceLabel(target, hostNameById),
+                          label: target.path,
                         })
                       }
                     />

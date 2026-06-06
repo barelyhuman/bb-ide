@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import type { ThreadListEntry } from "@bb/domain";
 import {
   makeEnvironment,
-  makeHost,
   makeThread,
   makeThreadListEntry,
   makeThreadSchedule,
@@ -14,7 +13,6 @@ import type { ThreadMetadataContentProps } from "./ThreadMetadataContent";
 // from one place.
 export {
   makeEnvironment,
-  makeHost,
   makeThread,
   makeThreadListEntry,
   makeThreadSchedule,
@@ -53,8 +51,6 @@ export const baseProps: ThreadMetadataContentProps = {
   managerThreads,
   canAssignToManager: true,
   canTakeOverThread: false,
-  environmentHost: makeHost(),
-  environmentIsLocal: true,
   environment: makeEnvironment(),
   workspaceStatus: makeWorkspaceStatus(),
   workspaceStatusError: null,

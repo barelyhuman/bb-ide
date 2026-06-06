@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import {
   ManagerSelectorRow,
-  HostRow,
   EnvironmentRow,
   WorkspacePathRow,
   BranchRow,
@@ -17,12 +16,10 @@ import {
   baseProps,
   managerThreads,
   makeEnvironment,
-  makeHost,
   makeThread,
   makeThreadSchedule,
   makeWorkspaceStatus,
 } from "./ThreadMetadataContent.fixtures";
-import { HOST_IDS, HOST_NAMES } from "../../../.ladle/story-fixtures";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
@@ -110,95 +107,18 @@ export function ManagerSelector() {
 }
 
 // ---------------------------------------------------------------------------
-// Host — the "Host" row.
-// ---------------------------------------------------------------------------
-
-export function Host() {
-  return (
-    <StoryCard>
-      <StoryRow label="local">
-        <RowStage>
-          <HostRow
-            environmentHost={makeHost()}
-            environment={makeEnvironment()}
-            environmentIsLocal
-          />
-        </RowStage>
-      </StoryRow>
-      <StoryRow label="remote, connected">
-        <RowStage>
-          <HostRow
-            environmentHost={makeHost({
-              id: HOST_IDS.remote,
-              name: HOST_NAMES.remote,
-              status: "connected",
-            })}
-            environment={makeEnvironment({ hostId: HOST_IDS.remote })}
-            environmentIsLocal={false}
-          />
-        </RowStage>
-      </StoryRow>
-      <StoryRow label="remote, disconnected">
-        <RowStage>
-          <HostRow
-            environmentHost={makeHost({
-              id: HOST_IDS.remote,
-              name: HOST_NAMES.remote,
-              status: "disconnected",
-            })}
-            environment={makeEnvironment({ hostId: HOST_IDS.remote })}
-            environmentIsLocal={false}
-          />
-        </RowStage>
-      </StoryRow>
-      <StoryRow label="remote persistent host">
-        <RowStage>
-          <HostRow
-            environmentHost={makeHost({
-              id: HOST_IDS.remote,
-              name: HOST_NAMES.remote,
-              type: "persistent",
-            })}
-            environment={makeEnvironment({ hostId: HOST_IDS.remote })}
-            environmentIsLocal={false}
-          />
-        </RowStage>
-      </StoryRow>
-    </StoryCard>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Environment — the "Environment" row.
 // ---------------------------------------------------------------------------
 
 export function Environment() {
   return (
     <StoryCard>
-      <StoryRow label="worktree, local">
+      <StoryRow label="worktree">
         <RowStage>
-          <EnvironmentRow
-            thread={makeThread()}
-            environment={makeEnvironment()}
-            environmentHost={makeHost()}
-            environmentIsLocal
-          />
+          <EnvironmentRow thread={makeThread()} environment={makeEnvironment()} />
         </RowStage>
       </StoryRow>
-      <StoryRow label="worktree, remote">
-        <RowStage>
-          <EnvironmentRow
-            thread={makeThread()}
-            environment={makeEnvironment({ hostId: HOST_IDS.remote })}
-            environmentHost={makeHost({
-              id: HOST_IDS.remote,
-              name: HOST_NAMES.remote,
-            })}
-            environmentIsLocal={false}
-          />
-        </RowStage>
-      </StoryRow>
-      <StoryRow label="direct, local">
+      <StoryRow label="direct">
         <RowStage>
           <EnvironmentRow
             thread={makeThread()}
@@ -206,43 +126,18 @@ export function Environment() {
               isWorktree: false,
               workspaceProvisionType: "unmanaged",
             })}
-            environmentHost={makeHost()}
-            environmentIsLocal
           />
         </RowStage>
       </StoryRow>
-      <StoryRow label="direct, remote">
+      <StoryRow label="provisioning">
         <RowStage>
           <EnvironmentRow
             thread={makeThread()}
             environment={makeEnvironment({
-              hostId: HOST_IDS.remote,
+              status: "provisioning",
               isWorktree: false,
-              workspaceProvisionType: "unmanaged",
+              workspaceProvisionType: "managed-worktree",
             })}
-            environmentHost={makeHost({
-              id: HOST_IDS.remote,
-              name: HOST_NAMES.remote,
-            })}
-            environmentIsLocal={false}
-          />
-        </RowStage>
-      </StoryRow>
-      <StoryRow label="remote persistent host">
-        <RowStage>
-          <EnvironmentRow
-            thread={makeThread()}
-            environment={makeEnvironment({
-              hostId: HOST_IDS.remote,
-              isWorktree: false,
-              workspaceProvisionType: "unmanaged",
-            })}
-            environmentHost={makeHost({
-              id: HOST_IDS.remote,
-              name: HOST_NAMES.remote,
-              type: "persistent",
-            })}
-            environmentIsLocal={false}
           />
         </RowStage>
       </StoryRow>

@@ -6,7 +6,7 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
-import type { Host, ProjectSource, PromptTextMention } from "@bb/domain";
+import type { ProjectSource, PromptTextMention } from "@bb/domain";
 import {
   ExecutionControls,
   type ExecutionControlsProps,
@@ -32,7 +32,6 @@ import {
   type ParsedEnvironmentValue,
   parseEnvironmentValue,
 } from "@/components/pickers/environment-picker-value";
-import { HostPicker } from "@/components/pickers/HostPicker";
 import {
   OPTION_BASE_CLASS_NAME,
   OPTION_CONTENT_CLASS_NAME,
@@ -56,7 +55,6 @@ import {
 } from "@/components/ui/dropdown-menu.js";
 import { Button } from "@/components/ui/button.js";
 import { Icon } from "@/components/ui/icon.js";
-import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { cn } from "@/lib/utils";
 
@@ -68,8 +66,7 @@ export interface NewThreadEnvironmentConfig {
   value: string;
   onChange: (value: string) => void;
   sources: readonly ProjectSource[];
-  hosts: readonly Host[];
-  isLocalHost: EnvironmentPickerUIProps["isLocalHost"];
+  hostId: EnvironmentPickerUIProps["hostId"];
   /** When true, the picker's "Reuse existing worktree" entry is disabled.
    * Caller signals the project has no worktree envs available. */
   reuseDisabled?: boolean;
@@ -126,26 +123,12 @@ export interface NewThreadProjectConfig {
   createProject?: ProjectSelectorCreateProjectConfig;
 }
 
-export interface NewThreadHostConfig {
-  /** All known hosts — used by `HostPicker` to render the selected host's
-   * label even when it falls outside the eligible set. */
-  hosts: readonly Host[];
-  /** Hosts eligible to host a manager for this project (connected + has a
-   * local-path source). The picker renders this list as menu items. */
-  eligibleHosts: readonly Host[];
-  /** Currently-selected host id. Empty string when no eligible host has
-   * been resolved yet (e.g. while the hosts query is in flight). */
-  value: string;
-  onChange: (hostId: string) => void;
-  isLocalHost: (id: string | null | undefined) => boolean;
-}
-
 /**
  * Mode-dependent block. Discriminated union — when mode is "thread" the
  * environment / branch / worktree / permission config is required and the
- * reuse-pill header slot is available; when mode is "manager" only the host
- * picker is meaningful. Invalid combinations (e.g. "manager" + reuse env)
- * are unrepresentable at the prop boundary.
+ * reuse-pill header slot is available; when mode is "manager" those controls
+ * are absent. Invalid combinations (e.g. "manager" + reuse env) are
+ * unrepresentable at the prop boundary.
  */
 export type NewThreadModeConfig =
   | {
@@ -160,8 +143,6 @@ export type NewThreadModeConfig =
     }
   | {
       mode: "manager";
-      /** Optional host picker seam for future multi-host manager creation. */
-      host?: NewThreadHostConfig;
     };
 
 export interface NewThreadPromptBoxUIProps {
@@ -325,9 +306,7 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
               createProject={project.createProject}
             />
           ) : null}
-          {modeConfig.mode === "manager" && modeConfig.host ? (
-            <HostSlot host={modeConfig.host} />
-          ) : modeConfig.mode === "thread" && project?.value !== null ? (
+          {modeConfig.mode === "thread" && project?.value !== null ? (
             <ThreadEnvSlot
               environment={modeConfig.environment}
               branch={modeConfig.branch}
@@ -349,24 +328,6 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
     </div>
   );
 });
-
-interface HostSlotProps {
-  host: NewThreadHostConfig;
-}
-
-function HostSlot({ host }: HostSlotProps) {
-  if (host.eligibleHosts.length < 2) return null;
-  return (
-    <HostPicker
-      muted
-      hosts={[...host.hosts]}
-      eligibleHosts={[...host.eligibleHosts]}
-      selectedHostId={host.value}
-      onChange={host.onChange}
-      isLocalHost={host.isLocalHost}
-    />
-  );
-}
 
 interface ThreadEnvSlotProps {
   environment: NewThreadEnvironmentConfig;
@@ -392,8 +353,7 @@ function ThreadEnvSlot({
         value={environment.value}
         onChange={environment.onChange}
         sources={environment.sources}
-        hosts={environment.hosts}
-        isLocalHost={environment.isLocalHost}
+        hostId={environment.hostId}
         reuseDisabled={environment.reuseDisabled}
         muted
       />
@@ -548,10 +508,8 @@ export interface NewThreadConnectedBranchConfig {
 
 /**
  * Connected variant of `NewThreadModeConfig`. In "thread" mode the env /
- * branch use the connected configs (without `hosts` / `isLocalHost` /
- * `onCreate` — the wrapper supplies those). In "manager" mode the host
- * config matches the UI variant (the caller already has the hosts query
- * and project sources, so there's nothing for the wrapper to enrich).
+ * branch use the connected configs (without `hostId` / `onCreate` — the
+ * wrapper supplies those).
  */
 export type NewThreadConnectedModeConfig =
   | {
@@ -564,7 +522,6 @@ export type NewThreadConnectedModeConfig =
     }
   | {
       mode: "manager";
-      host?: NewThreadHostConfig;
     };
 
 export interface NewThreadPromptBoxProps extends Omit<
@@ -595,10 +552,7 @@ export function NewThreadPromptBox({
     return (
       <NewThreadPromptBoxUI
         {...rest}
-        modeConfig={{
-          mode: "manager",
-          ...(modeConfig.host ? { host: modeConfig.host } : {}),
-        }}
+        modeConfig={{ mode: "manager" }}
       />
     );
   }
@@ -613,12 +567,7 @@ function ConnectedThreadModeBranch({
   threadConfig,
   ...rest
 }: ConnectedThreadModeBranchProps) {
-  const { isLocalHost } = useHostDaemon();
-  const { data: hosts = [] } = useEffectiveHosts();
-  const localHosts = useMemo(
-    () => hosts.filter((host) => isLocalHost(host.id)),
-    [hosts, isLocalHost],
-  );
+  const { localHostId } = useHostDaemon();
 
   const parsedEnvironment = parseEnvironmentValue(
     threadConfig.environment.value,
@@ -631,8 +580,8 @@ function ConnectedThreadModeBranch({
   const allowCreate = isHostMode && parsedEnvironment.mode === "local";
 
   const uiEnvironment = useMemo(
-    () => ({ ...threadConfig.environment, hosts: localHosts, isLocalHost }),
-    [threadConfig.environment, localHosts, isLocalHost],
+    () => ({ ...threadConfig.environment, hostId: localHostId }),
+    [threadConfig.environment, localHostId],
   );
   const uiBranch = useMemo<NewThreadBranchConfig>(() => {
     const branch = threadConfig.branch;

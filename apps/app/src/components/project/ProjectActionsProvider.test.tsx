@@ -48,7 +48,6 @@ vi.mock("@/hooks/useHostDaemon", () => ({
     pickFolder: null,
     supportsNativeFolderPicker: false,
     isLocalDaemonHost: () => false,
-    isLocalHost: () => false,
   }),
 }));
 

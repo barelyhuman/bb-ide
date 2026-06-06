@@ -8,7 +8,6 @@ import {
   type EnvironmentPickerUIProps,
 } from "@/components/pickers/EnvironmentPicker";
 import { parseEnvironmentValue } from "@/components/pickers/environment-picker-value";
-import { HostPicker } from "@/components/pickers/HostPicker";
 import { ProjectSelector } from "@/components/pickers/ProjectSelector";
 import { WorktreePicker } from "@/components/pickers/WorktreePicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
@@ -16,11 +15,9 @@ import {
   HOST_IDS,
   PROJECT_IDS,
   STORY_BRANCH_OPTIONS,
-  STORY_HOSTS,
   STORY_PROJECTS,
   STORY_PROJECT_SOURCES,
   STORY_WORKTREE_OPTIONS,
-  storyIsLocalHost,
 } from "../../../.ladle/story-fixtures";
 
 export default {
@@ -28,9 +25,6 @@ export default {
 };
 
 const noop = () => {};
-const connectedHosts = STORY_HOSTS.filter(
-  (host) => host.status === "connected",
-);
 
 function getStoryBranchMenuKind(
   environmentValue: string,
@@ -44,12 +38,12 @@ function getStoryBranchMenuKind(
 }
 
 // ---------------------------------------------------------------------------
-// EnvironmentOptionsStrip — composes ProjectSelector + either HostPicker for
-// projectless threads or EnvironmentPicker + (BranchPicker | WorktreePicker)
-// for project threads, matching the chain below the production new-thread
-// prompt box. Each row overrides just the slots it cares about; everything
-// else falls back to the shared fixture catalog so adding a new branch /
-// worktree state in `story-fixtures.ts` flows here automatically.
+// EnvironmentOptionsStrip — composes ProjectSelector + EnvironmentPicker +
+// (BranchPicker | WorktreePicker) for project threads, matching the chain below
+// the production new-thread prompt box. Each row overrides just the slots it
+// cares about; everything else falls back to the shared fixture catalog so
+// adding a new branch / worktree state in `story-fixtures.ts` flows here
+// automatically.
 // ---------------------------------------------------------------------------
 
 interface EnvironmentOptionsStripProps {
@@ -85,24 +79,13 @@ function EnvironmentOptionsStrip({
           className="h-7 px-1.5"
           modal={false}
         />
-        {projectless ? (
-          <HostPicker
-            hosts={[...STORY_HOSTS]}
-            eligibleHosts={connectedHosts}
-            selectedHostId={HOST_IDS.local}
-            onChange={noop}
-            isLocalHost={storyIsLocalHost}
-            muted
-            modal={false}
-          />
-        ) : (
+        {projectless ? null : (
           <>
             <EnvironmentPickerUI
               value={environmentValue}
               onChange={noop}
               sources={STORY_PROJECT_SOURCES}
-              hosts={STORY_HOSTS}
-              isLocalHost={storyIsLocalHost}
+              hostId={HOST_IDS.local}
               muted
               modal={false}
               {...environment}

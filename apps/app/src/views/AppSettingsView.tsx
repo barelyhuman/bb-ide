@@ -1,6 +1,4 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { timeAgo } from "@bb/core-ui";
 import type {
   WorkspaceOpenTarget,
   WorkspaceOpenTargetId,
@@ -17,30 +15,20 @@ import {
 } from "@/components/ui/dropdown-menu.js";
 import { PageShell } from "@/components/ui/page-shell.js";
 import { AppSourcesSection } from "@/components/settings/AppSourcesSection";
-import { CONNECTED_DOT_CLASS } from "@/components/settings/constants";
 import {
-  SettingsRow,
-  SettingsRowList,
   SettingsSection,
   SettingsWithControl,
 } from "@/components/ui/settings-section.js";
 import { WorkspaceOpenTargetIcon } from "@/components/workspace-open-target/WorkspaceOpenTargetIcon";
-import {
-  HostRenameDialog,
-  type HostRenameDialogTarget,
-} from "@/components/dialogs/HostRenameDialog";
 import {
   setPreferredTheme,
   useThemePreference,
   type ThemePreference,
 } from "@/hooks/useTheme";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
-import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { useWorkspaceOpenTargets } from "@/hooks/useWorkspaceOpenTargets";
 import { isDesktopBrowserAvailable } from "@/lib/bb-desktop";
 import { useOpenLinksInAppBrowserPreference } from "@/lib/in-app-browser-link-preference";
-import { invalidateHostAvailabilityQueries } from "@/hooks/cache-owners/system-cache-effects";
-import * as api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   resolvePreferredWorkspaceOpenTarget,
@@ -51,11 +39,6 @@ import {
   type WorkspaceOpenTargetCapability,
 } from "@/lib/workspace-open-target-preference";
 import { getWorkspaceOpenTargetFallbackLabel } from "@/components/workspace-open-target/workspace-open-target-display";
-
-interface RenameHostMutationRequest {
-  id: string;
-  name: string;
-}
 
 interface ThemePreferenceOption {
   label: string;
@@ -270,7 +253,7 @@ export function InAppBrowserLinkSettingsSection({
 
 export function AppSettingsView() {
   const themePreference = useThemePreference();
-  const { hasDaemon, isLocalDaemonHost, isLocalHost } = useHostDaemon();
+  const { hasDaemon } = useHostDaemon();
   const { workspaceOpenTargets } = useWorkspaceOpenTargets({
     enabled: hasDaemon,
   });
@@ -282,28 +265,6 @@ export function AppSettingsView() {
   // The in-app browser only exists on desktop; hide the toggle entirely on web,
   // where it would have no effect.
   const [desktopBrowserAvailable] = useState(isDesktopBrowserAvailable);
-  const { data: hosts = [], isLoading: hostsLoading } = useEffectiveHosts();
-  const queryClient = useQueryClient();
-
-  const [renameTarget, setRenameTarget] =
-    useState<HostRenameDialogTarget | null>(null);
-  const localHosts = useMemo(
-    () =>
-      hosts.filter((host) => isLocalHost(host.id) || isLocalDaemonHost(host.id)),
-    [hosts, isLocalDaemonHost, isLocalHost],
-  );
-
-  const renameHost = useMutation({
-    meta: {
-      errorMessage: "Failed to rename host.",
-    },
-    mutationFn: ({ id, name }: RenameHostMutationRequest) =>
-      api.updateHost(id, { name }),
-    onSuccess: () => {
-      invalidateHostAvailabilityQueries({ queryClient });
-      setRenameTarget(null);
-    },
-  });
 
   return (
     <PageShell contentClassName="pt-4 md:pt-5">
@@ -363,75 +324,8 @@ export function AppSettingsView() {
           />
         ) : null}
 
-        <SettingsSection title="Local Host">
-          {hostsLoading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
-          ) : (
-            <SettingsRowList>
-              {localHosts.length === 0 ? (
-                <SettingsRow>
-                  <span className="text-sm text-muted-foreground">
-                    No registered local host.
-                  </span>
-                </SettingsRow>
-              ) : (
-                localHosts.map((host) => {
-                  const isConnected = host.status === "connected";
-                  return (
-                    <SettingsRow key={host.id}>
-                      <span className="min-w-0 flex-1 truncate">
-                        {host.name}
-                        <span className="ml-1.5 text-xs text-muted-foreground">
-                          {host.id}
-                        </span>
-                      </span>
-                      {isConnected ? (
-                        <span
-                          className={CONNECTED_DOT_CLASS}
-                          title="Connected"
-                        />
-                      ) : host.lastSeenAt !== null ? (
-                        <span className="shrink-0 text-xs text-muted-foreground">
-                          Offline · {timeAgo(host.lastSeenAt)}
-                        </span>
-                      ) : (
-                        <span className="shrink-0 text-xs text-muted-foreground">
-                          Never connected
-                        </span>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 shrink-0"
-                        onClick={() =>
-                          setRenameTarget({
-                            id: host.id,
-                            currentName: host.name,
-                          })
-                        }
-                      >
-                        <Icon name="Edit" className="size-3.5" />
-                        Rename
-                      </Button>
-                    </SettingsRow>
-                  );
-                })
-              )}
-            </SettingsRowList>
-          )}
-        </SettingsSection>
-
         <AppSourcesSection />
       </div>
-
-      <HostRenameDialog
-        target={renameTarget}
-        pending={renameHost.isPending}
-        onOpenChange={(open) => {
-          if (!open) setRenameTarget(null);
-        }}
-        onRename={(id, name) => renameHost.mutate({ id, name })}
-      />
     </PageShell>
   );
 }

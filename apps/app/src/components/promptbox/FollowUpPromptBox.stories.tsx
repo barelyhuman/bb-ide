@@ -75,36 +75,22 @@ const basePermission = {
 
 interface EnvironmentSummaryArgs {
   environment: Environment;
-  isLocalHost: boolean;
-  hostName?: string;
-  hostConnected?: boolean;
   branchName?: string;
   onCreateNewThreadInWorktree?: () => void;
 }
 
 function makeEnvironmentSummary({
   environment,
-  isLocalHost,
-  hostName,
-  hostConnected,
   branchName,
   onCreateNewThreadInWorktree,
 }: EnvironmentSummaryArgs): ReactNode {
   const display = formatEnvironmentDisplay({
     environment,
-    isLocalHost,
-    hostName,
   });
   return (
     <ThreadEnvironmentSummary
       environmentLabel={display.modeLabel}
       environmentCompactLabel={display.compactModeLabel}
-      environmentHostLabel={
-        display.location === "remote"
-          ? (display.hostLabel ?? undefined)
-          : undefined
-      }
-      environmentHostConnected={hostConnected}
       environmentIcon={getEnvironmentWorkspaceLabelIconName(
         display.workspaceDisplayKind,
       )}
@@ -121,20 +107,6 @@ const localEnvironmentSummary: ReactNode = makeEnvironmentSummary({
     workspaceProvisionType: "unmanaged",
     status: "ready",
   }),
-  isLocalHost: true,
-  branchName: "bb/promptbox-stories",
-});
-
-const remoteEnvironmentSummary: ReactNode = makeEnvironmentSummary({
-  environment: makeEnvironment({
-    managed: false,
-    isWorktree: false,
-    workspaceProvisionType: "unmanaged",
-    status: "ready",
-  }),
-  isLocalHost: false,
-  hostName: "ec2-builder",
-  hostConnected: true,
   branchName: "bb/promptbox-stories",
 });
 
@@ -144,7 +116,6 @@ const worktreeEnvironmentSummary: ReactNode = makeEnvironmentSummary({
     workspaceProvisionType: "managed-worktree",
     status: "ready",
   }),
-  isLocalHost: true,
   branchName: "bb/promptbox-stories",
   // Worktree threads expose a "new thread in this worktree" affordance —
   // production wires it to the new-thread route. The story just needs a
@@ -163,7 +134,6 @@ const provisioningEnvironmentSummary: ReactNode = makeEnvironmentSummary({
     workspaceProvisionType: "managed-worktree",
     status: "provisioning",
   }),
-  isLocalHost: true,
 });
 
 const usage: ThreadContextWindowUsage = {
@@ -479,15 +449,6 @@ export function Overview() {
             </>
           }
           contextWindowUsage={usage}
-        />
-      </StoryRow>
-      <StoryRow
-        label="env: secondary host"
-        hint="Host-scoped environment · host-name with connection dot"
-      >
-        <Row
-          submitMode={{ kind: "ready" }}
-          environmentSummary={remoteEnvironmentSummary}
         />
       </StoryRow>
       <StoryRow label="env: worktree" hint="managed worktree label + icon">

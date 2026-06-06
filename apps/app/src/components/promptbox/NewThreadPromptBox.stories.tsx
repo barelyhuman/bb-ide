@@ -4,7 +4,6 @@ import {
   NewThreadPromptBoxUI,
   type NewThreadBranchConfig,
   type NewThreadEnvironmentConfig,
-  type NewThreadHostConfig,
   type NewThreadModeConfig,
   type NewThreadProjectConfig,
   type NewThreadWorktreeConfig,
@@ -17,14 +16,12 @@ import {
   HOST_IDS,
   PROJECT_IDS,
   STORY_BRANCH_OPTIONS,
-  STORY_HOSTS,
   STORY_PROJECTS,
   STORY_PROJECT_SOURCES,
   STORY_WORKTREE_OPTIONS,
   makeAttachmentsConfig as makeAttachments,
   makeExecutionControlsProps,
   makeMentionsConfig as makeMentions,
-  storyIsLocalHost,
 } from "../../../.ladle/story-fixtures";
 
 export default {
@@ -32,9 +29,6 @@ export default {
 };
 
 const noop = () => {};
-const connectedStoryHosts = STORY_HOSTS.filter(
-  (host) => host.status === "connected",
-);
 
 const baseExecution = makeExecutionControlsProps();
 
@@ -42,8 +36,7 @@ const baseEnvironment: NewThreadEnvironmentConfig = {
   value: `host:${HOST_IDS.local}:local`,
   onChange: noop,
   sources: STORY_PROJECT_SOURCES,
-  hosts: STORY_HOSTS,
-  isLocalHost: storyIsLocalHost,
+  hostId: HOST_IDS.local,
 };
 
 const baseBranch: NewThreadBranchConfig = {
@@ -71,14 +64,6 @@ const baseProject: NewThreadProjectConfig = {
   projects: STORY_PROJECTS,
   value: PROJECT_IDS.bb,
   onChange: noop,
-};
-
-const baseHost: NewThreadHostConfig = {
-  hosts: STORY_HOSTS,
-  eligibleHosts: connectedStoryHosts,
-  value: HOST_IDS.local,
-  onChange: noop,
-  isLocalHost: storyIsLocalHost,
 };
 
 const permissionModeOptions: readonly PickerOption<PermissionMode>[] = [
@@ -127,7 +112,6 @@ function useControlledMode(
       current === "manager"
         ? {
             mode: "manager",
-            host: baseHost,
           }
         : {
             mode: "thread",
@@ -253,7 +237,6 @@ function FullAccessRow() {
     current === "manager"
       ? {
           mode: "manager",
-          host: baseHost,
         }
       : {
           mode: "thread",

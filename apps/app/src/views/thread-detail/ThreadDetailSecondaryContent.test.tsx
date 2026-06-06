@@ -267,8 +267,6 @@ function buildSecondaryContentProps({
       managerThreads: [],
       canAssignToManager: false,
       canTakeOverThread: false,
-      environmentHost: null,
-      environmentIsLocal: true,
       environment: null,
       workspaceStatus: undefined,
       workspaceStatusError: null,

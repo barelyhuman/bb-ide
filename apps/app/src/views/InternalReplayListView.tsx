@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
 import { Icon } from "@/components/ui/icon.js";
@@ -12,7 +12,6 @@ import {
   type SplitButtonAction,
 } from "@/components/ui/split-button.js";
 import { invalidateReplayCaptures } from "@/hooks/cache-owners/system-cache-effects";
-import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { replayCapturesQueryKey } from "@/hooks/queries/query-keys";
 import { cn } from "@/lib/utils";
 import { getProviderIconInfo } from "@/lib/provider-icon";
@@ -62,11 +61,6 @@ export function InternalReplayListView() {
     queryKey: replayCapturesQueryKey(),
     queryFn: () => api.listReplayCaptures(),
   });
-  const { data: hosts = [] } = useEffectiveHosts();
-  const hostNameById = useMemo(
-    () => new Map(hosts.map((host) => [host.id, host.name])),
-    [hosts],
-  );
   const deleteCapture = useMutation({
     mutationFn: (captureId: string) => api.deleteReplayCapture(captureId),
     onSuccess: () => {
@@ -236,12 +230,6 @@ export function InternalReplayListView() {
                           valueClassName="min-w-0 truncate font-mono"
                         >
                           {capture.captureId}
-                        </DetailRow>
-                        <DetailRow
-                          label="Host"
-                          valueClassName="min-w-0 truncate"
-                        >
-                          {hostNameById.get(capture.hostId) ?? capture.hostId}
                         </DetailRow>
                         <DetailRow
                           label="Provider"

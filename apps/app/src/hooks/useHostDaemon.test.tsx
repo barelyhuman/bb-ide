@@ -31,7 +31,6 @@ interface HostDaemonFetchState {
 interface HostDaemonSnapshot {
   hasDaemon: boolean;
   isLocalDaemonHost: (hostId: string | null | undefined) => boolean;
-  isLocalHost: (hostId: string | null | undefined) => boolean;
   localDaemonHostId: string | null;
   localHostId: string | null;
   pickFolder: (() => Promise<string | null>) | null;
@@ -193,8 +192,6 @@ describe("useHostDaemon", () => {
     expect(snapshot.supportsNativeFolderPicker).toBe(true);
     expect(snapshot.isLocalDaemonHost("host-1")).toBe(true);
     expect(snapshot.isLocalDaemonHost("host-2")).toBe(false);
-    expect(snapshot.isLocalHost("host-1")).toBe(true);
-    expect(snapshot.isLocalHost("host-2")).toBe(false);
 
     await act(async () => {
       await requireHostDaemonSnapshot(latestSnapshot.current).pickFolder?.();
@@ -248,7 +245,6 @@ describe("useHostDaemon", () => {
     expect(snapshot.localDaemonHostId).toBe("host-1");
     expect(snapshot.supportsNativeFolderPicker).toBe(true);
     expect(snapshot.isLocalDaemonHost("host-1")).toBe(true);
-    expect(snapshot.isLocalHost("host-1")).toBe(false);
 
     await act(async () => {
       await requireHostDaemonSnapshot(latestSnapshot.current).pickFolder?.();
@@ -293,7 +289,6 @@ describe("useHostDaemon", () => {
     expect(snapshot.localDaemonHostId).toBeNull();
     expect(snapshot.supportsNativeFolderPicker).toBe(false);
     expect(snapshot.isLocalDaemonHost("host-1")).toBe(false);
-    expect(snapshot.isLocalHost("host-1")).toBe(false);
     expect(snapshot.pickFolder).toBeNull();
   });
 

@@ -5,7 +5,6 @@ import { Link } from "react-router-dom";
 import type {
   Environment,
   GitBranchRefClassification,
-  Host,
   Thread,
   ThreadListEntry,
   WorkspaceStatus,
@@ -14,7 +13,6 @@ import type { ThreadSchedule } from "@bb/server-contract";
 import type { WorkspaceResolutionFailure } from "@bb/host-daemon-contract";
 import { formatEnvironmentDisplay } from "@bb/core-ui";
 import { cn } from "@/lib/utils";
-import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import { Button } from "@/components/ui/button.js";
 import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { CopyableInlineLabel } from "@/components/ui/copy-button.js";
@@ -32,7 +30,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
 import { Icon } from "@/components/ui/icon.js";
-import { LocalhostBadge } from "@/components/ui/localhost-badge.js";
 import {
   BranchPicker,
   getMergeBaseBranchCandidateGroups,
@@ -196,44 +193,14 @@ export function KindRow({ thread }: { thread: Thread }) {
   );
 }
 
-export interface HostRowProps {
-  environmentHost: Host | null;
-  environment: Environment | null;
-  environmentIsLocal: boolean;
-}
-
-export function HostRow({
-  environmentHost,
-  environment,
-  environmentIsLocal,
-}: HostRowProps) {
-  if (!environmentHost) return null;
-  const threadHostIsLocal = environment ? environmentIsLocal : undefined;
-  const threadHostConnected = environmentHost.status === "connected";
-
-  return (
-    <DetailRow label="Host" valueClassName="min-w-0 truncate">
-      <span className="flex items-center gap-1.5">
-        <span className="truncate">{environmentHost.name}</span>
-        {threadHostIsLocal ? <LocalhostBadge /> : null}
-        <HostStatusBadge connected={threadHostConnected} />
-      </span>
-    </DetailRow>
-  );
-}
-
 export interface EnvironmentRowProps {
   thread: Thread;
   environment: Environment | null;
-  environmentHost: Host | null;
-  environmentIsLocal: boolean;
 }
 
 export function EnvironmentRow({
   thread,
   environment,
-  environmentHost,
-  environmentIsLocal,
 }: EnvironmentRowProps) {
   const createThreadInWorktree = useCreateThreadInWorktree({
     projectId: thread.projectId,
@@ -243,8 +210,6 @@ export function EnvironmentRow({
   if (!environment) return null;
   const display = formatEnvironmentDisplay({
     environment,
-    isLocalHost: environmentIsLocal,
-    hostName: environmentHost?.name,
   });
   const showCreateThreadButton = isWorktreeEnvironment(environment);
   return (
@@ -656,8 +621,6 @@ export interface ThreadMetadataContentProps {
   managerThreads: readonly ThreadListEntry[];
   canAssignToManager: boolean;
   canTakeOverThread: boolean;
-  environmentHost: Host | null;
-  environmentIsLocal: boolean;
   environment: Environment | null;
   workspaceStatus: WorkspaceStatus | undefined;
   workspaceStatusError: Error | null;
@@ -766,8 +729,6 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
     managerThreads,
     canAssignToManager,
     canTakeOverThread,
-    environmentHost,
-    environmentIsLocal,
     environment,
     workspaceStatus,
     workspaceStatusError,
@@ -806,17 +767,7 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
         updateThreadPending={updateThreadPending}
         onAssignManager={onAssignManager}
       />
-      <HostRow
-        environmentHost={environmentHost}
-        environment={environment}
-        environmentIsLocal={environmentIsLocal}
-      />
-      <EnvironmentRow
-        thread={thread}
-        environment={environment}
-        environmentHost={environmentHost}
-        environmentIsLocal={environmentIsLocal}
-      />
+      <EnvironmentRow thread={thread} environment={environment} />
       <WorkspacePathRow thread={thread} environment={environment} />
       <BranchRow thread={thread} workspaceStatus={workspaceStatus} />
       <MergeBaseRow

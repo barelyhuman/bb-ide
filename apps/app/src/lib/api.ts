@@ -1,7 +1,6 @@
 import { extractErrorMessage, toRecord } from "@bb/core-ui";
 import type {
   Environment,
-  Host,
   PendingInteraction,
   Project,
   ProjectExecutionDefaults,
@@ -1445,25 +1444,4 @@ export async function getSystemVersion(): Promise<SystemVersionResponse> {
 
 export async function getSystemConfig(): Promise<SystemConfigResponse> {
   return request<SystemConfigResponse>(apiClient.system.config.$get());
-}
-
-export async function listHosts(): Promise<Host[]> {
-  return request<Host[]>(apiClient.hosts.$get());
-}
-
-export async function getHost(id: string): Promise<Host> {
-  return request<Host>(apiClient.hosts[":id"].$get({ param: { id } }));
-}
-
-export async function updateHost(
-  id: string,
-  req: { name: string },
-): Promise<Host> {
-  return request<Host>(
-    apiClient.hosts[":id"].$patch({ param: { id }, json: req }),
-  );
-}
-
-export async function deleteHost(id: string): Promise<void> {
-  await requestVoid(apiClient.hosts[":id"].$delete({ param: { id } }));
 }

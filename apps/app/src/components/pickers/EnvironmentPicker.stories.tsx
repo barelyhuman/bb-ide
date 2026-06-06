@@ -1,21 +1,11 @@
-import type { Host, ProjectSource } from "@bb/domain";
+import type { ProjectSource } from "@bb/domain";
 import { EnvironmentPickerUI } from "./EnvironmentPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
-import { HOST_IDS, makeHost } from "../../../.ladle/story-fixtures";
+import { HOST_IDS } from "../../../.ladle/story-fixtures";
 
 export default {
   title: "pickers/Environment Picker",
 };
-
-const mockHosts: Host[] = [
-  makeHost(),
-  makeHost({ id: "host_mac_mini", name: "Mac Studio (office)" }),
-  makeHost({
-    id: "host_old_laptop",
-    name: "Linux laptop",
-    status: "disconnected",
-  }),
-];
 
 function makeSource(id: string, hostId: string, path: string): ProjectSource {
   return {
@@ -34,12 +24,6 @@ const localProjectSources: readonly ProjectSource[] = [
   makeSource("src_local", HOST_IDS.local, "/Users/michael/Projects/bb"),
 ];
 
-const multiHostSources: readonly ProjectSource[] = [
-  makeSource("src_local", HOST_IDS.local, "/Users/michael/Projects/bb"),
-  makeSource("src_remote", "host_mac_mini", "/Users/michael/projects/bb"),
-];
-
-const isLocalHost = (id: string | null | undefined) => id === HOST_IDS.local;
 const noop = () => {};
 
 export function Overview() {
@@ -50,8 +34,7 @@ export function Overview() {
           value={`host:${HOST_IDS.local}:local`}
           onChange={noop}
           sources={localProjectSources}
-          hosts={mockHosts}
-          isLocalHost={isLocalHost}
+          hostId={HOST_IDS.local}
         />
       </StoryRow>
       <StoryRow label="muted" hint="prompt-box treatment">
@@ -59,8 +42,7 @@ export function Overview() {
           value={`host:${HOST_IDS.local}:local`}
           onChange={noop}
           sources={localProjectSources}
-          hosts={mockHosts}
-          isLocalHost={isLocalHost}
+          hostId={HOST_IDS.local}
           muted
         />
       </StoryRow>
@@ -69,32 +51,7 @@ export function Overview() {
           value={`host:${HOST_IDS.local}:worktree`}
           onChange={noop}
           sources={localProjectSources}
-          hosts={mockHosts}
-          isLocalHost={isLocalHost}
-        />
-      </StoryRow>
-      <StoryRow
-        label="secondary host direct"
-        hint="host: mac-mini-studio + mode: local"
-      >
-        <EnvironmentPickerUI
-          value="host:host_mac_mini:local"
-          onChange={noop}
-          sources={multiHostSources}
-          hosts={mockHosts}
-          isLocalHost={isLocalHost}
-        />
-      </StoryRow>
-      <StoryRow
-        label="secondary host worktree"
-        hint="host: mac-mini-studio + mode: worktree"
-      >
-        <EnvironmentPickerUI
-          value="host:host_mac_mini:worktree"
-          onChange={noop}
-          sources={multiHostSources}
-          hosts={mockHosts}
-          isLocalHost={isLocalHost}
+          hostId={HOST_IDS.local}
         />
       </StoryRow>
       <StoryRow
@@ -105,8 +62,7 @@ export function Overview() {
           value="reuse"
           onChange={noop}
           sources={localProjectSources}
-          hosts={mockHosts}
-          isLocalHost={isLocalHost}
+          hostId={HOST_IDS.local}
         />
       </StoryRow>
       <StoryRow
@@ -117,8 +73,7 @@ export function Overview() {
           value={`host:${HOST_IDS.local}:local`}
           onChange={noop}
           sources={localProjectSources}
-          hosts={mockHosts}
-          isLocalHost={isLocalHost}
+          hostId={HOST_IDS.local}
           reuseDisabled
         />
       </StoryRow>
@@ -126,9 +81,8 @@ export function Overview() {
         <EnvironmentPickerUI
           value={`host:${HOST_IDS.local}:local`}
           onChange={noop}
-          sources={multiHostSources}
-          hosts={mockHosts}
-          isLocalHost={isLocalHost}
+          sources={localProjectSources}
+          hostId={HOST_IDS.local}
           defaultOpen
           modal={false}
         />

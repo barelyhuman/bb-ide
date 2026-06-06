@@ -53,7 +53,6 @@ import { useCreateThreadInWorktree } from "@/hooks/useCreateThreadInWorktree";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useLocalOpenTargets } from "@/hooks/useLocalOpenTargets";
 import { useConnectionAwareQueryState } from "@/hooks/queries/connection-aware-query-state";
-import { useEffectiveHost } from "@/hooks/queries/effective-hosts";
 import { useThreadTerminals } from "@/hooks/queries/thread-terminal-queries";
 import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
 import {
@@ -860,14 +859,6 @@ export function ThreadDetailView() {
   } = useLocalOpenTargets({
     enabled: threadEnvironmentIsLocal,
   });
-  const suppressMissingEnvironmentHostFetch =
-    threadDetailBootstrapResolvedMissingEnvironmentHost({
-      environment,
-      threadDetailBootstrap: threadDetailBootstrapQuery.data,
-    });
-  const { data: environmentHost } = useEffectiveHost(environment?.hostId, {
-    enabled: !suppressMissingEnvironmentHostFetch,
-  });
   const managedBySection: ThreadPromptManagedBySection | null = useMemo(() => {
     if (!thread?.parentThreadId) return null;
     const href = getThreadRoutePath({
@@ -1148,8 +1139,6 @@ export function ThreadDetailView() {
   const threadEnvironmentDisplay = environment
     ? formatEnvironmentDisplay({
         environment,
-        isLocalHost: threadEnvironmentIsLocal,
-        hostName: environmentHost?.name,
       })
     : undefined;
   const threadEnvironmentIcon = threadEnvironmentDisplay
@@ -1234,19 +1223,9 @@ export function ThreadDetailView() {
       canUseGitUi={canUseGitUi}
       contextWindowUsage={contextWindowUsage}
       environmentBranchName={threadBranchName}
-      environmentHostConnected={
-        environmentHost && !threadEnvironmentIsLocal
-          ? environmentHost.status === "connected"
-          : undefined
-      }
       environmentIcon={threadEnvironmentIcon ?? undefined}
       environmentLabel={threadEnvironmentDisplay?.modeLabel}
       environmentCompactLabel={threadEnvironmentDisplay?.compactModeLabel}
-      environmentHostLabel={
-        threadEnvironmentDisplay?.location === "remote"
-          ? (threadEnvironmentDisplay.hostLabel ?? undefined)
-          : undefined
-      }
       isEnvironmentActionPending={requestEnvironmentAction.isPending}
       onCreateNewThreadInWorktree={onCreateNewThreadInWorktree}
       composerQueriesEnabled={hasThreadComposerBootstrapReady}
@@ -1429,8 +1408,6 @@ export function ThreadDetailView() {
           managerThreads,
           canAssignToManager,
           canTakeOverThread,
-          environmentHost: environmentHost ?? null,
-          environmentIsLocal: threadEnvironmentIsLocal,
           environment: environment ?? null,
           workspaceStatus,
           workspaceStatusError: workspaceStatusError ?? null,

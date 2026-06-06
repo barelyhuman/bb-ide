@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import type { Host } from "@bb/domain";
 import type {
   SystemConfigResponse,
   SystemExecutionOptionsResponse,
@@ -9,9 +8,6 @@ import type { ProviderCliStatusResponse } from "@bb/host-daemon-contract";
 import * as api from "@/lib/api";
 import { fetchProviderCliStatus } from "@/lib/api-host-daemon";
 import {
-  type HostQueryId,
-  hostQueryKey,
-  hostsQueryKey,
   localProviderCliStatusQueryKey,
   systemConfigQueryKey,
   systemExecutionOptionsQueryKey,
@@ -28,14 +24,6 @@ interface QueryOptions {
   enabled?: boolean;
 }
 
-function requireQueryId(id: HostQueryId, hookName: string): string {
-  if (!id) {
-    throw new Error(`${hookName}: hostId is required when query is enabled`);
-  }
-
-  return id;
-}
-
 function requireDaemonPort(
   daemonPort: number | null,
   hookName: string,
@@ -46,24 +34,6 @@ function requireDaemonPort(
     );
   }
   return daemonPort;
-}
-
-export function useHosts(options?: QueryOptions) {
-  return useQuery<Host[]>({
-    queryKey: hostsQueryKey(),
-    queryFn: () => api.listHosts(),
-    enabled: options?.enabled ?? true,
-    staleTime: 30_000,
-  });
-}
-
-export function useHost(hostId: HostQueryId, options?: QueryOptions) {
-  return useQuery<Host>({
-    queryKey: hostQueryKey(hostId),
-    queryFn: () => api.getHost(requireQueryId(hostId, "useHost")),
-    enabled: (options?.enabled ?? true) && Boolean(hostId),
-    staleTime: 30_000,
-  });
 }
 
 export function useSystemExecutionOptions(

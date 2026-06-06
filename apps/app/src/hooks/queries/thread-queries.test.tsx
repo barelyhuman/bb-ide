@@ -14,7 +14,6 @@ import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { installAbortableJsonRoute } from "@/test/abort-signal-test-utils";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
-import { useEffectiveHost } from "./effective-hosts";
 import { useEnvironment } from "./environment-queries";
 import {
   useProjectThreadSubset,
@@ -202,14 +201,10 @@ describe("thread query bootstraps", () => {
           enabled: canonicalEnabled,
           staleTime: 5_000,
         });
-        const effectiveHost = useEffectiveHost("host-1", {
-          enabled: canonicalEnabled,
-        });
         return {
           bootstrap,
           canonicalEnvironment,
           canonicalThread,
-          effectiveHost,
         };
       },
       { wrapper },
@@ -219,7 +214,6 @@ describe("thread query bootstraps", () => {
       expect(result.current.bootstrap.status).toBe("success");
       expect(result.current.canonicalThread.data?.id).toBe(thread.id);
       expect(result.current.canonicalEnvironment.data?.id).toBe(environment.id);
-      expect(result.current.effectiveHost.data?.id).toBe(host.id);
     });
     expect(queryClient.getQueryData(hostsQueryKey())).toEqual([host]);
     expect(includeThreadRequestCount).toBe(1);

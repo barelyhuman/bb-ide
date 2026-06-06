@@ -17,7 +17,6 @@ import { pickFolder as daemonPickFolder } from "@/lib/api-host-daemon";
  * - `localDaemonHostId` — the host ID reported by the reachable local daemon
  * - `hasDaemon` — whether a daemon is reachable
  * - `supportsNativeFolderPicker` — whether the daemon can open a native folder picker
- * - `isLocalHost(hostId)` — whether the given host matches this machine's connected server session
  * - `isLocalDaemonHost(hostId)` — whether the given host matches the reachable local daemon
  * - `pickFolder()` — open native folder picker (null if unavailable)
  */
@@ -32,14 +31,6 @@ export function useHostDaemon() {
   const supportsNativeFolderPicker =
     localHostStatus?.supportsNativeFolderPicker ?? false;
   const platform = localHostStatus?.platform ?? null;
-
-  const isLocalHost = useCallback(
-    (hostId: string | null | undefined) => {
-      if (!localHostId || !hostId) return false;
-      return hostId === localHostId;
-    },
-    [localHostId],
-  );
 
   const isLocalDaemonHost = useCallback(
     (hostId: string | null | undefined) => {
@@ -61,7 +52,6 @@ export function useHostDaemon() {
     hasDaemon,
     supportsNativeFolderPicker,
     platform,
-    isLocalHost,
     isLocalDaemonHost,
     pickFolder,
   };

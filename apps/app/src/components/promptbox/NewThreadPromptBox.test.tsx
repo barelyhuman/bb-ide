@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, screen } from "@testing-library/react";
-import type { Host, PermissionMode, ProjectSource } from "@bb/domain";
+import type { PermissionMode, ProjectSource } from "@bb/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import {
@@ -11,28 +11,18 @@ import {
 
 const noop = vi.fn();
 
-type HostIdCandidate = string | null | undefined;
-
 interface TestProviderIconProps {
   className?: string;
 }
 
-const localHost: Host = {
-  id: "host_local",
-  name: "This Mac",
-  type: "persistent",
-  status: "connected",
-  lastSeenAt: 100,
-  createdAt: 0,
-  updatedAt: 100,
-};
+const localHostId = "host_local";
 
 const projectSources: readonly ProjectSource[] = [
   {
     id: "src_local",
     projectId: "proj_bb",
     type: "local_path",
-    hostId: localHost.id,
+    hostId: localHostId,
     path: "/Users/michael/Projects/bb",
     isDefault: true,
     createdAt: 0,
@@ -52,19 +42,14 @@ function TestProviderIcon({ className }: TestProviderIconProps) {
   return <svg className={className} aria-hidden />;
 }
 
-function isLocalHost(hostId: HostIdCandidate): boolean {
-  return hostId === localHost.id;
-}
-
 function buildThreadModeConfig(): NewThreadModeConfig {
   return {
     mode: "thread",
     environment: {
-      value: `host:${localHost.id}:local`,
+      value: `host:${localHostId}:local`,
       onChange: noop,
       sources: projectSources,
-      hosts: [localHost],
-      isLocalHost,
+      hostId: localHostId,
     },
     branch: {
       value: null,

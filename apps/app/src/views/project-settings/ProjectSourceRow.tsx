@@ -1,6 +1,5 @@
 import { type LocalPathProjectSource, type ProjectSource } from "@bb/domain";
 import { Icon } from "@/components/ui/icon.js";
-import { LocalhostBadge } from "@/components/ui/localhost-badge.js";
 import { SettingsRow } from "@/components/ui/settings-section.js";
 import { Pill } from "@/components/ui/pill.js";
 import { PersistentHostIconName } from "@/lib/host-display";
@@ -14,9 +13,8 @@ import {
 
 interface ProjectSourceRowProps {
   source: ProjectSource;
-  isLocalhostSource: boolean;
+  canEditLocalPath: boolean;
   isLocalPathInvalid: boolean;
-  hostName: string;
   isEditPending: boolean;
   isOnlySource: boolean;
   onEditLocalPath: (source: LocalPathProjectSource) => void;
@@ -25,9 +23,8 @@ interface ProjectSourceRowProps {
 
 export function ProjectSourceRow({
   source,
-  isLocalhostSource,
+  canEditLocalPath,
   isLocalPathInvalid,
-  hostName,
   isEditPending,
   isOnlySource,
   onEditLocalPath,
@@ -41,14 +38,6 @@ export function ProjectSourceRow({
       />
       <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
         <span className="min-w-0 flex-shrink truncate">{source.path}</span>
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {hostName}
-        </span>
-        {isLocalhostSource ? (
-          <span className="self-center">
-            <LocalhostBadge />
-          </span>
-        ) : null}
         {isLocalPathInvalid ? (
           <Pill variant="destructive">Invalid local path</Pill>
         ) : null}
@@ -65,7 +54,7 @@ export function ProjectSourceRow({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
-          {isLocalhostSource ? (
+          {canEditLocalPath ? (
             <DropdownMenuItem
               disabled={isEditPending}
               onSelect={(event) => {

@@ -36,7 +36,6 @@ import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { QuickCreateProjectProvider } from "@/hooks/useQuickCreateProject";
 import { RootComposeRoute } from "./RootComposeView";
 
-type HostIdCandidate = string | null | undefined;
 type ThreadOverrides = Partial<ThreadWithRuntime>;
 type ThreadListEntryOverrides = Partial<ThreadListEntry>;
 type ProjectWithThreadsOverrides = Partial<ProjectWithThreadsResponse>;
@@ -47,7 +46,6 @@ vi.mock("@/hooks/useHostDaemon", () => ({
     hasDaemon: true,
     supportsNativeFolderPicker: false,
     platform: null,
-    isLocalHost: (hostId: HostIdCandidate) => hostId === "host_local",
     pickFolder: null,
   }),
 }));

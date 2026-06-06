@@ -75,8 +75,6 @@ interface ThreadDetailPromptAreaProps {
   contextWindowUsage?: ThreadTimelineResponse["contextWindowUsage"];
   environmentBranchName?: string;
   environmentCompactLabel?: string;
-  environmentHostConnected?: boolean;
-  environmentHostLabel?: string;
   environmentIcon?: IconName;
   environmentLabel?: string;
   onCreateNewThreadInWorktree?: () => void;
@@ -129,8 +127,6 @@ export function ThreadDetailPromptArea({
   contextWindowUsage,
   environmentBranchName,
   environmentCompactLabel,
-  environmentHostConnected,
-  environmentHostLabel,
   environmentIcon,
   environmentLabel,
   onCreateNewThreadInWorktree,
@@ -772,12 +768,10 @@ export function ThreadDetailPromptArea({
 
   const environmentSummary = useMemo(
     () =>
-      environmentLabel || environmentHostConnected !== undefined ? (
+      environmentLabel ? (
         <ThreadEnvironmentSummary
           environmentLabel={environmentLabel}
           environmentCompactLabel={environmentCompactLabel}
-          environmentHostLabel={environmentHostLabel}
-          environmentHostConnected={environmentHostConnected}
           environmentIcon={environmentIcon}
           environmentBranchName={environmentBranchName}
           onCreateNewThreadInWorktree={onCreateNewThreadInWorktree}
@@ -786,8 +780,6 @@ export function ThreadDetailPromptArea({
     [
       environmentBranchName,
       environmentCompactLabel,
-      environmentHostConnected,
-      environmentHostLabel,
       environmentIcon,
       environmentLabel,
       onCreateNewThreadInWorktree,

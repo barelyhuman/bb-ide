@@ -27,7 +27,7 @@ export function Overview() {
     <StoryCard>
       <StoryRow
         label="standard"
-        hint="canonical state — manager selector + host + env + branch + merge base + clean git status"
+        hint="canonical state — manager selector + env + branch + merge base + clean git status"
       >
         {render({})}
       </StoryRow>
@@ -79,7 +79,6 @@ export function Overview() {
             environmentId: null,
           }),
           environment: null,
-          environmentHost: null,
           workspaceStatus: undefined,
         })}
       </StoryRow>

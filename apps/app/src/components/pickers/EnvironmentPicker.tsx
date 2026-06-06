@@ -1,7 +1,6 @@
 import { useMemo } from "react";
-import type { Host, ProjectSource } from "@bb/domain";
+import type { ProjectSource } from "@bb/domain";
 import { Icon, type IconName } from "@/components/ui/icon.js";
-import { LocalhostBadge } from "@/components/ui/localhost-badge.js";
 import { findLocalPathProjectSourceForHost } from "@bb/domain";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -18,12 +17,7 @@ import {
   COARSE_POINTER_ICON_SIZE_CLASS,
 } from "@/components/ui/coarse-pointer-sizing.js";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
-import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
-import {
-  HostStatusBadge,
-  HostStatusDot,
-} from "@/components/HostStatusIndicator";
 import { cn } from "@/lib/utils";
 import {
   OPTION_BASE_CLASS_NAME,
@@ -38,44 +32,6 @@ import {
 } from "./environment-picker-value";
 
 // ---------------------------------------------------------------------------
-// Host section data
-// ---------------------------------------------------------------------------
-
-interface HostSection {
-  host: Host;
-  isLocal: boolean;
-  hasSource: boolean;
-  isConnected: boolean;
-}
-
-function buildHostSections(
-  hosts: readonly Host[],
-  sources: readonly ProjectSource[],
-  isLocalHost: (hostId: string | null | undefined) => boolean,
-): HostSection[] {
-  const sections = hosts.map((host): HostSection => {
-    const isConnected = host.status === "connected";
-    const hasSource =
-      findLocalPathProjectSourceForHost(sources, host.id) !== undefined;
-    return {
-      host,
-      isLocal: isLocalHost(host.id),
-      hasSource,
-      isConnected,
-    };
-  });
-
-  // Sort: connected+has-source first, then connected without source, then disconnected
-  sections.sort((a, b) => {
-    const scoreA = (a.isConnected ? 2 : 0) + (a.hasSource ? 1 : 0);
-    const scoreB = (b.isConnected ? 2 : 0) + (b.hasSource ? 1 : 0);
-    return scoreB - scoreA;
-  });
-
-  return sections;
-}
-
-// ---------------------------------------------------------------------------
 // Pure presentational picker. Use directly in stories with mocked data.
 // App callers should use EnvironmentPicker (the connected wrapper below).
 // ---------------------------------------------------------------------------
@@ -83,17 +39,14 @@ function buildHostSections(
 interface SelectedEnvironment {
   modeLabel: string;
   compactModeLabel: string;
-  hostLabel?: string;
   icon: IconName;
-  hostConnected?: boolean;
 }
 
 export interface EnvironmentPickerUIProps {
   value: string;
   onChange: (value: string) => void;
   sources: readonly ProjectSource[];
-  hosts: readonly Host[];
-  isLocalHost: (hostId: string | null | undefined) => boolean;
+  hostId: string | null;
   /** When true, the "Reuse existing worktree" entry is disabled — the
    * caller signals that the project has no worktree envs available to
    * reuse. The entry is always rendered so the affordance stays
@@ -111,16 +64,17 @@ export function EnvironmentPickerUI({
   value,
   onChange,
   sources,
-  hosts,
-  isLocalHost,
+  hostId,
   reuseDisabled,
   muted,
   defaultOpen,
   modal,
 }: EnvironmentPickerUIProps) {
-  const hostSections = useMemo(
-    () => buildHostSections(hosts, sources, isLocalHost),
-    [hosts, sources, isLocalHost],
+  const hasSource = useMemo(
+    () =>
+      hostId !== null &&
+      findLocalPathProjectSourceForHost(sources, hostId) !== undefined,
+    [hostId, sources],
   );
 
   const parsed = useMemo(() => parseEnvironmentValue(value), [value]);
@@ -140,30 +94,15 @@ export function EnvironmentPickerUI({
         icon: getEnvironmentWorkspaceLabelIconName("managed-worktree"),
       };
     }
-    const host = hosts.find((h) => h.id === parsed.hostId);
-    const isLocal = isLocalHost(parsed.hostId);
     const modeLabel =
-      parsed.mode === "worktree"
-        ? "New worktree"
-        : isLocal
-          ? "Work locally"
-          : "Work on host";
+      parsed.mode === "worktree" ? "New worktree" : "Work locally";
     const compactModeLabel =
-      parsed.mode === "worktree" ? "Worktree" : isLocal ? "Local" : "Host";
+      parsed.mode === "worktree" ? "Worktree" : "Local";
     const icon = getEnvironmentWorkspaceLabelIconName(
       parsed.mode === "worktree" ? "managed-worktree" : "other",
     );
-    if (isLocal) {
-      return { modeLabel, compactModeLabel, icon };
-    }
-    return {
-      modeLabel,
-      compactModeLabel,
-      hostLabel: host?.name ?? "Unknown",
-      icon,
-      hostConnected: host?.status === "connected",
-    };
-  }, [parsed, hosts, isLocalHost]);
+    return { modeLabel, compactModeLabel, icon };
+  }, [parsed]);
 
   return (
     <DropdownMenu defaultOpen={defaultOpen} modal={modal}>
@@ -173,7 +112,7 @@ export function EnvironmentPickerUI({
           variant="ghost"
           size="sm"
           aria-label="Environment"
-          title={`Environment: ${selected.modeLabel}${selected.hostLabel ? ` · ${selected.hostLabel}` : ""}`}
+          title={`Environment: ${selected.modeLabel}`}
           data-promptbox-icon-only-control=""
           className={cn(
             OPTION_BASE_CLASS_NAME,
@@ -188,12 +127,6 @@ export function EnvironmentPickerUI({
             />
             <span className="min-w-0 truncate" data-promptbox-full-label="">
               {selected.modeLabel}
-              {selected.hostLabel ? (
-                <span className="text-muted-foreground">
-                  {" "}
-                  · {selected.hostLabel}
-                </span>
-              ) : null}
             </span>
             <span
               className="min-w-0 truncate"
@@ -202,9 +135,6 @@ export function EnvironmentPickerUI({
             >
               {selected.compactModeLabel}
             </span>
-            {selected.hostConnected !== undefined ? (
-              <HostStatusBadge connected={selected.hostConnected} />
-            ) : null}
           </span>
           <Icon
             name="ChevronDown"
@@ -220,18 +150,12 @@ export function EnvironmentPickerUI({
         className="min-w-52 max-w-80 divide-y [&>*+*]:pt-2 [&>*:not(:last-child)]:pb-2"
         mobileTitle="Environment"
       >
-        {hostSections.map((section) => {
-          const enabled = section.isConnected && section.hasSource;
-          return (
-            <HostSectionGroup
-              key={section.host.id}
-              section={section}
-              enabled={enabled}
-              value={value}
-              onChange={onChange}
-            />
-          );
-        })}
+        <WorkspaceModeSection
+          hostId={hostId}
+          enabled={hostId !== null && hasSource}
+          value={value}
+          onChange={onChange}
+        />
         <ReuseSection
           isReuseSelected={parsed?.type === "reuse"}
           disabled={Boolean(reuseDisabled)}
@@ -263,20 +187,14 @@ export function EnvironmentPicker({
   reuseDisabled,
   muted,
 }: EnvironmentPickerProps) {
-  const { isLocalHost } = useHostDaemon();
-  const { data: hosts = [] } = useEffectiveHosts();
-  const localHosts = useMemo(
-    () => hosts.filter((host) => isLocalHost(host.id)),
-    [hosts, isLocalHost],
-  );
+  const { localHostId } = useHostDaemon();
 
   return (
     <EnvironmentPickerUI
       value={value}
       onChange={onChange}
       sources={sources}
-      hosts={localHosts}
-      isLocalHost={isLocalHost}
+      hostId={localHostId}
       reuseDisabled={reuseDisabled}
       muted={muted}
     />
@@ -341,36 +259,32 @@ function ReuseSection({
 }
 
 // ---------------------------------------------------------------------------
-// Host section
+// Workspace mode section
 // ---------------------------------------------------------------------------
 
-interface HostSectionGroupProps {
-  section: HostSection;
+interface WorkspaceModeSectionProps {
+  hostId: string | null;
   enabled: boolean;
   value: string;
   onChange: (value: string) => void;
 }
 
-function HostSectionGroup({
-  section,
+function WorkspaceModeSection({
+  hostId,
   enabled,
   value,
   onChange,
-}: HostSectionGroupProps) {
-  const localValue = encodeHostValue(section.host.id, "local");
-  const worktreeValue = encodeHostValue(section.host.id, "worktree");
+}: WorkspaceModeSectionProps) {
+  const localValue = hostId ? encodeHostValue(hostId, "local") : "";
+  const worktreeValue = hostId ? encodeHostValue(hostId, "worktree") : "";
 
   return (
     <DropdownMenuGroup>
-      <DropdownMenuLabel className="flex items-center gap-1.5">
-        <span className="truncate">{section.host.name}</span>
-        {section.isLocal ? <LocalhostBadge /> : null}
-        {section.isConnected ? <HostStatusDot /> : null}
-      </DropdownMenuLabel>
+      <DropdownMenuLabel>Workspace</DropdownMenuLabel>
       {enabled ? (
         <>
           <EnvironmentMenuItem
-            label={section.isLocal ? "Work locally" : "Work on host"}
+            label="Work locally"
             icon={getEnvironmentWorkspaceLabelIconName("other")}
             itemValue={localValue}
             selectedValue={value}
@@ -386,9 +300,7 @@ function HostSectionGroup({
         </>
       ) : (
         <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-          {!section.isConnected
-            ? "Host is offline"
-            : "Host not configured for project"}
+          Project source unavailable
         </DropdownMenuItem>
       )}
     </DropdownMenuGroup>

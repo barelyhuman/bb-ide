@@ -5,28 +5,21 @@ export interface EnvironmentDisplayInfo {
   /**
    * Human-readable environment label: a custom environment name when present,
    * "Provisioning" while the environment is still being set up, otherwise
-   * "Working locally", "Working remotely", or "Worktree".
+   * "Working locally" or "Worktree".
    */
   modeLabel: string;
   /**
    * Compact mode label for constrained prompt/composer surfaces. Custom names
-   * stay custom names; generated direct-workspace labels compact to
-   * "Local" / "Remote".
+   * stay custom names; generated direct-workspace labels compact to "Local".
    */
   compactModeLabel: string;
-  /** Host display name, if available. Null when the host has no name. */
-  hostLabel: string | null;
   id: string;
-  /** "local" for the user's machine, "remote" for other hosts. */
-  location: "local" | "remote";
   mode: "direct" | "worktree";
   workspaceDisplayKind: EnvironmentWorkspaceDisplayKind;
 }
 
 interface FormatEnvironmentDisplayArgs {
   environment: Environment;
-  isLocalHost: boolean;
-  hostName?: string;
 }
 
 /**
@@ -34,8 +27,6 @@ interface FormatEnvironmentDisplayArgs {
  */
 export function formatEnvironmentDisplay({
   environment,
-  isLocalHost,
-  hostName,
 }: FormatEnvironmentDisplayArgs): EnvironmentDisplayInfo {
   const mode: EnvironmentDisplayInfo["mode"] = environment.isWorktree
     ? "worktree"
@@ -55,30 +46,20 @@ export function formatEnvironmentDisplay({
       ? "Provisioning"
       : mode === "worktree"
         ? "Worktree"
-        : isLocalHost
-          ? "Working locally"
-          : "Working remotely";
+        : "Working locally";
   const generatedCompactModeLabel =
     environment.status === "provisioning"
       ? "Provisioning"
       : mode === "worktree"
         ? "Worktree"
-        : isLocalHost
-          ? "Local"
-          : "Remote";
+        : "Local";
   const modeLabel = environment.name ?? generatedModeLabel;
   const compactModeLabel = environment.name ?? generatedCompactModeLabel;
-
-  const location: EnvironmentDisplayInfo["location"] = isLocalHost
-    ? "local"
-    : "remote";
 
   return {
     modeLabel,
     compactModeLabel,
-    hostLabel: hostName ?? null,
     id: environment.id,
-    location,
     mode,
     workspaceDisplayKind,
   };
