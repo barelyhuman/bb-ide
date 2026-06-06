@@ -67,8 +67,8 @@ Existing reports and audit notes point at the same product pressure:
 - `qa/manual-pass-log.md` notes that manager completion handling moved away from
   polling loops, but live logs still showed occasional `bb thread show --json`
   inspections while reviewing completed child results.
-- `qa/manual-manager-runbook.md` explicitly validates that managers do not poll
-  repeatedly, then instructs reviewers to inspect `bb thread log ... --json`
+- Historical manager QA notes explicitly validated that managers did not poll
+  repeatedly, then instructed reviewers to inspect `bb thread log ... --json`
   and search for `bb thread show`, `bb thread list`, and `bb thread log`.
 - Historical provider audit notes documented the same readability principle for
   provider timelines: full nested agent reports and command noise can overwhelm
@@ -119,13 +119,13 @@ Implementation guidance:
 
 Named truncation budget constants owned by `@bb/thread-view`:
 
-| Constant | Budget | Rationale |
-| --- | --- | --- |
-| `THREAD_OUTPUT_PREVIEW_BUDGET` | 12,000 chars / 200 lines total; 8,000 chars / 140 lines head; 4,000 chars / 60 lines tail | Enough for a useful final-answer summary while preventing essay-sized outputs from dominating manager context. |
-| `GIT_DIFF_PATCH_PREVIEW_BUDGET` | 24,000 chars / 400 lines total; 160 patch lines per file | Allows a manager to inspect representative code changes without importing a full multi-file patch. |
-| `GIT_DIFF_FILE_LIST_PREVIEW_BUDGET` | 8,000 chars / 200 lines | Keeps changed-file metadata visible but bounded for broad refactors. |
+| Constant                                 | Budget                                                                                      | Rationale                                                                                                                                  |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `THREAD_OUTPUT_PREVIEW_BUDGET`           | 12,000 chars / 200 lines total; 8,000 chars / 140 lines head; 4,000 chars / 60 lines tail   | Enough for a useful final-answer summary while preventing essay-sized outputs from dominating manager context.                             |
+| `GIT_DIFF_PATCH_PREVIEW_BUDGET`          | 24,000 chars / 400 lines total; 160 patch lines per file                                    | Allows a manager to inspect representative code changes without importing a full multi-file patch.                                         |
+| `GIT_DIFF_FILE_LIST_PREVIEW_BUDGET`      | 8,000 chars / 200 lines                                                                     | Keeps changed-file metadata visible but bounded for broad refactors.                                                                       |
 | `PROVIDER_COMMAND_OUTPUT_CONTEXT_BUDGET` | 32,000 chars / 600 lines total; 24,000 chars / 450 lines head; 8,000 chars / 150 lines tail | A last-resort provider-context cap for arbitrary shell output, larger than CLI previews because it may be the only evidence for a command. |
-| `PROVIDER_COMMAND_TEXT_CONTEXT_BUDGET` | 8,000 chars / 120 lines | Prevents heredocs and long quoted arguments from becoming repeated future context. |
+| `PROVIDER_COMMAND_TEXT_CONTEXT_BUDGET`   | 8,000 chars / 120 lines                                                                     | Prevents heredocs and long quoted arguments from becoming repeated future context.                                                         |
 
 The utility should count user-visible grapheme clusters and lines for text
 budgets in Phase 1. Truncation must not split a grapheme cluster. If a budget
@@ -136,9 +136,9 @@ output.
 
 Input byte-limit constant owned by `@bb/cli`:
 
-| Constant | Budget | Rationale |
-| --- | --- | --- |
-| `CLI_TEXT_INPUT_MAX_BYTES` | 1 MiB | Prevents accidental huge prompt/message files or stdin streams from OOMing the CLI while still allowing substantial task specs. |
+| Constant                   | Budget | Rationale                                                                                                                       |
+| -------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `CLI_TEXT_INPUT_MAX_BYTES` | 1 MiB  | Prevents accidental huge prompt/message files or stdin streams from OOMing the CLI while still allowing substantial task specs. |
 
 ## Product Defaults
 
@@ -498,8 +498,9 @@ Docs:
 - Update manager instructions where they currently say to review with
   `bb thread show <id> --git-diff` and `bb thread output <id>` so they describe
   preview defaults and when to opt into full detail.
-- Update `qa/manual-manager-runbook.md` with the new validation commands and
-  note that repeated polling remains out of scope for this plan.
+- Update the current real-provider CLI/API E2E runbook or a scoped manager QA
+  artifact with any new validation commands, and note that repeated polling
+  remains out of scope for this plan.
 
 ## Implementation Plan
 

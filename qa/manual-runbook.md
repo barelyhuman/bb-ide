@@ -1,6 +1,43 @@
-# Manual QA Runbook
+# Real-Provider CLI/API E2E Manual Runbook
 
-This runbook covers the standalone persistent-host CLI/API smoke pass for general threads and managed worktrees. It is written against the current CLI and API surface.
+This runbook covers the thorough non-app end-to-end validation pass for bb's
+server, host daemon, CLI, API, database state, and real provider paths. It is
+written against the current standalone persistent-host setup and intentionally
+does not claim generic "Full QA" or release readiness by itself.
+
+Use this when you need to validate real-provider CLI/API behavior with
+standalone server + daemon infrastructure: prompts, follow-ups, managed
+worktrees, thread lifecycle, restart/reconnect behavior, API responses, DB
+state, and logs. This pass does not cover app UI, Electron, or browser behavior.
+
+## QA Gate Taxonomy
+
+- **CI validation** runs Turbo/build/typecheck/lint/unit/integration/package
+  smoke checks. It is automated validation, not manual product QA.
+- **Regression validation** reruns targeted or broad checks after a specific
+  change. Its verdict is scoped to the changed behavior.
+- **Real-provider CLI/API E2E** is this non-app provider gate. The automated
+  companion is `pnpm exec turbo run test:integration`, including real-provider
+  coverage under `tests/integration/real/**` and `@bb/agent-runtime`; this
+  manual runbook adds operator-driven CLI/API, standalone server + daemon,
+  restart, lifecycle, API, DB, and log checks.
+- **Smoke QA** is a shallow liveness check on a running app or surface. It is
+  useful for quick confidence but does not establish release readiness.
+- **Release QA / Full QA** combines CI/regression validation, Real-provider
+  CLI/API E2E where applicable, and app-driven manual/browser/Electron product
+  flows with an explicit pass/fail/NA matrix. Any required release row that is
+  not run makes the release verdict incomplete.
+
+## Not Covered By This Runbook
+
+Pair this runbook with app QA whenever a release or change needs product-flow,
+visual, or shell confidence. App QA should cover the rich prompt editor,
+mentions, sidebar pinning/collapse/drag-and-drop, settings/provider UI,
+Electron shell behavior, browser routing, visual layout, and other in-app flows.
+
+This runbook can find server/daemon/provider/CLI/API regressions that app QA may
+miss, but it will not catch visual regressions, broken browser interactions,
+Electron packaging or window behavior, or UI-only provider-selection issues.
 
 ## Prerequisites
 
@@ -112,7 +149,7 @@ pnpm qa:standalone:stop --state "$STATE_PATH"
 pnpm qa:standalone:cleanup
 ```
 
-## Smoke Pass
+## CLI/API Thread Smoke Pass
 
 Spawn an unmanaged Codex thread and wait for it to finish:
 
@@ -711,9 +748,12 @@ Expected result:
 Record each pass with:
 
 - Date and operator
+- Gate name: Real-provider CLI/API E2E
 - Standalone state path
 - Provider(s) used
 - Credential mode: default subscription-backed path, or explicitly opt-in API-key route path
 - Thread IDs and environment IDs
 - Whether smoke, multi-thread, and recovery passed
 - Any unexpected output, missing events, or log findings
+- Whether this pass was paired with app QA; if not, state that app UI,
+  Electron, and browser behavior were not covered
