@@ -370,6 +370,80 @@ describe("environment command dispatch", () => {
     );
   });
 
+  it("batches live provisioning entries before flushing", async () => {
+    const { workspace } = createFakeWorkspace("/tmp/batched-progress");
+    const { runtime } = createFakeRuntime();
+    const emittedEvents: EventSinkInput[] = [];
+    const eventCountsAtFlush: number[] = [];
+    const manager = new RuntimeManager({
+      provisionWorkspace: async (options) => {
+        options.onProgress?.({
+          type: "step",
+          key: "setup-output-0",
+          text: "install line 0",
+          status: "completed",
+          startedAt: Date.now(),
+        });
+        options.onProgress?.({
+          type: "step",
+          key: "setup-output-1",
+          text: "install line 1",
+          status: "completed",
+          startedAt: Date.now(),
+        });
+        options.onProgress?.({
+          type: "step",
+          key: "setup-output-2",
+          text: "install line 2",
+          status: "completed",
+          startedAt: Date.now(),
+        });
+        return workspace;
+      },
+      createRuntime: () => runtime,
+    });
+
+    const result = await dispatchCommand(
+      {
+        type: "environment.provision",
+        environmentId: "env-batched-progress",
+        initiator: {
+          threadId: "thr-batched-progress",
+          provisioningId: "tpv-batched-progress",
+        },
+        workspaceProvisionType: "unmanaged",
+        path: "/tmp/batched-progress",
+      },
+      makeDispatchOptions({
+        runtimeManager: manager,
+        eventSink: {
+          emit: (event) => {
+            emittedEvents.push(event);
+          },
+          flush: async () => {
+            eventCountsAtFlush.push(emittedEvents.length);
+          },
+        },
+      }),
+    );
+
+    expect(emittedEvents).toHaveLength(1);
+    expect(eventCountsAtFlush).toEqual([1]);
+    const event = emittedEvents[0]?.event;
+    if (!event || event.type !== "system/thread-provisioning") {
+      throw new Error("Expected thread provisioning event");
+    }
+    const entryKeys = event.entries.map((entry) => entry.key);
+    expect(entryKeys).toEqual([
+      "setup-output-0",
+      "setup-output-1",
+      "setup-output-2",
+      "workspace-path",
+      "workspace-branch",
+    ]);
+    expect(result.transcript.map((entry) => entry.key)).toEqual(entryKeys);
+  });
+
   it("flushes live events before surfacing provisioning failures", async () => {
     const emittedEvents: EventSinkInput[] = [];
     let flushCount = 0;

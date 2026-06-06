@@ -14,11 +14,18 @@ import {
 } from "../command-dispatch-support.js";
 
 type ProvisionProgressCallback = (entry: ProvisioningTranscriptEntry) => void;
+interface ProvisionProgressEmitter {
+  flush: () => void;
+  onProgress: ProvisionProgressCallback;
+}
 type BuildOnProgressArgs = {
   command: CommandOf<"environment.provision">;
   options: CommandDispatchOptions;
   transcript: ProvisioningTranscriptEntry[];
 };
+
+const PROVISION_PROGRESS_BATCH_MS = 1_000;
+
 export async function provisionEnvironment(
   command: CommandOf<"environment.provision">,
   options: CommandDispatchOptions,
@@ -27,7 +34,7 @@ export async function provisionEnvironment(
     options.runtimeManager.get(command.environmentId) != null;
 
   const transcript: ProvisioningTranscriptEntry[] = [];
-  const onProgress = buildOnProgress({
+  const progress = buildOnProgress({
     command,
     options,
     transcript,
@@ -36,7 +43,11 @@ export async function provisionEnvironment(
   try {
     const entry = await options.runtimeManager.ensureEnvironment({
       environmentId: command.environmentId,
-      provision: toProvisionWorkspaceOptions(command, options, onProgress),
+      provision: toProvisionWorkspaceOptions(
+        command,
+        options,
+        progress.onProgress,
+      ),
     });
 
     const defaultBranch = entry.workspace.isGitRepo
@@ -47,7 +58,7 @@ export async function provisionEnvironment(
     // For fresh provisions, emit cwd (for unmanaged) and branch/SHA entries.
     if (!alreadyExists) {
       if (!entry.workspace.managed) {
-        onProgress({
+        progress.onProgress({
           type: "step",
           key: "workspace-path",
           text: `Using workspace: ${entry.workspace.path}`,
@@ -67,7 +78,7 @@ export async function provisionEnvironment(
         } catch {
           // SHA unavailable (e.g., empty repo)
         }
-        onProgress({
+        progress.onProgress({
           type: "step",
           key: "workspace-branch",
           text: branchText,
@@ -89,6 +100,7 @@ export async function provisionEnvironment(
   } finally {
     // Flush buffered progress events before reporting the command result so
     // streamed transcript entries stay ordered ahead of the terminal outcome.
+    progress.flush();
     if (command.initiator) {
       await options.eventSink.flush();
     }
@@ -104,19 +116,31 @@ export function cancelEnvironmentProvision(
   });
 }
 
-function buildOnProgress(args: BuildOnProgressArgs): ProvisionProgressCallback {
+function buildOnProgress(args: BuildOnProgressArgs): ProvisionProgressEmitter {
   const { command, options, transcript } = args;
   const initiator = command.initiator;
   const eventSink = options.eventSink;
   if (!initiator) {
-    return (entry) => {
-      transcript.push(entry);
+    return {
+      flush: () => undefined,
+      onProgress: (entry) => {
+        transcript.push(entry);
+      },
     };
   }
   const threadId = initiator.threadId;
+  const pendingEntries: ProvisioningTranscriptEntry[] = [];
+  let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
-  return (entry) => {
-    transcript.push(entry);
+  const flush = () => {
+    if (flushTimer !== null) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+    if (pendingEntries.length === 0) {
+      return;
+    }
+    const entries = pendingEntries.splice(0, pendingEntries.length);
     eventSink.emit({
       threadId,
       event: {
@@ -126,9 +150,25 @@ function buildOnProgress(args: BuildOnProgressArgs): ProvisionProgressCallback {
         provisioningId: initiator.provisioningId,
         status: "active",
         environmentId: command.environmentId,
-        entries: [entry],
+        entries,
       },
     });
+  };
+
+  const scheduleFlush = () => {
+    if (flushTimer !== null) {
+      return;
+    }
+    flushTimer = setTimeout(flush, PROVISION_PROGRESS_BATCH_MS);
+  };
+
+  return {
+    flush,
+    onProgress: (entry) => {
+      transcript.push(entry);
+      pendingEntries.push(entry);
+      scheduleFlush();
+    },
   };
 }
 

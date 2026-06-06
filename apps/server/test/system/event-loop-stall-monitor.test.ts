@@ -72,7 +72,7 @@ describe("event loop stall monitor", () => {
   });
 
   it("logs and resets when the max event loop delay reaches the threshold", () => {
-    const histogram = installHistogram({
+    installHistogram({
       maxDelayMs: 500,
       meanDelayMs: 25,
       p99DelayMs: 450,

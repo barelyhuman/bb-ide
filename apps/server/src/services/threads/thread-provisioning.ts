@@ -253,18 +253,18 @@ async function advanceThreadProvisioningOnce(
   if (!thread || thread.deletedAt !== null) {
     return;
   }
-  let context = args.context ?? loadActiveThreadProvisionContext(deps, thread.id);
+  if (thread.status !== "provisioning") {
+    forgetActiveThreadProvisionContext(thread.id);
+    return;
+  }
+  let context =
+    args.context ?? loadActiveThreadProvisionContext(deps, thread.id);
   if (!context) {
     failThreadProvisioning(deps, {
       thread,
       environmentId: thread.environmentId,
-      detail:
-        "Server restarted before live thread provisioning context completed; retry the thread to continue.",
+      detail: "Thread setup did not finish. Retry the thread to continue.",
     });
-    return;
-  }
-  if (thread.status === "error") {
-    forgetActiveThreadProvisionContext(thread.id);
     return;
   }
   if (thread.archivedAt !== null || thread.stopRequestedAt !== null) {

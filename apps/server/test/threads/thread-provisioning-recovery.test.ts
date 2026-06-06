@@ -18,6 +18,7 @@ import {
   createMetadataPendingContext,
   createWorkspaceReadyContext,
 } from "../../src/services/threads/thread-provisioning-context.js";
+import { advanceThreadProvisioning } from "../../src/services/threads/thread-provisioning.js";
 import {
   listQueuedThreadCommands,
   reportQueuedCommandError,
@@ -167,6 +168,48 @@ describe("thread provisioning recovery", () => {
           });
         }
       }
+    });
+  });
+
+  it("does not fail an already active thread when provisioning is advanced again", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-late-provisioning-advance",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/late-provisioning-advance",
+        status: "ready",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      appendThreadProvisioningEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        provisioningId: "tpv_late_provisioning_advance",
+        status: "completed",
+        entries: [],
+      });
+
+      await advanceThreadProvisioning(harness.deps, {
+        threadId: thread.id,
+      });
+
+      expect(getThread(harness.db, thread.id)).toMatchObject({
+        status: "active",
+      });
+      expect(
+        listEvents(harness.db, { threadId: thread.id }).map(
+          (event) => event.type,
+        ),
+      ).toEqual(["system/thread-provisioning"]);
     });
   });
 

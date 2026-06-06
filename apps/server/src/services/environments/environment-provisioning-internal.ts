@@ -23,9 +23,7 @@ import {
   systemThreadProvisioningEventDataSchema,
   threadScope,
 } from "@bb/domain";
-import type {
-  AppDeps,
-} from "../../types.js";
+import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import {
   appendSystemErrorEventInTransaction,
@@ -404,9 +402,14 @@ export function settleEnvironmentProvisionCommandResult(
   const postCommitActions: CommandResultPostCommitAction[] = [];
   const initiator = args.command.initiator;
   if (!initiator) {
-    setEnvironmentStatus(args.deps.db, args.deps.hub, args.command.environmentId, {
-      status: "error",
-    });
+    setEnvironmentStatus(
+      args.deps.db,
+      args.deps.hub,
+      args.command.environmentId,
+      {
+        status: "error",
+      },
+    );
     return emptyCommandResultSideEffects();
   }
   const environmentProvisioningId = initiator.provisioningId;
@@ -578,7 +581,10 @@ export function settleEnvironmentProvisionCancelCommandResult(
     args.command.environmentId,
   );
   if (!args.report.ok) {
-    const environment = getEnvironment(args.deps.db, args.command.environmentId);
+    const environment = getEnvironment(
+      args.deps.db,
+      args.command.environmentId,
+    );
     args.deps.logger.warn(
       {
         activeProvisionState:
@@ -752,7 +758,7 @@ export async function advanceEnvironmentProvisioning(
     interruptUnrecoverableEnvironmentProvisioning(deps, {
       environmentId: environment.id,
       reason:
-        "Server restarted before live environment provisioning completed; retry provisioning to continue.",
+        "Environment setup did not finish. Retry provisioning to continue.",
     });
     return null;
   }
@@ -811,9 +817,11 @@ export async function dispatchManagedEnvironmentReprovision(
     );
   }
 
-  if (hasActiveManagedEnvironmentProvision(deps, {
-    environmentId: args.environment.id,
-  })) {
+  if (
+    hasActiveManagedEnvironmentProvision(deps, {
+      environmentId: args.environment.id,
+    })
+  ) {
     return MANAGED_REPROVISION_IN_PROGRESS;
   }
 
