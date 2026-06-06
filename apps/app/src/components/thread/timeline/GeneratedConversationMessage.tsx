@@ -150,9 +150,8 @@ function generatedConversationTitle({
       timelineTitleSegment({
         em: false,
         link: null,
-        shimmer:
-          turnRequest.kind === "steer" && turnRequest.status === "pending",
-        text: requestLabel,
+        shimmer: false,
+        text: `(${requestLabel})`,
         truncate: false,
       }),
     );
