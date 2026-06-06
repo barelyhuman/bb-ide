@@ -187,7 +187,6 @@ function acknowledgeTerminalOpen(
       shell: "/bin/zsh",
       title: "zsh",
       initialCwd: "/tmp/terminal-workspace",
-      currentCwd: null,
       cols: 100,
       rows: 30,
     },
@@ -212,7 +211,6 @@ describe("public thread terminal routes", () => {
     harnesses.push(fixture.harness);
     const stored = createTerminalSession(fixture.harness.db, {
       cols: 120,
-      currentCwd: null,
       daemonSessionId: fixture.session.id,
       environmentId: fixture.environment.id,
       hostId: fixture.host.id,
@@ -224,7 +222,6 @@ describe("public thread terminal routes", () => {
     });
     const exited = createTerminalSession(fixture.harness.db, {
       cols: 120,
-      currentCwd: null,
       daemonSessionId: fixture.session.id,
       environmentId: fixture.environment.id,
       hostId: fixture.host.id,
@@ -326,7 +323,6 @@ describe("public thread terminal routes", () => {
         shell: "/bin/zsh",
         title: "zsh",
         initialCwd: "/tmp/terminal-workspace",
-        currentCwd: null,
         cols: 100,
         rows: 30,
       },
@@ -336,7 +332,6 @@ describe("public thread terminal routes", () => {
     expect(response.status).toBe(201);
     const body = terminalSessionSchema.parse(await readJson(response));
     expect(body).toMatchObject({
-      currentCwd: null,
       initialCwd: "/tmp/terminal-workspace",
       status: "running",
       title: "zsh",
@@ -486,7 +481,6 @@ describe("public thread terminal routes", () => {
     harnesses.push(fixture.harness);
     const stored = createTerminalSession(fixture.harness.db, {
       cols: 80,
-      currentCwd: null,
       daemonSessionId: fixture.session.id,
       environmentId: fixture.environment.id,
       hostId: fixture.host.id,
@@ -519,7 +513,6 @@ describe("public thread terminal routes", () => {
     harnesses.push(fixture.harness);
     const stored = createTerminalSession(fixture.harness.db, {
       cols: 80,
-      currentCwd: null,
       daemonSessionId: fixture.session.id,
       environmentId: fixture.environment.id,
       hostId: fixture.host.id,
@@ -579,7 +572,6 @@ describe("public thread terminal routes", () => {
     harnesses.push(fixture.harness);
     const stored = createTerminalSession(fixture.harness.db, {
       cols: 80,
-      currentCwd: null,
       daemonSessionId: fixture.session.id,
       environmentId: fixture.environment.id,
       hostId: fixture.host.id,
@@ -628,7 +620,6 @@ describe("public thread terminal routes", () => {
     harnesses.push(fixture.harness);
     const stored = createTerminalSession(fixture.harness.db, {
       cols: 80,
-      currentCwd: null,
       daemonSessionId: fixture.session.id,
       environmentId: fixture.environment.id,
       hostId: fixture.host.id,
@@ -682,7 +673,6 @@ describe("public thread terminal routes", () => {
     harnesses.push(fixture.harness);
     const stored = createTerminalSession(fixture.harness.db, {
       cols: 80,
-      currentCwd: null,
       daemonSessionId: fixture.session.id,
       environmentId: fixture.environment.id,
       hostId: fixture.host.id,
@@ -721,7 +711,6 @@ describe("public thread terminal routes", () => {
     harnesses.push(fixture.harness);
     const stored = createTerminalSession(fixture.harness.db, {
       cols: 80,
-      currentCwd: null,
       daemonSessionId: fixture.session.id,
       environmentId: fixture.environment.id,
       hostId: fixture.host.id,
@@ -785,7 +774,6 @@ describe("public thread terminal routes", () => {
     harnesses.push(fixture.harness);
     const stored = createTerminalSession(fixture.harness.db, {
       cols: 80,
-      currentCwd: null,
       daemonSessionId: fixture.session.id,
       environmentId: fixture.environment.id,
       hostId: fixture.host.id,

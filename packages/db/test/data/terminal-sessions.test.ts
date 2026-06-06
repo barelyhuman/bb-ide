@@ -88,7 +88,6 @@ function setup(): TerminalSessionFixture {
 function createStartingTerminal(fixture: TerminalSessionFixture) {
   return createTerminalSession(fixture.db, {
     cols: 80,
-    currentCwd: null,
     daemonSessionId: fixture.session.id,
     environmentId: fixture.environment.id,
     hostId: fixture.host.id,
@@ -107,7 +106,6 @@ describe("terminal sessions", () => {
 
     const running = markTerminalSessionRunning(fixture.db, {
       cols: 100,
-      currentCwd: null,
       daemonSessionId: fixture.session.id,
       initialCwd: "/tmp/workspace",
       rows: 30,
@@ -135,7 +133,6 @@ describe("terminal sessions", () => {
 
     const running = markTerminalSessionRunning(fixture.db, {
       cols: 100,
-      currentCwd: null,
       daemonSessionId: fixture.session.id,
       initialCwd: "/tmp/workspace",
       rows: 30,
@@ -193,7 +190,6 @@ describe("terminal sessions", () => {
 
     const running = markTerminalSessionRunning(fixture.db, {
       cols: 100,
-      currentCwd: null,
       daemonSessionId: fixture.session.id,
       initialCwd: "/tmp/workspace",
       rows: 30,
@@ -221,7 +217,6 @@ describe("terminal sessions", () => {
 
     const running = markTerminalSessionRunning(fixture.db, {
       cols: 100,
-      currentCwd: null,
       daemonSessionId: fixture.session.id,
       initialCwd: "/tmp/workspace",
       rows: 30,
@@ -246,7 +241,6 @@ describe("terminal sessions", () => {
 
     const running = markTerminalSessionRunning(fixture.db, {
       cols: 100,
-      currentCwd: null,
       daemonSessionId: replacementSession.id,
       initialCwd: "/tmp/workspace",
       rows: 30,

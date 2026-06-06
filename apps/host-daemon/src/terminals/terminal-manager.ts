@@ -447,7 +447,6 @@ export class TerminalManager {
         shell,
         title: terminalTitleFromShell(shell),
         initialCwd: entry.path,
-        currentCwd: null,
         cols: message.cols,
         rows: message.rows,
       });

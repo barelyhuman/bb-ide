@@ -212,7 +212,6 @@ const terminalSession: TerminalSession = {
   hostId: "host_test",
   title: "Terminal 1",
   initialCwd: "/tmp/workspace",
-  currentCwd: null,
   cols: 80,
   rows: 24,
   status: "running",

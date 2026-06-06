@@ -78,6 +78,24 @@ interface MigratedThreadScheduleRow {
   updatedAt: number;
 }
 
+interface MigratedTerminalSessionRow {
+  id: string;
+  threadId: string;
+  environmentId: string;
+  hostId: string;
+  daemonSessionId: string | null;
+  title: string;
+  initialCwd: string;
+  cols: number;
+  rows: number;
+  status: string;
+  exitCode: number | null;
+  closeReason: string | null;
+  createdAt: number;
+  updatedAt: number;
+  lastUserInputAt: number | null;
+}
+
 interface OperationBackfillProjectRow {
   deletedAt: number | null;
 }
@@ -122,6 +140,10 @@ interface RunMigrationFileArgs {
   migrationPath: string;
 }
 
+interface SeedPre0017TerminalSessionMigrationArgs {
+  db: DbConnection;
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function requirePublishedMigrationWhen(tag: string): number {
@@ -144,6 +166,7 @@ const threadDynamicContextFileStatesWhen = 1779139400002;
 const commandLookupIndexesWhen = 1779943370189;
 const threadPinningMigrationWhen = 1779990051923;
 const threadSchedulesMigrationWhen = 1780614650350;
+const terminalSessionRuntimeStateHonestyWhen = 1780718665310;
 const queuedMessageSortKeyMigrationPath = resolve(
   __dirname,
   "..",
@@ -235,6 +258,7 @@ function replaceAppliedMigrationHash(
 
 function runMigrationFile(args: RunMigrationFileArgs): void {
   const migrationSql = readFileSync(args.migrationPath, "utf-8");
+
   const statements = migrationSql
     .split("--> statement-breakpoint")
     .map((statement) => statement.trim())
@@ -243,6 +267,190 @@ function runMigrationFile(args: RunMigrationFileArgs): void {
   for (const statement of statements) {
     args.db.$client.exec(statement);
   }
+}
+
+function deleteAppliedMigration(db: DbConnection, createdAt: number): void {
+  db.$client
+    .prepare<DeleteMigrationParameters>(
+      `
+        DELETE FROM __drizzle_migrations
+        WHERE created_at = ?
+      `,
+    )
+    .run(createdAt);
+}
+
+function seedPre0017TerminalSessionMigration(
+  args: SeedPre0017TerminalSessionMigrationArgs,
+): void {
+  args.db.$client.pragma("foreign_keys = OFF");
+  try {
+    args.db.$client.exec(`
+      DROP TABLE terminal_sessions;
+      CREATE TABLE terminal_sessions (
+        id text PRIMARY KEY NOT NULL,
+        thread_id text NOT NULL,
+        environment_id text NOT NULL,
+        host_id text NOT NULL,
+        daemon_session_id text,
+        title text NOT NULL,
+        initial_cwd text NOT NULL,
+        current_cwd text,
+        cols integer NOT NULL,
+        rows integer NOT NULL,
+        status text NOT NULL,
+        exit_code integer,
+        close_reason text,
+        created_at integer NOT NULL,
+        updated_at integer NOT NULL,
+        last_user_input_at integer,
+        last_connected_at integer,
+        exited_at integer,
+        FOREIGN KEY (thread_id) REFERENCES threads(id) ON DELETE cascade,
+        FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE cascade,
+        FOREIGN KEY (host_id) REFERENCES hosts(id) ON DELETE cascade,
+        FOREIGN KEY (daemon_session_id) REFERENCES host_daemon_sessions(id) ON DELETE set null
+      );
+      CREATE INDEX terminal_sessions_thread_status_updated_idx
+        ON terminal_sessions (thread_id, status, updated_at);
+      CREATE INDEX terminal_sessions_environment_status_idx
+        ON terminal_sessions (environment_id, status);
+      CREATE INDEX terminal_sessions_host_status_idx
+        ON terminal_sessions (host_id, status);
+      CREATE INDEX terminal_sessions_daemon_session_idx
+        ON terminal_sessions (daemon_session_id);
+    `);
+  } finally {
+    args.db.$client.pragma("foreign_keys = ON");
+  }
+
+  args.db.$client.exec(`
+    INSERT INTO hosts (id, name, type, created_at, updated_at)
+    VALUES ('host_pre0017', 'pre-0017 host', 'persistent', 1000, 1000);
+
+    INSERT INTO projects (id, name, created_at, updated_at)
+    VALUES ('proj_pre0017', 'pre-0017 project', 1000, 1000);
+
+    INSERT INTO environments (
+      id,
+      project_id,
+      host_id,
+      path,
+      workspace_provision_type,
+      status,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      'env_pre0017',
+      'proj_pre0017',
+      'host_pre0017',
+      '/tmp/pre0017',
+      'unmanaged',
+      'ready',
+      1000,
+      1000
+    );
+
+    INSERT INTO threads (
+      id,
+      project_id,
+      environment_id,
+      provider_id,
+      latest_attention_at,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      'thr_pre0017',
+      'proj_pre0017',
+      'env_pre0017',
+      'codex',
+      1000,
+      1000,
+      1000
+    );
+
+    INSERT INTO host_daemon_sessions (
+      id,
+      host_id,
+      instance_id,
+      host_name,
+      host_type,
+      data_dir,
+      protocol_version,
+      heartbeat_interval_ms,
+      lease_timeout_ms,
+      status,
+      lease_expires_at,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      'sess_pre0017',
+      'host_pre0017',
+      'inst_pre0017',
+      'pre-0017 host',
+      'persistent',
+      '/tmp/pre0017-data',
+      32,
+      10000,
+      30000,
+      'active',
+      9000,
+      1000,
+      1000
+    );
+
+    INSERT INTO terminal_sessions (
+      id,
+      thread_id,
+      environment_id,
+      host_id,
+      daemon_session_id,
+      title,
+      initial_cwd,
+      current_cwd,
+      cols,
+      rows,
+      status,
+      exit_code,
+      close_reason,
+      created_at,
+      updated_at,
+      last_user_input_at,
+      last_connected_at,
+      exited_at
+    )
+    VALUES (
+      'term_pre0017',
+      'thr_pre0017',
+      'env_pre0017',
+      'host_pre0017',
+      'sess_pre0017',
+      'Terminal 1',
+      '/tmp/pre0017',
+      '/tmp/derived-runtime-cwd',
+      120,
+      40,
+      'running',
+      NULL,
+      NULL,
+      1100,
+      1200,
+      1300,
+      1400,
+      NULL
+    );
+  `);
+}
+
+function addPre0017TerminalRuntimeColumns(db: DbConnection): void {
+  db.$client.exec(`
+    ALTER TABLE terminal_sessions ADD COLUMN current_cwd text;
+    ALTER TABLE terminal_sessions ADD COLUMN last_connected_at integer;
+    ALTER TABLE terminal_sessions ADD COLUMN exited_at integer;
+  `);
 }
 
 function runQueuedMessageSortKeyMigration(db: DbConnection): void {
@@ -343,6 +551,7 @@ describe("migrate", () => {
 
     try {
       migrate(db);
+      addPre0017TerminalRuntimeColumns(db);
 
       db.$client
         .prepare("DROP INDEX host_daemon_sessions_closed_prune_idx")
@@ -832,6 +1041,7 @@ describe("migrate", () => {
 
     try {
       migrate(db);
+      addPre0017TerminalRuntimeColumns(db);
 
       db.$client.prepare("DROP TABLE thread_schedules").run();
       db.$client.prepare("DROP INDEX projects_deleted_idx").run();
@@ -1078,6 +1288,71 @@ describe("migrate", () => {
           )
           .get("manager_thread_nudges"),
       ).toBeUndefined();
+    } finally {
+      closeConnection(db);
+    }
+  });
+
+  it("preserves durable terminal session data when applying 0017", () => {
+    const db = createConnection(":memory:");
+
+    try {
+      migrate(db);
+      seedPre0017TerminalSessionMigration({ db });
+      deleteAppliedMigration(db, terminalSessionRuntimeStateHonestyWhen);
+
+      migrate(db);
+
+      expect(
+        db.$client
+          .prepare<[], MigratedTerminalSessionRow>(
+            `
+              SELECT
+                id,
+                thread_id AS threadId,
+                environment_id AS environmentId,
+                host_id AS hostId,
+                daemon_session_id AS daemonSessionId,
+                title,
+                initial_cwd AS initialCwd,
+                cols,
+                rows,
+                status,
+                exit_code AS exitCode,
+                close_reason AS closeReason,
+                created_at AS createdAt,
+                updated_at AS updatedAt,
+                last_user_input_at AS lastUserInputAt
+              FROM terminal_sessions
+              WHERE id = 'term_pre0017'
+            `,
+          )
+          .get(),
+      ).toEqual({
+        id: "term_pre0017",
+        threadId: "thr_pre0017",
+        environmentId: "env_pre0017",
+        hostId: "host_pre0017",
+        daemonSessionId: "sess_pre0017",
+        title: "Terminal 1",
+        initialCwd: "/tmp/pre0017",
+        cols: 120,
+        rows: 40,
+        status: "running",
+        exitCode: null,
+        closeReason: null,
+        createdAt: 1100,
+        updatedAt: 1200,
+        lastUserInputAt: 1300,
+      });
+
+      const terminalSessionColumns = db.$client
+        .prepare<[], TableInfoRow>("PRAGMA table_info(terminal_sessions)")
+        .all()
+        .map((column) => column.name);
+      expect(terminalSessionColumns).not.toContain("current_cwd");
+      expect(terminalSessionColumns).not.toContain("last_connected_at");
+      expect(terminalSessionColumns).not.toContain("exited_at");
     } finally {
       closeConnection(db);
     }

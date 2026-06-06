@@ -1852,6 +1852,10 @@ describe("host-daemon command schemas", () => {
 });
 
 describe("host-daemon session schemas", () => {
+  it("documents the current protocol version", () => {
+    expect(HOST_DAEMON_PROTOCOL_VERSION).toBe(33);
+  });
+
   it("parses valid session open and event batch payloads", () => {
     expect(
       hostDaemonSessionOpenRequestSchema.parse({
@@ -2514,7 +2518,6 @@ describe("host-daemon session schemas", () => {
         shell: "/bin/zsh",
         title: "zsh",
         initialCwd: "/tmp/workspace",
-        currentCwd: null,
         cols: TERMINAL_COLS_MAX,
         rows: TERMINAL_ROWS_MAX + 1,
       }).success,

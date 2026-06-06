@@ -29,6 +29,10 @@ import {
   threads,
 } from "../src/index.js";
 
+interface ColumnNameRow {
+  name: string;
+}
+
 function closeConnection(db: ReturnType<typeof createConnection>): void {
   db.$client.close();
 }
@@ -78,6 +82,44 @@ describe("db rebuild schema", () => {
     );
 
     closeConnection(db);
+  });
+
+  it("does not persist terminal runtime-only columns", () => {
+    const db = createConnection(":memory:");
+    migrate(db);
+
+    try {
+      const columnNames = db.$client
+        .prepare<[], ColumnNameRow>(
+          `
+            SELECT name
+            FROM pragma_table_info('terminal_sessions')
+            ORDER BY cid
+          `,
+        )
+        .all()
+        .map((row) => row.name);
+
+      expect(columnNames).toEqual([
+        "id",
+        "thread_id",
+        "environment_id",
+        "host_id",
+        "daemon_session_id",
+        "title",
+        "initial_cwd",
+        "cols",
+        "rows",
+        "status",
+        "exit_code",
+        "close_reason",
+        "created_at",
+        "updated_at",
+        "last_user_input_at",
+      ]);
+    } finally {
+      closeConnection(db);
+    }
   });
 
   it("enforces foreign keys across the rebuilt tables", () => {

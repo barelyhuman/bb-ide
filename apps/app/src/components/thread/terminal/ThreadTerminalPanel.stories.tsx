@@ -18,7 +18,6 @@ const BASE_TERMINAL_SESSION: TerminalSession = {
   hostId: "host_terminal_story",
   title: "Terminal 1",
   initialCwd: "/Users/michael/project",
-  currentCwd: null,
   cols: 100,
   rows: 30,
   status: "running",

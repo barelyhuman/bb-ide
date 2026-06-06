@@ -2111,7 +2111,6 @@ export const terminalSessionSchema = z.object({
   hostId: z.string().min(1),
   title: z.string().min(1),
   initialCwd: z.string().min(1),
-  currentCwd: z.string().min(1).nullable(),
   cols: terminalColsSchema,
   rows: terminalRowsSchema,
   status: terminalSessionStatusSchema,

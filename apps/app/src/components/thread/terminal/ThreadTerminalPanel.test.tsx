@@ -105,7 +105,6 @@ function makeTerminalSession(
     hostId: "host_test",
     title: "Terminal 1",
     initialCwd: "/tmp/workspace",
-    currentCwd: null,
     cols: 100,
     rows: 30,
     status: "running",

@@ -301,7 +301,6 @@ export function toTerminalSession(row: TerminalSessionRow): TerminalSession {
     hostId: row.hostId,
     title: row.title,
     initialCwd: row.initialCwd,
-    currentCwd: row.currentCwd,
     cols: row.cols,
     rows: row.rows,
     status: row.status,
@@ -358,7 +357,6 @@ export class TerminalSessionLifecycle {
     const title = `Terminal ${existingSessions.length + 1}`;
     const startingSession = createTerminalSession(this.options.db, {
       cols: args.payload.cols,
-      currentCwd: null,
       daemonSessionId: daemonSession.id,
       environmentId: environment.id,
       hostId: environment.hostId,
@@ -445,7 +443,6 @@ export class TerminalSessionLifecycle {
 
     const runningSession = markTerminalSessionRunning(this.options.db, {
       cols: opened.cols,
-      currentCwd: opened.currentCwd,
       daemonSessionId: daemonSession.id,
       initialCwd: opened.initialCwd,
       rows: opened.rows,

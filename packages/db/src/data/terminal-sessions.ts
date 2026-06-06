@@ -14,7 +14,6 @@ export type TerminalSessionRow = typeof terminalSessions.$inferSelect;
 
 export interface CreateTerminalSessionInput {
   cols: number;
-  currentCwd: string | null;
   daemonSessionId: string | null;
   environmentId: string;
   hostId: string;
@@ -40,7 +39,6 @@ export interface UpdateTerminalSessionTitleArgs {
 
 export interface MarkTerminalSessionRunningArgs {
   cols: number;
-  currentCwd: string | null;
   daemonSessionId: string;
   initialCwd: string;
   now?: number;
@@ -125,7 +123,6 @@ export function createTerminalSession(
       daemonSessionId: input.daemonSessionId,
       title: input.title,
       initialCwd: input.initialCwd,
-      currentCwd: input.currentCwd,
       cols: input.cols,
       rows: input.rows,
       status: input.status,
@@ -134,8 +131,6 @@ export function createTerminalSession(
       createdAt: now,
       updatedAt: now,
       lastUserInputAt: null,
-      lastConnectedAt: input.daemonSessionId === null ? null : now,
-      exitedAt: null,
     })
     .returning()
     .get();
@@ -233,7 +228,6 @@ export function markTerminalSessionRunning(
       .set({
         cols: args.cols,
         rows: args.rows,
-        currentCwd: args.currentCwd,
         daemonSessionId: args.daemonSessionId,
         initialCwd: args.initialCwd,
         title: args.title,
@@ -241,8 +235,6 @@ export function markTerminalSessionRunning(
         closeReason: null,
         exitCode: null,
         updatedAt: now,
-        lastConnectedAt: now,
-        exitedAt: null,
       })
       .where(
         and(
@@ -317,7 +309,6 @@ export function markTerminalSessionExited(
         closeReason: args.closeReason,
         daemonSessionId: null,
         updatedAt: now,
-        exitedAt: now,
       })
       .where(eq(terminalSessions.id, args.terminalId))
       .returning()
@@ -339,7 +330,6 @@ export function markDaemonTerminalSessionExited(
         closeReason: args.closeReason,
         daemonSessionId: null,
         updatedAt: now,
-        exitedAt: now,
       })
       .where(
         and(
@@ -364,7 +354,6 @@ export function markThreadTerminalSessionsExited(
       closeReason: args.closeReason,
       daemonSessionId: null,
       updatedAt: now,
-      exitedAt: now,
     })
     .where(
       and(
@@ -388,7 +377,6 @@ export function markEnvironmentTerminalSessionsExited(
       closeReason: args.closeReason,
       daemonSessionId: null,
       updatedAt: now,
-      exitedAt: now,
     })
     .where(
       and(
@@ -412,7 +400,6 @@ export function markHostDisconnectedTerminalSessionsExited(
       closeReason: args.closeReason,
       daemonSessionId: null,
       updatedAt: now,
-      exitedAt: now,
     })
     .where(
       and(

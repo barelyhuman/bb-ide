@@ -593,7 +593,6 @@ export const terminalSessions = sqliteTable(
     ),
     title: text("title").notNull(),
     initialCwd: text("initial_cwd").notNull(),
-    currentCwd: text("current_cwd"),
     cols: integer("cols").notNull(),
     rows: integer("rows").notNull(),
     status: text("status").$type<TerminalSessionStatus>().notNull(),
@@ -602,8 +601,6 @@ export const terminalSessions = sqliteTable(
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
     lastUserInputAt: integer("last_user_input_at"),
-    lastConnectedAt: integer("last_connected_at"),
-    exitedAt: integer("exited_at"),
   },
   (table) => [
     index("terminal_sessions_thread_status_updated_idx").on(
