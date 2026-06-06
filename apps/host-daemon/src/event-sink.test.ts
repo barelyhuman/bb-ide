@@ -4,6 +4,7 @@ import { createEventSink, type CreateEventSinkOptions } from "./event-sink.js";
 
 function createLogger(): CreateEventSinkOptions["logger"] {
   return {
+    debug: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
   };
@@ -126,6 +127,29 @@ describe("event sink", () => {
     // The rejected event is dropped, not retried.
     await sink.flush();
     expect(postEvents).toHaveBeenCalledTimes(1);
+  });
+
+  it("logs a debug tripwire once when the queue grows large while undelivered", () => {
+    const logger = createLogger();
+    const sink = createEventSink({
+      isSessionOpen: () => false,
+      logger,
+      postEvents: acceptingPostEvents(),
+    });
+
+    for (let index = 0; index < 511; index += 1) {
+      sink.emit({ threadId: "thr_1", event: systemErrorEvent("thr_1") });
+    }
+    expect(logger.debug).not.toHaveBeenCalled();
+
+    // Crossing the depth threshold fires the tripwire once...
+    sink.emit({ threadId: "thr_1", event: systemErrorEvent("thr_1") });
+    sink.emit({ threadId: "thr_1", event: systemErrorEvent("thr_1") });
+    expect(logger.debug).toHaveBeenCalledTimes(1);
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({ queueDepth: 512 }),
+      expect.any(String),
+    );
   });
 
   it("never throws from emit regardless of how many events queue up", () => {

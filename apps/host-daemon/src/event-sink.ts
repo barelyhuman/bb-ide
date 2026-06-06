@@ -9,6 +9,12 @@ import type { HostDaemonLogger } from "./logger.js";
 
 const DEFAULT_DEBOUNCE_MS = 100;
 
+// Tripwires for noticing that delivery has stalled and the in-memory queue is
+// growing. These only emit a debug log — they never drop, fault, or bound the
+// queue. If they fire in practice, that is the signal to add real backpressure.
+const QUEUE_DEPTH_DEBUG_THRESHOLD = 512;
+const QUEUE_AGE_DEBUG_THRESHOLD_MS = 30_000;
+
 export interface EventSinkInput {
   event: ThreadEvent;
   threadId: string;
@@ -22,7 +28,7 @@ export interface EventPostResult {
 
 export interface CreateEventSinkOptions {
   isSessionOpen: () => boolean;
-  logger: Pick<HostDaemonLogger, "error" | "warn">;
+  logger: Pick<HostDaemonLogger, "debug" | "error" | "warn">;
   postEvents: (events: HostDaemonEventEnvelope[]) => Promise<EventPostResult>;
 }
 
@@ -96,6 +102,29 @@ export function createEventSink(options: CreateEventSinkOptions): EventSink {
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let flushPromise: Promise<void> | null = null;
   let disposed = false;
+  // When the queue first became non-empty in the current backed-up episode, or
+  // null while the queue is empty. Used only for the debug tripwire below.
+  let backedUpSinceMs: number | null = null;
+  let backpressureLogged = false;
+
+  function maybeLogQueuePressure(): void {
+    if (backpressureLogged || backedUpSinceMs === null) {
+      return;
+    }
+    const queueDepth = queue.length;
+    const queueAgeMs = Date.now() - backedUpSinceMs;
+    if (
+      queueDepth < QUEUE_DEPTH_DEBUG_THRESHOLD &&
+      queueAgeMs < QUEUE_AGE_DEBUG_THRESHOLD_MS
+    ) {
+      return;
+    }
+    backpressureLogged = true;
+    options.logger.debug(
+      { queueDepth, queueAgeMs },
+      "Daemon event queue is backing up; delivery may be stalled",
+    );
+  }
 
   function clearScheduledFlush(): void {
     if (flushTimer === null) {
@@ -154,6 +183,10 @@ export function createEventSink(options: CreateEventSinkOptions): EventSink {
         );
       }
       queue.splice(0, batch.length);
+      if (queue.length === 0) {
+        backedUpSinceMs = null;
+        backpressureLogged = false;
+      }
     }
   }
 
@@ -177,10 +210,14 @@ export function createEventSink(options: CreateEventSinkOptions): EventSink {
       if (disposed) {
         throw new EventSinkDisposedError();
       }
+      if (backedUpSinceMs === null) {
+        backedUpSinceMs = Date.now();
+      }
       queue.push({
         threadId: input.threadId,
         event: input.event,
       });
+      maybeLogQueuePressure();
       scheduleFlush(
         shouldFlushThreadEventImmediately(input.event) ? 0 : DEFAULT_DEBOUNCE_MS,
       );
