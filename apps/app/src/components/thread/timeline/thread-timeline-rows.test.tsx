@@ -286,29 +286,6 @@ describe("ThreadTimelineRows", () => {
     });
   });
 
-  it("renders system-originated user rows with compact BB system chrome", () => {
-    renderTimelineRows({
-      timelineRows: [
-        conversationRow({
-          role: "user",
-          initiator: "system",
-          senderThreadId: null,
-          text: "[bb system]\n\nScheduled nudge: daily-recap. Check ASYNC.md.",
-        }),
-      ],
-    });
-
-    expect(
-      screen
-        .getByRole("button", { name: /System Message/u })
-        .getAttribute("aria-expanded"),
-    ).toBe("true");
-    expect(
-      screen.getByText("Scheduled nudge: daily-recap. Check ASYNC.md."),
-    ).toBeTruthy();
-    expect(screen.queryByText(/\[bb system/u)).toBeNull();
-  });
-
   it("renders an unread divider before the first row newer than the frozen read cutoff", () => {
     renderTimelineRows({
       overrides: {

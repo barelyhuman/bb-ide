@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo } from "react";
 import type { TimelineUserConversationRow } from "@bb/server-contract";
 import type { PromptTextMention } from "@bb/domain";
 import type { TimelineTitle, TimelineTitleSegment } from "@bb/thread-view";
@@ -9,7 +9,6 @@ import {
 } from "./ConversationAttachments.js";
 import { computeMutedPrefixLength } from "./compute-muted-prefix-length.js";
 import {
-  clipMentionTextToVisibleRange,
   renderMentionTextSegments,
   shiftMentionsToTextRange,
 } from "./ConversationMessageMentions.js";
@@ -17,14 +16,8 @@ import { ExpandableTimelineRow } from "./ExpandableTimelineRow.js";
 import { NESTED_TIMELINE_GROUP_LINE_CLASS_NAME } from "./timeline-nested-group-line.js";
 import type { TimelineTitleLinkResolver } from "./TimelineTitleView.js";
 import type { ThreadTimelineLocalFileLinkHandler } from "./types.js";
-import { USER_MESSAGE_CHAR_CAP } from "./conversation-message-limits.js";
 import { turnRequestLabel } from "./conversation-turn-request-label.js";
 import { cn } from "@/lib/utils";
-import {
-  ConversationMessageInlineOverflowToggle,
-  ConversationMessageOverflowToggle,
-  useIsOverflowing,
-} from "./conversation-message-overflow.js";
 
 interface GeneratedConversationMessageProps {
   attachmentItems: ConversationAttachmentItems;
@@ -202,29 +195,6 @@ export const GeneratedConversationMessage = memo(
         }),
       [mentions, messageText.length, trimStartLength],
     );
-    const visibleText =
-      messageText.length > USER_MESSAGE_CHAR_CAP
-        ? messageText.slice(0, USER_MESSAGE_CHAR_CAP)
-        : messageText;
-    const visibleMessage = useMemo(
-      () =>
-        clipMentionTextToVisibleRange({
-          mentions: messageMentions,
-          rangeStart: 0,
-          text: visibleText,
-        }),
-      [messageMentions, visibleText],
-    );
-    const isTruncated = messageText.length > USER_MESSAGE_CHAR_CAP;
-    const [isFullTextVisible, setIsFullTextVisible] = useState(false);
-    const textRef = useRef<HTMLParagraphElement>(null);
-    const isOverflowing = useIsOverflowing({
-      elementRef: textRef,
-      enabled: !isFullTextVisible && messageText.length > 0,
-      measurementKey: visibleText,
-    });
-    const showToggle = isFullTextVisible || isOverflowing;
-    const showInlineToggle = !isFullTextVisible && isOverflowing;
     const requestLabel = turnRequestLabel(turnRequest);
     const isPendingSteer =
       turnRequest.kind === "steer" && turnRequest.status === "pending";
@@ -243,42 +213,17 @@ export const GeneratedConversationMessage = memo(
         <div className={NESTED_TIMELINE_GROUP_LINE_CLASS_NAME}>
           <div className="pl-2 text-sm leading-relaxed text-foreground">
             {messageText ? (
-              <p
-                ref={textRef}
-                className={cn(
-                  "whitespace-pre-wrap break-words",
-                  !isFullTextVisible && "line-clamp-2",
-                  showInlineToggle && "relative",
-                )}
-              >
+              <p className="whitespace-pre-wrap break-words">
                 {renderMentionTextSegments({
-                  mentions: visibleMessage.mentions,
-                  text: visibleMessage.text,
+                  mentions: messageMentions,
+                  text: messageText,
                 })}
-                {isTruncated ? (
-                  <span className="text-muted-foreground"> [truncated]</span>
-                ) : null}
-                {showInlineToggle ? (
-                  <ConversationMessageInlineOverflowToggle
-                    buttonBackgroundClassName="bg-background"
-                    fadeFromClassName="from-background"
-                    label="Show more"
-                    onToggle={() => setIsFullTextVisible(true)}
-                  />
-                ) : null}
               </p>
             ) : (
               <p className="text-muted-foreground">
                 {generatedConversationEmptyText(sourceKind)}
               </p>
             )}
-            {isFullTextVisible && showToggle ? (
-              <ConversationMessageOverflowToggle
-                expanded={isFullTextVisible}
-                labels={{ collapsed: "Show more", expanded: "Show less" }}
-                onToggle={() => setIsFullTextVisible((prev) => !prev)}
-              />
-            ) : null}
             <ConversationAttachments
               align="start"
               filePaths={attachmentItems.filePaths}
@@ -308,17 +253,13 @@ export const GeneratedConversationMessage = memo(
       [
         attachmentItems.filePaths,
         attachmentItems.imageItems,
-        isTruncated,
         messageText,
+        messageMentions,
         onOpenLocalFileLink,
         projectId,
         sourceKind,
         requestLabel,
         isPendingSteer,
-        isFullTextVisible,
-        visibleMessage,
-        showToggle,
-        showInlineToggle,
       ],
     );
 
@@ -326,7 +267,6 @@ export const GeneratedConversationMessage = memo(
       <ExpandableTimelineRow
         title={title}
         leadingIcon={leadingIcon}
-        autoExpanded={sourceKind === "system"}
         resolveSegmentLinkHref={resolveSegmentLinkHref}
         renderBody={renderBody}
       />

@@ -85,11 +85,11 @@ Reply with a punch list, not code. Each item should call out the current shape, 
 
 Cap at ~600 words. Lead with the highest-value trims so I can prioritize.`;
 
-const clampedSystemMessageText = `[bb system]
+const longSystemMessageText = `[bb system]
 
-Scheduled follow-up: refresh the active project context, collect the latest thread status, and prepare a concise handoff for the next assistant turn. This fixture is intentionally long enough to exceed two rendered lines in the timeline row, which keeps the system message auto-expanded while showing the Show more affordance.
+Scheduled follow-up: refresh the active project context, collect the latest thread status, and prepare a concise handoff for the next assistant turn. This fixture is intentionally long enough to exercise the expanded generated-message body.
 
-Additional detail after the preview confirms that expanding the row preserves the rest of the message body.`;
+Additional detail confirms that expanding the row preserves the rest of the message body.`;
 
 const singleImageAttachments: TimelineConversationAttachments = {
   webImages: 0,
@@ -311,7 +311,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="system-initiated (scheduled turn)"
-        hint="auto-expanded activity row: System Message"
+        hint="collapsed activity row: System Message"
       >
         <TimelineStage>
           <ConversationMessageContent
@@ -328,7 +328,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="system-initiated (welcome)"
-        hint="system message body is auto-expanded and line-clamped"
+        hint="system message body is shown after expanding the row"
       >
         <TimelineStage>
           <ConversationMessageContent
@@ -346,8 +346,8 @@ export function Overview() {
         </TimelineStage>
       </StoryRow>
       <StoryRow
-        label="system-initiated (clamped)"
-        hint="auto-expanded body shows two lines with Show more"
+        label="system-initiated (long)"
+        hint="expanded body shows the full generated message"
       >
         <TimelineStage>
           <ConversationMessageContent
@@ -355,7 +355,7 @@ export function Overview() {
             initiator="system"
             senderThreadId={null}
             senderThreadTitle={null}
-            text={clampedSystemMessageText}
+            text={longSystemMessageText}
             attachments={null}
             mentions={[]}
             turnRequest={acceptedMessage}
