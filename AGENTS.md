@@ -57,6 +57,39 @@
 - API routes are under `/api/v1/` — e.g. `GET /api/v1/threads/:id`. `curl` the server directly to isolate frontend vs server bugs.
 - Use the CLI to inspect state: `pnpm bb thread show <id>`, `pnpm bb project list`, `pnpm bb status`. From source: `pnpm bb:dev`.
 
+### Local Dev QA Launcher
+
+Use `scripts/bb-dev-app` when validating changes in the desktop dev app or
+helping QA from this single checkout:
+
+- `scripts/bb-dev-app status` prints the active branch, dev URLs, data dir, and
+  logs.
+- `scripts/bb-dev-app current` restarts dev server + desktop on the current
+  branch.
+- `scripts/bb-dev-app main` fetches `origin/main`, fast-forwards `main`, and
+  launches dev server + desktop from this same checkout.
+- `scripts/bb-dev-app branch <branch>` switches to a local branch, or creates
+  it from `origin/<branch>`, then launches dev server + desktop.
+- `scripts/bb-dev-app stop` stops the launcher-managed dev server and desktop.
+- `scripts/bb-dev-app logs dev` and `scripts/bb-dev-app logs desktop` follow
+  logs.
+
+Branch switches intentionally keep dirty work in this single checkout; git will
+stop if a local file would be overwritten. Set `BB_DEV_APP_STASH_DIRTY=1` for a
+one-off launch that stashes first.
+
+For CLI QA against the dev instance, run `eval "$(scripts/bb-dev-app env)"`
+first. This sets `BB_SERVER_URL`, `BB_HOST_DAEMON_PORT`, and
+`BB_PROJECT_ID=proj_personal` so `pnpm bb:dev ...` does not accidentally target
+the packaged/prod app.
+
+Smoke-test agents with:
+
+```bash
+eval "$(scripts/bb-dev-app env)"
+pnpm bb:dev thread spawn --project proj_personal --provider codex --permission-mode readonly --title "Smoke test" --prompt "Reply only with ok." --no-context-parent-thread --json
+```
+
 ## Contract Documentation
 
 - Routes and commands that are self-evident from their name and type signature don't need comments. Add JSDoc only when the behavior is non-obvious — side effects, multi-step flows, guards, or context that the type signature doesn't convey.
