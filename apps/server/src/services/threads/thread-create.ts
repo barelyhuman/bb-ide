@@ -16,6 +16,7 @@ import {
   rememberProjectExecutionDefaultsForCreate,
   resolveProjectExecutionDefaultsForCreate,
 } from "./project-execution-defaults.js";
+import { validatePromptAttachmentReferences } from "../projects/attachments.js";
 import {
   createThreadRecord,
   getThreadSafe,
@@ -274,6 +275,11 @@ export async function createThreadFromRequest(
         projectId: requestInput.projectId,
       })
     : null;
+  await validatePromptAttachmentReferences({
+    dataDir: deps.config.dataDir,
+    input: requestInput.input,
+    projectId: requestInput.projectId,
+  });
   const { executionDefaults, providerId } =
     resolveProjectExecutionDefaultsForCreate(deps, {
       executionInputSources: requestInput.executionInputSources,

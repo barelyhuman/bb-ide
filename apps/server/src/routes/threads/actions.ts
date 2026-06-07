@@ -35,6 +35,7 @@ import {
   wouldCleanupEnvironment,
 } from "../../services/environments/environment-cleanup-internal.js";
 import { requirePublicThread } from "../../services/lib/entity-lookup.js";
+import { validatePromptAttachmentReferences } from "../../services/projects/attachments.js";
 import {
   requestQueuedMessageAutoSendForThread,
   sendQueuedMessage,
@@ -154,6 +155,11 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     async (context, payload) => {
       const thread = requirePublicThread(deps.db, context.req.param("id"));
       ensureThreadIsWritable(thread);
+      await validatePromptAttachmentReferences({
+        dataDir: deps.config.dataDir,
+        input: payload.input,
+        projectId: thread.projectId,
+      });
       const execution = await buildExecutionOptions(
         deps,
         payload,

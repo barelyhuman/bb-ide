@@ -152,6 +152,97 @@ case "$PI_MODEL" in
 esac
 ```
 
+## API Prompt Attachments
+
+Public API `localFile` and `localImage` prompt parts use one of two path
+forms:
+
+- Absolute or URI-like paths are passed through to the runtime as already
+  readable paths.
+- Relative paths are project attachment references returned by
+  `POST /api/v1/projects/:id/attachments`. They are not workspace-relative file
+  paths. Do not submit `{ "type": "localFile", "path": "alpha.txt" }` for
+  `$PROJECT_ROOT/alpha.txt`; upload the file first and use the returned `path`.
+
+Validate the upload-and-reference flow before any prompt/timeline attachment QA:
+
+```bash
+ATTACHMENT_JSON=$(
+  curl -fsS \
+    -X POST "$BB_SERVER_URL/api/v1/projects/$BB_PROJECT_ID/attachments" \
+    -F "file=@$PROJECT_ROOT/alpha.txt"
+)
+echo "$ATTACHMENT_JSON" | jq
+
+PROMPT_TEXT='Review @alpha.txt and reply exactly ATTACHMENT OK.'
+MENTION_TEXT='@alpha.txt'
+THREAD_CREATE_BODY=$(
+  jq -n \
+    --arg projectId "$BB_PROJECT_ID" \
+    --arg hostId "$HOST_ID" \
+    --arg model "$CODEX_MODEL" \
+    --arg text "$PROMPT_TEXT" \
+    --arg mention "$MENTION_TEXT" \
+    --argjson attachment "$ATTACHMENT_JSON" '
+      ($text | index($mention)) as $start |
+      {
+        origin: "app",
+        projectId: $projectId,
+        providerId: "codex",
+        model: $model,
+        input: [
+          {
+            type: "text",
+            text: $text,
+            mentions: [
+              {
+                start: $start,
+                end: ($start + ($mention | length)),
+                resource: {
+                  kind: "path",
+                  source: "workspace",
+                  entryKind: "file",
+                  path: "alpha.txt",
+                  label: "alpha.txt"
+                }
+              }
+            ]
+          },
+          (
+            if $attachment.type == "localFile" then
+              {
+                type: "localFile",
+                path: $attachment.path,
+                name: $attachment.name,
+                sizeBytes: $attachment.sizeBytes
+              } + (if $attachment.mimeType then { mimeType: $attachment.mimeType } else {} end)
+            else
+              { type: "localImage", path: $attachment.path }
+            end
+          )
+        ],
+        environment: {
+          type: "host",
+          hostId: $hostId,
+          workspace: {
+            type: "unmanaged",
+            path: null
+          }
+        }
+      }
+    '
+)
+THREAD_JSON=$(
+  curl -fsS \
+    -H 'content-type: application/json' \
+    -d "$THREAD_CREATE_BODY" \
+    "$BB_SERVER_URL/api/v1/threads"
+)
+THREAD_ID=$(echo "$THREAD_JSON" | jq -er '.id')
+curl -fsS "$BB_SERVER_URL/api/v1/threads/$THREAD_ID/timeline" |
+  jq '.rows[] | select(.kind == "conversation" and .role == "user") | {mentions, attachments}'
+```
+
 For exact-output checks, use prompts in the form `Say exactly: <EXPECTED TEXT>`.
 Avoid phrasing like "reply only in chat with..." because providers can interpret that
 as a behavioral constraint rather than the expected response text.

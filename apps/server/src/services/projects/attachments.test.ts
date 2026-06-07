@@ -2,7 +2,10 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { readAttachment } from "./attachments.js";
+import {
+  readAttachment,
+  validatePromptAttachmentReferences,
+} from "./attachments.js";
 
 const tempDirs: string[] = [];
 
@@ -31,6 +34,58 @@ describe("project attachments", () => {
 
     expect(result.content.toString("utf8")).toBe("hello");
     expect(result.mimeType).toBe("text/plain");
+  });
+
+  it("accepts prompt attachment references to uploaded project files", async () => {
+    const dataDir = await makeTempDir();
+    const attachmentDir = join(dataDir, "attachments", "proj_test");
+
+    await mkdir(attachmentDir, { recursive: true });
+    await writeFile(join(attachmentDir, "notes-uploaded.txt"), "hello", "utf8");
+
+    await expect(
+      validatePromptAttachmentReferences({
+        dataDir,
+        projectId: "proj_test",
+        input: [{ type: "localFile", path: "notes-uploaded.txt" }],
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("rejects relative prompt attachment paths that were not uploaded", async () => {
+    const dataDir = await makeTempDir();
+
+    await expect(
+      validatePromptAttachmentReferences({
+        dataDir,
+        projectId: "proj_test",
+        input: [{ type: "localFile", path: "alpha.txt" }],
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      body: expect.objectContaining({
+        code: "invalid_request",
+        message: expect.stringContaining(
+          "relative workspace file paths are not valid attachment references",
+        ),
+      }),
+    });
+  });
+
+  it("allows runtime-readable prompt attachment paths without upload validation", async () => {
+    const dataDir = await makeTempDir();
+
+    await expect(
+      validatePromptAttachmentReferences({
+        dataDir,
+        projectId: "proj_test",
+        input: [
+          { type: "localFile", path: "/tmp/workspace/alpha.txt" },
+          { type: "localImage", path: "C:\\Users\\michael\\screenshot.png" },
+          { type: "localFile", path: "https://example.test/notes.txt" },
+        ],
+      }),
+    ).resolves.toBeUndefined();
   });
 
   it("rejects POSIX traversal outside the project attachment directory", async () => {

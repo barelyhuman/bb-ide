@@ -29,6 +29,7 @@ import {
   threadTimelineResponseSchema,
   threadWithIncludesResponseSchema,
   timelineTurnSummaryDetailsResponseSchema,
+  uploadedPromptAttachmentSchema,
 } from "@bb/server-contract";
 import { z } from "zod";
 import { describe, expect, it } from "vitest";
@@ -75,8 +76,8 @@ describe("public thread data routes", () => {
     await withTestHarness(async (harness) => {
       const { host, environment, thread } = seedThreadFixture(harness, {
         session: {
-        id: "host-thread-include",
-      },
+          id: "host-thread-include",
+        },
       });
 
       const leanResponse = await harness.app.request(
@@ -196,6 +197,189 @@ describe("public thread data routes", () => {
           ]),
         }),
       );
+    });
+  });
+
+  it("uses uploaded project attachments for localFile prompt input and timeline metadata", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-uploaded-local-file",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/uploaded-local-file-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/uploaded-local-file-project",
+      });
+      const formData = new FormData();
+      formData.set(
+        "file",
+        new File(["alpha\n"], "alpha.txt", { type: "text/plain" }),
+      );
+
+      const uploadResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}/attachments`,
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
+      expect(uploadResponse.status).toBe(201);
+      const uploaded = uploadedPromptAttachmentSchema.parse(
+        await readJson(uploadResponse),
+      );
+      if (uploaded.type !== "localFile") {
+        throw new Error("Expected text upload to produce localFile attachment");
+      }
+
+      const promptText = "Review @alpha.txt";
+      const mentionText = "@alpha.txt";
+      const mentionStart = promptText.indexOf(mentionText);
+      const mentionEnd = mentionStart + mentionText.length;
+      const mention = {
+        start: mentionStart,
+        end: mentionEnd,
+        resource: {
+          kind: "path",
+          source: "workspace",
+          entryKind: "file",
+          path: "alpha.txt",
+          label: "alpha.txt",
+        },
+      };
+      const attachmentInput = {
+        type: "localFile",
+        path: uploaded.path,
+        name: uploaded.name,
+        sizeBytes: uploaded.sizeBytes,
+        ...(uploaded.mimeType ? { mimeType: uploaded.mimeType } : {}),
+      };
+
+      const createThreadResponse = await harness.app.request(
+        "/api/v1/threads",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            origin: "app",
+            projectId: project.id,
+            providerId: "codex",
+            model: "gpt-5",
+            input: [
+              { type: "text", text: promptText, mentions: [mention] },
+              attachmentInput,
+            ],
+            environment: {
+              type: "reuse",
+              environmentId: environment.id,
+            },
+          }),
+        },
+      );
+
+      expect(createThreadResponse.status).toBe(201);
+      const createdThread = threadSchema.parse(
+        await readJson(createThreadResponse),
+      );
+      const queuedStart = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" &&
+          command.threadId === createdThread.id,
+      );
+      if (queuedStart.command.type !== "thread.start") {
+        throw new Error("Expected queued thread.start command");
+      }
+      expect(queuedStart.command.input).toEqual([
+        { type: "text", text: promptText, mentions: [mention] },
+        attachmentInput,
+      ]);
+
+      const timelineResponse = await harness.app.request(
+        `/api/v1/threads/${createdThread.id}/timeline`,
+      );
+      expect(timelineResponse.status).toBe(200);
+      const timeline = threadTimelineResponseSchema.parse(
+        await readJson(timelineResponse),
+      );
+      const userRow = timeline.rows.find(
+        (row) => row.kind === "conversation" && row.role === "user",
+      );
+      if (
+        !userRow ||
+        userRow.kind !== "conversation" ||
+        userRow.role !== "user"
+      ) {
+        throw new Error("Expected user conversation timeline row");
+      }
+      expect(userRow.text).toBe(promptText);
+      expect(userRow.mentions).toEqual([mention]);
+      expect(userRow.attachments).toEqual({
+        webImages: 0,
+        localImages: 0,
+        localFiles: 1,
+        imageUrls: [],
+        localImagePaths: [],
+        localFilePaths: [uploaded.path],
+      });
+    });
+  });
+
+  it("rejects bare relative localFile prompt paths that were not uploaded", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-missing-local-file-token",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/missing-local-file-token-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/missing-local-file-token-project",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          origin: "app",
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [
+            { type: "text", text: "Review @alpha.txt", mentions: [] },
+            { type: "localFile", path: "alpha.txt" },
+          ],
+          environment: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+        }),
+      });
+
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: expect.stringContaining(
+          "relative workspace file paths are not valid attachment references",
+        ),
+      });
+      expect(
+        harness.db
+          .select({ id: events.id })
+          .from(events)
+          .where(eq(events.type, "client/turn/requested"))
+          .all(),
+      ).toHaveLength(0);
     });
   });
 

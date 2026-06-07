@@ -58,6 +58,7 @@ import {
   throwSenderThreadInvalid,
   throwThreadNotWritable,
 } from "../lib/lifecycle-api-errors.js";
+import { validatePromptAttachmentReferences } from "../projects/attachments.js";
 
 type SendThreadMessageMode = SendMessageRequest["mode"];
 type TextPromptInput = Extract<PromptInput, { type: "text" }>;
@@ -103,7 +104,9 @@ interface SendThreadMessageTransactionPreflight {
 }
 
 interface SendThreadMessageQueueRequest {
-  (args: SendThreadMessageQueueRequestArgs): SendThreadMessageQueueRequestResult;
+  (
+    args: SendThreadMessageQueueRequestArgs,
+  ): SendThreadMessageQueueRequestResult;
 }
 
 interface AppendAndQueueSendThreadMessageArgs {
@@ -352,6 +355,11 @@ export async function sendThreadMessage(
         senderThreadId,
       })
     : payload.input;
+  await validatePromptAttachmentReferences({
+    dataDir: deps.config.dataDir,
+    input,
+    projectId: thread.projectId,
+  });
   // Agent-originated CLI sends still appear as normal turn requests in the
   // timeline, while initiator lets policy distinguish the source.
   const initiator: ThreadTurnInitiator = senderThreadId ? "agent" : "user";
@@ -438,13 +446,10 @@ export async function sendThreadMessage(
         initiator,
         input: preparedInput.input,
         queueInTransaction: ({ tx }) => {
-          const dispatchKind = prepareReadyThreadTurnDispatchInTransaction(
-            tx,
-            {
-              command,
-              thread,
-            },
-          );
+          const dispatchKind = prepareReadyThreadTurnDispatchInTransaction(tx, {
+            command,
+            thread,
+          });
           const currentThread = getThread(tx, thread.id);
           if (
             dispatchKind === "turn.submit" ||

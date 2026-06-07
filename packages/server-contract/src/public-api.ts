@@ -343,7 +343,13 @@ export type PublicApiSchema = {
     >;
   };
   "/projects/:id/attachments": {
-    /** Upload a file attachment. Used to attach files to user messages. */
+    /**
+     * Upload a file attachment for prompt input.
+     *
+     * Use the returned object directly as a `localFile` or `localImage` prompt
+     * part. Relative `localFile`/`localImage` paths are upload references from
+     * this route; they are not workspace-relative file paths.
+     */
     $post: Endpoint<
       PathProjectId & { form: ProjectAttachmentUploadForm },
       UploadedPromptAttachment,
@@ -353,6 +359,8 @@ export type PublicApiSchema = {
   "/projects/:id/attachments/content": {
     /**
      * Serve an uploaded attachment's content. Used to render attachment previews.
+     * The `path` query value must be a path returned by the attachment upload
+     * route for this project.
      *
      * Returns raw binary with the appropriate `Content-Type` header.
      * The handler constructs a `Response` directly (bypasses `context.json()`),

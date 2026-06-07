@@ -116,11 +116,21 @@ export const promptInputSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("localImage"),
+    /**
+     * Absolute paths and URI-like values are passed through to the runtime.
+     * Relative paths are server-managed attachment references, not workspace
+     * relative files.
+     */
     path: z.string(),
     ...promptInputVisibilityFields,
   }),
   z.object({
     type: z.literal("localFile"),
+    /**
+     * Absolute paths and URI-like values are passed through to the runtime.
+     * Relative paths are server-managed attachment references, not workspace
+     * relative files.
+     */
     path: z.string(),
     name: z.string().optional(),
     sizeBytes: z.number().int().nonnegative().optional(),

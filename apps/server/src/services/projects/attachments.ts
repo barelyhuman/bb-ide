@@ -2,14 +2,34 @@
 // We might move this to something like R2 or S3 in the future.
 // eslint-disable-next-line no-restricted-imports
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { basename, extname, join, normalize, resolve } from "node:path";
+import {
+  basename,
+  extname,
+  isAbsolute,
+  join,
+  normalize,
+  resolve,
+  win32,
+} from "node:path";
 import { resolveContainedPath } from "@bb/process-utils";
+import type { PromptInput } from "@bb/domain";
 import type { UploadedPromptAttachment } from "@bb/server-contract";
 import mimeTypes from "mime-types";
 import { ApiError } from "../../errors.js";
 
 const IMAGE_LIMIT_BYTES = 10 * 1024 * 1024;
 const FILE_LIMIT_BYTES = 25 * 1024 * 1024;
+
+type PromptAttachmentInput = Extract<
+  PromptInput,
+  { type: "localFile" | "localImage" }
+>;
+
+interface ValidatePromptAttachmentReferencesArgs {
+  dataDir: string;
+  input: PromptInput[];
+  projectId: string;
+}
 
 function sanitizeFilename(name: string): string {
   const base = basename(name).replace(/[^a-zA-Z0-9._-]+/gu, "-");
@@ -61,6 +81,59 @@ function resolveAttachmentPath(
     "invalid_request",
     "Attachment path escapes project directory",
   );
+}
+
+function pathLooksRuntimeReadable(rawPath: string): boolean {
+  return (
+    isAbsolute(rawPath) ||
+    win32.isAbsolute(rawPath) ||
+    /^[a-zA-Z][a-zA-Z0-9+.-]*:/u.test(rawPath)
+  );
+}
+
+function shouldValidateProjectAttachmentReference(
+  input: PromptInput,
+): input is PromptAttachmentInput {
+  if (input.type !== "localFile" && input.type !== "localImage") {
+    return false;
+  }
+  return !pathLooksRuntimeReadable(input.path);
+}
+
+function missingAttachmentReferenceError(attachmentPath: string): ApiError {
+  return new ApiError(
+    400,
+    "invalid_request",
+    `Attachment ${attachmentPath} was not uploaded for this project. Upload files with POST /api/v1/projects/:id/attachments and use the returned path in localFile/localImage prompt input; relative workspace file paths are not valid attachment references.`,
+  );
+}
+
+async function ensureAttachmentReferenceExists(
+  dataDir: string,
+  projectId: string,
+  attachmentPath: string,
+): Promise<void> {
+  const dir = projectAttachmentDir(dataDir, projectId);
+  const resolved = resolveAttachmentPath(dir, attachmentPath);
+  const fileStat = await stat(resolved).catch(() => null);
+  if (!fileStat || !fileStat.isFile()) {
+    throw missingAttachmentReferenceError(attachmentPath);
+  }
+}
+
+export async function validatePromptAttachmentReferences(
+  args: ValidatePromptAttachmentReferencesArgs,
+): Promise<void> {
+  for (const input of args.input) {
+    if (!shouldValidateProjectAttachmentReference(input)) {
+      continue;
+    }
+    await ensureAttachmentReferenceExists(
+      args.dataDir,
+      args.projectId,
+      input.path,
+    );
+  }
 }
 
 export async function storeAttachment(
