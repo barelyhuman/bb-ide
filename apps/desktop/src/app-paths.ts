@@ -16,6 +16,10 @@ export interface ResolveDesktopAssetPathArgs {
   paths: DesktopPathContext;
 }
 
+export interface ResolveDesktopIconPathArgs {
+  paths: DesktopPathContext;
+}
+
 export interface AssertPathExistsArgs {
   label: string;
   path: string;
@@ -43,6 +47,15 @@ export function resolveDesktopAssetPath(
   args: ResolveDesktopAssetPathArgs,
 ): string {
   return join(args.paths.appPath, "assets", args.fileName);
+}
+
+export function resolveDesktopIconPath(
+  args: ResolveDesktopIconPathArgs,
+): string {
+  return resolveDesktopAssetPath({
+    fileName: args.paths.isPackaged ? "icon.png" : "icon-dev.png",
+    paths: args.paths,
+  });
 }
 
 export function assertPathExists(args: AssertPathExistsArgs): void {

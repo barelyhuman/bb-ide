@@ -25,8 +25,8 @@ import {
 import { z } from "zod";
 import {
   assertPathExists,
-  resolveDesktopAssetPath,
   resolveDesktopBridgePath,
+  resolveDesktopIconPath,
   type DesktopPathContext,
 } from "./app-paths.js";
 import {
@@ -1025,7 +1025,7 @@ async function runDesktopApp(): Promise<void> {
     platform: process.platform,
   });
 
-  app.setName("bb");
+  app.setName(app.isPackaged ? "bb" : "bb-dev");
 
   if (!app.requestSingleInstanceLock()) {
     app.quit();
@@ -1084,10 +1084,7 @@ async function runDesktopApp(): Promise<void> {
   });
 
   const paths = createDesktopPathContext();
-  const iconPath = resolveDesktopAssetPath({
-    fileName: "icon.png",
-    paths,
-  });
+  const iconPath = resolveDesktopIconPath({ paths });
   const bridgePath = resolveDesktopBridgePath({ paths });
   const resolvedLogViewerPreloadPath = join(
     paths.appPath,
