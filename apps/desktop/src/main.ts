@@ -1025,7 +1025,7 @@ async function runDesktopApp(): Promise<void> {
     platform: process.platform,
   });
 
-  app.setName("bb");
+  app.setName(app.isPackaged ? "bb" : "bb-dev");
 
   if (!app.requestSingleInstanceLock()) {
     app.quit();
