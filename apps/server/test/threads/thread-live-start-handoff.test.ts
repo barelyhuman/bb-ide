@@ -1,6 +1,8 @@
 import { getThread } from "@bb/db";
 import {
   encodeClientTurnRequestIdNumber,
+  threadScope,
+  turnScope,
   type Environment,
   type ResolvedThreadExecutionOptions,
   type Thread,
@@ -12,6 +14,8 @@ import {
   requestThreadStopForCurrentState,
 } from "../../src/services/threads/thread-lifecycle.js";
 import {
+  createTestDaemonEventEnvelope,
+  internalAuthHeaders,
   listQueuedThreadCommands,
   reportQueuedCommandError,
   reportQueuedCommandSuccess,
@@ -250,6 +254,72 @@ describe("live thread start handoff", () => {
 
       expect(getThread(harness.db, fixture.thread.id)).toMatchObject({
         archivedAt: null,
+        status: "idle",
+        stopRequestedAt: null,
+      });
+    });
+  });
+
+  it("does not reactivate an idle thread when a completed start turn settled first", async () => {
+    await withTestHarness(async (harness) => {
+      const fixture = await startLiveThreadStartRpc({
+        harness,
+        requestIdValue: 6,
+      });
+      const providerThreadId = "provider-completed-before-start-settlement";
+      const turnId = "turn-completed-before-start-settlement";
+      const sessionId = fixture.startCommand.row.sessionId;
+      if (!sessionId) {
+        throw new Error("Queued thread start is missing sessionId");
+      }
+
+      const eventResponse = await harness.app.request(
+        "/internal/session/events",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId,
+            events: [
+              createTestDaemonEventEnvelope({
+                event: {
+                  type: "thread/identity",
+                  threadId: fixture.thread.id,
+                  providerThreadId,
+                  scope: threadScope(),
+                },
+              }),
+              createTestDaemonEventEnvelope({
+                event: {
+                  type: "turn/started",
+                  threadId: fixture.thread.id,
+                  providerThreadId,
+                  scope: turnScope(turnId),
+                },
+              }),
+              createTestDaemonEventEnvelope({
+                event: {
+                  type: "turn/completed",
+                  threadId: fixture.thread.id,
+                  providerThreadId,
+                  scope: turnScope(turnId),
+                  status: "completed",
+                },
+              }),
+            ],
+          }),
+        },
+      );
+      expect(eventResponse.status).toBe(200);
+      expect(getThread(harness.db, fixture.thread.id)).toMatchObject({
+        status: "idle",
+      });
+
+      await reportQueuedCommandSuccess(harness, fixture.startCommand, {
+        providerThreadId,
+      });
+
+      expect(getThread(harness.db, fixture.thread.id)).toMatchObject({
         status: "idle",
         stopRequestedAt: null,
       });

@@ -149,11 +149,18 @@ interface CompleteThreadStartArgs {
 
 interface ThreadStartSuccessActivationArgs {
   commandStartedAt: number;
+  providerThreadId: string;
   thread: Thread;
 }
 
 interface HasThreadInterruptedEventAtOrAfterArgs {
   createdAt: number;
+  threadId: string;
+}
+
+interface HasProviderTurnCompletedEventAtOrAfterArgs {
+  createdAt: number;
+  providerThreadId: string;
   threadId: string;
 }
 
@@ -575,6 +582,27 @@ function hasThreadInterruptedEventAtOrAfter(
   );
 }
 
+function hasProviderTurnCompletedEventAtOrAfter(
+  deps: ThreadLifecycleReadDeps,
+  args: HasProviderTurnCompletedEventAtOrAfterArgs,
+): boolean {
+  return (
+    deps.db
+      .select({ id: events.id })
+      .from(events)
+      .where(
+        and(
+          eq(events.threadId, args.threadId),
+          eq(events.providerThreadId, args.providerThreadId),
+          eq(events.type, "turn/completed"),
+          gte(events.createdAt, args.createdAt),
+        ),
+      )
+      .limit(1)
+      .get() !== undefined
+  );
+}
+
 function canActivateThreadAfterSuccessfulStart(
   deps: ThreadLifecycleReadDeps,
   args: ThreadStartSuccessActivationArgs,
@@ -594,10 +622,17 @@ function canActivateThreadAfterSuccessfulStart(
     return false;
   }
 
-  return !hasThreadInterruptedEventAtOrAfter(deps, {
-    createdAt: args.commandStartedAt,
-    threadId: args.thread.id,
-  });
+  return (
+    !hasThreadInterruptedEventAtOrAfter(deps, {
+      createdAt: args.commandStartedAt,
+      threadId: args.thread.id,
+    }) &&
+    !hasProviderTurnCompletedEventAtOrAfter(deps, {
+      createdAt: args.commandStartedAt,
+      providerThreadId: args.providerThreadId,
+      threadId: args.thread.id,
+    })
+  );
 }
 
 function settleThreadCommandFailure(
@@ -684,6 +719,7 @@ export function settleThreadStartCommandResult(
     currentThread &&
     canActivateThreadAfterSuccessfulStart(args.deps, {
       commandStartedAt: args.execution.createdAt,
+      providerThreadId: args.report.result.providerThreadId,
       thread: currentThread,
     })
   ) {
