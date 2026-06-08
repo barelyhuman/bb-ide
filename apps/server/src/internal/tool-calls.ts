@@ -12,6 +12,9 @@ import { appendThreadEvent } from "../services/threads/thread-events.js";
 import { requireThreadEnvironment } from "../services/lib/entity-lookup.js";
 import { requireAuthenticatedDaemonSession } from "./session-state.js";
 
+export const MESSAGE_USER_MIGRATION_RESULT_TEXT =
+  "Message delivered. Migration note: do not call message_user for future user-facing updates. Send normal manager messages instead; users now see all manager messages. You do not need to resend the message you just sent.";
+
 export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {
   const { post } = typedRoutes<HostDaemonInternalSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
@@ -54,7 +57,9 @@ export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {
 
         return context.json({
           success: true,
-          contentItems: [{ type: "inputText", text: "Message delivered" }],
+          contentItems: [
+            { type: "inputText", text: MESSAGE_USER_MIGRATION_RESULT_TEXT },
+          ],
         });
       }
 

@@ -14,6 +14,7 @@ import {
   createTestDaemonEventEnvelope,
   internalAuthHeaders,
 } from "../helpers/commands.js";
+import { MESSAGE_USER_MIGRATION_RESULT_TEXT } from "../../src/internal/tool-calls.js";
 import { readJson } from "../helpers/json.js";
 import {
   seedEvent,
@@ -612,6 +613,12 @@ describe("internal event and tool-call routes", () => {
       );
 
       expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        success: true,
+        contentItems: [
+          { type: "inputText", text: MESSAGE_USER_MIGRATION_RESULT_TEXT },
+        ],
+      });
       const storedEvents = harness.db
         .select()
         .from(events)

@@ -38,7 +38,6 @@ import {
   type ResolvedThreadRuntimeCommandConfig,
   type ThreadRuntimeCommandEnvironment,
 } from "./thread-runtime-config.js";
-import { appendManagerToolReminder } from "./manager-tool-reminder.js";
 import { resolveWorkflowsEnabledPolicy } from "./thread-default-policy.js";
 import {
   buildExistingThreadExecutionInput,
@@ -297,22 +296,21 @@ export async function prepareTurnSubmitCommandPayload(
     thread: args.thread,
     environment: args.environment,
   });
-  let input = args.input;
-  if (args.thread.type === "manager") {
-    if (!isAgentProviderId(args.thread.providerId)) {
-      throw new ApiError(
-        500,
-        "internal_error",
-        `Manager thread has unsupported provider ${args.thread.providerId}`,
-      );
-    }
-    input = appendManagerToolReminder(args.input, args.thread.providerId);
+  if (
+    args.thread.type === "manager" &&
+    !isAgentProviderId(args.thread.providerId)
+  ) {
+    throw new ApiError(
+      500,
+      "internal_error",
+      `Manager thread has unsupported provider ${args.thread.providerId}`,
+    );
   }
   return buildPreparedTurnSubmitCommandPayload({
     environmentId: args.environment.id,
     execution: args.execution,
     permissionEscalation: args.permissionEscalation,
-    input,
+    input: args.input,
     providerThreadId,
     runtimeContext,
     target: args.target,

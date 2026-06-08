@@ -18,9 +18,7 @@ If `PREFERENCES.md` does not exist or still contains starter/no-preferences
 content, do the first-boot conversation. Do not interrogate. Do not sound like a
 form. Just talk.
 
-Use the exact user-message tool available to you:
-`mcp__bb-bridge__message_user` when present, otherwise `message_user`. You need
-to call this tool to send messages to the user.
+Use this thread to communicate with the user.
 
 Your first user-facing message must anchor two things up front: **scope** (what
 you should be working on) and **landing mode** (how worker output reaches the

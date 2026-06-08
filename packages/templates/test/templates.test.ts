@@ -82,10 +82,14 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("agents collaborate to complete tasks");
     expect(rendered).toContain("Delegate substantive work by default");
     expect(rendered).toContain(
-      "Use the `message_user` tool for deliberate user-facing updates",
+      "Keep the user informed in this thread",
     );
-    expect(rendered).toContain("Treat plain assistant text");
-    expect(rendered).toContain("mcp__bb-bridge__message_user");
+    expect(rendered).toContain("Worker messages, orchestration notes");
+    expect(rendered).toContain(
+      "ask directly and state the decision or action needed",
+    );
+    expect(rendered).not.toContain("mcp__bb-bridge__message_user");
+    expect(rendered).not.toContain("message_user");
     expect(rendered).toContain("bb thread spawn");
     expect(rendered).toContain("Simple delegation");
     expect(rendered).toContain("Apps are global within the local data dir");
@@ -141,7 +145,11 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("First, inspect `PREFERENCES.md`");
     expect(rendered).toContain("Do not interrogate. Do not sound like a");
     expect(rendered).toContain("starter/no-preferences");
-    expect(rendered).toContain("mcp__bb-bridge__message_user");
+    expect(rendered).toContain(
+      "Use this thread to communicate with the user.",
+    );
+    expect(rendered).not.toContain("mcp__bb-bridge__message_user");
+    expect(rendered).not.toContain("message_user");
     expect(rendered).toContain("name, vibe, or other identity details");
     expect(rendered).toContain("may already exist from user");
     expect(rendered).toContain("Preserve any seeded structure");

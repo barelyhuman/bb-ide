@@ -1,16 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { AgentProviderId } from "@bb/agent-providers";
 import { getLatestThreadSequence } from "@bb/db";
-import type { PromptInput, ResolvedThreadExecutionOptions } from "@bb/domain";
-import type { ThreadType } from "@bb/domain";
+import type {
+  PromptInput,
+  ResolvedThreadExecutionOptions,
+  ThreadType,
+} from "@bb/domain";
 import type { TurnSubmitTarget } from "@bb/host-daemon-contract";
 import type { PreparedTurnSubmitCommandPayload } from "../../src/services/threads/thread-commands.js";
-import {
-  appendManagerToolReminder,
-  buildManagerToolReminderText,
-  resolveManagerUserMessageToolName,
-  type ManagerUserMessageToolName,
-} from "../../src/services/threads/manager-tool-reminder.js";
 import { prepareTurnSubmitCommandPayload } from "../../src/services/threads/thread-commands.js";
 import { findThreadEvent } from "../../src/services/threads/thread-data.js";
 import { sendThreadMessage } from "../../src/services/threads/thread-send.js";
@@ -19,11 +16,7 @@ import {
   reportQueuedCommandError,
   waitForQueuedCommand,
 } from "../helpers/commands.js";
-import {
-  agentOnlyTextPrompt,
-  textInput,
-  textPrompt,
-} from "../helpers/prompt-input.js";
+import { textInput, textPrompt } from "../helpers/prompt-input.js";
 import {
   seedEnvironment,
   seedHostSession,
@@ -37,11 +30,6 @@ import {
   withTestHarness,
 } from "../helpers/test-app.js";
 
-interface ProviderReminderCase {
-  providerId: AgentProviderId;
-  toolName: ManagerUserMessageToolName;
-}
-
 interface PrepareTurnSubmitPayloadForThreadArgs {
   input: PromptInput[];
   providerId: AgentProviderId;
@@ -53,52 +41,26 @@ interface PrepareTurnSubmitPayloadForThreadResult {
   payload: PreparedTurnSubmitCommandPayload;
 }
 
-interface SlashCommandReminderCase {
+interface ManagerInputCase {
   input: PromptInput[];
   name: string;
 }
 
-const providerReminderCases: ProviderReminderCase[] = [
+const managerInputCases: ManagerInputCase[] = [
   {
-    providerId: "claude-code",
-    toolName: "mcp__bb-bridge__message_user",
-  },
-  {
-    providerId: "codex",
-    toolName: "message_user",
-  },
-  {
-    providerId: "pi",
-    toolName: "message_user",
-  },
-];
-
-const slashCommandReminderCases: SlashCommandReminderCase[] = [
-  {
-    input: textInput("/compact"),
-    name: "slash command",
-  },
-  {
-    input: textInput("   /foo"),
-    name: "slash command with leading whitespace",
-  },
-  {
-    input: textInput("/"),
-    name: "slash-only command",
+    input: textInput("continue work"),
+    name: "plain text",
   },
   {
     input: [
-      { type: "image", url: "https://example.com/input.png" },
-      textPrompt("/review"),
+      { type: "image", url: "https://example.com/context.png" },
+      textPrompt("use this image"),
     ],
-    name: "slash command after an attachment",
+    name: "attachment with text",
   },
   {
-    input: [
-      agentOnlyTextPrompt("[bb system] Updated manager preferences."),
-      textPrompt("/loop"),
-    ],
-    name: "slash command after an agent-only system block",
+    input: [],
+    name: "empty input",
   },
 ];
 
@@ -134,7 +96,8 @@ async function respondToManagerPreferencesRead(
     harness,
     ({ command, row }) =>
       row.state === "pending" &&
-      command.type === "host.read_file" && command.path === preferencesPath,
+      command.type === "host.read_file" &&
+      command.path === preferencesPath,
   );
   const response = await reportQueuedCommandError(harness, readPreferences, {
     errorCode: "ENOENT",
@@ -147,7 +110,7 @@ async function prepareTurnSubmitPayloadForThread(
   args: PrepareTurnSubmitPayloadForThreadArgs,
 ): Promise<PrepareTurnSubmitPayloadForThreadResult> {
   return await withTestHarness(async (harness) => {
-    const hostId = `host-manager-reminder-${args.threadType}-${args.providerId}`;
+    const hostId = `host-manager-input-${args.threadType}-${args.providerId}`;
     const { host } = seedHostSession(harness.deps, { id: hostId });
     const { project } = seedProjectWithSource(harness.deps, {
       hostId: host.id,
@@ -168,7 +131,7 @@ async function prepareTurnSubmitPayloadForThread(
       execution: testExecution,
       input: args.input,
       permissionEscalation: "deny",
-      providerThreadId: "provider-thread-manager-reminder",
+      providerThreadId: "provider-thread-manager-input",
       target: buildTurnSubmitTarget(args.targetMode),
       thread,
     });
@@ -179,54 +142,19 @@ async function prepareTurnSubmitPayloadForThread(
   });
 }
 
-function expectedReminderInput(providerId: AgentProviderId): PromptInput {
-  return textPrompt(buildManagerToolReminderText(providerId));
-}
-
-describe("manager tool reminders", () => {
-  it.each(providerReminderCases)(
-    "resolves $providerId manager user-message tool name",
-    ({ providerId, toolName }) => {
-      expect(resolveManagerUserMessageToolName(providerId)).toBe(toolName);
-    },
-  );
-
-  it.each(providerReminderCases)(
-    "appends a $providerId manager turn reminder with the provider-specific tool name",
-    async ({ providerId }) => {
-      const input = textInput("continue work");
-
+describe("manager turn input", () => {
+  it.each(managerInputCases)(
+    "preserves manager input for $name",
+    async ({ input }) => {
       const { payload } = await prepareTurnSubmitPayloadForThread({
         input,
-        providerId,
+        providerId: "codex",
         threadType: "manager",
       });
 
-      expect(payload.input).toEqual([
-        ...input,
-        expectedReminderInput(providerId),
-      ]);
+      expect(payload.input).toEqual(input);
     },
   );
-
-  it.each(slashCommandReminderCases)(
-    "does not append a manager turn reminder for a $name",
-    ({ input }) => {
-      expect(appendManagerToolReminder(input, "codex")).toEqual(input);
-    },
-  );
-
-  it("appends the reminder when the first block is not text and the user text is not a slash command", () => {
-    const input: PromptInput[] = [
-      { type: "image", url: "https://example.com/context.png" },
-      textPrompt("use this image"),
-    ];
-
-    expect(appendManagerToolReminder(input, "codex")).toEqual([
-      ...input,
-      expectedReminderInput("codex"),
-    ]);
-  });
 
   it("leaves standard thread input unchanged", async () => {
     const input = textInput("standard turn");
@@ -240,35 +168,10 @@ describe("manager tool reminders", () => {
     expect(payload.input).toEqual(input);
   });
 
-  it("does not double-append when input already ends with the exact reminder", async () => {
-    const input: PromptInput[] = [
-      textPrompt("continue work"),
-      expectedReminderInput("codex"),
-    ];
-
-    const { payload } = await prepareTurnSubmitPayloadForThread({
-      input,
-      providerId: "codex",
-      threadType: "manager",
-    });
-
-    expect(payload.input).toEqual(input);
-  });
-
-  it("appends the reminder to empty manager input", async () => {
-    const { payload } = await prepareTurnSubmitPayloadForThread({
-      input: [],
-      providerId: "pi",
-      threadType: "manager",
-    });
-
-    expect(payload.input).toEqual([expectedReminderInput("pi")]);
-  });
-
-  it("appends the reminder on active manager steers without persisting it to the client turn event", async () => {
+  it("does not append hidden reminders on active manager steers", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
-        id: "host-manager-reminder-steer",
+        id: "host-manager-input-steer",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -284,7 +187,7 @@ describe("manager tool reminders", () => {
         status: "active",
         type: "manager",
       });
-      const providerThreadId = "provider-thread-manager-reminder-steer";
+      const providerThreadId = "provider-thread-manager-input-steer";
       seedThreadRuntimeState(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
@@ -294,7 +197,7 @@ describe("manager tool reminders", () => {
         threadId: thread.id,
         environmentId: environment.id,
         providerThreadId,
-        turnId: "turn-manager-reminder-steer",
+        turnId: "turn-manager-input-steer",
       });
       const input = textInput("adjust course");
       const eventSequenceBeforeSend = getLatestThreadSequence(harness.db, {
@@ -329,7 +232,7 @@ describe("manager tool reminders", () => {
         throw new Error("Expected turn.submit command");
       }
       expect(command.target.mode).toBe("steer");
-      expect(command.input).toEqual([...input, expectedReminderInput("codex")]);
+      expect(command.input).toEqual(input);
 
       const turnRequestEvent = findThreadEvent(harness.db, {
         afterSeq: eventSequenceBeforeSend,

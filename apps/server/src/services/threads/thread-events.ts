@@ -315,8 +315,8 @@ function isThreadReadStateUpdate(
   return result !== null;
 }
 
-// `system/manager/user_message` is the manager's outbound message to the user
-// (via the `message_user` tool). It advances `latestAttentionAt` so the
+// `system/manager/user_message` is the legacy `message_user` tool's outbound
+// message event. It advances `latestAttentionAt` so the
 // sidebar and the manager unread divider can mark the message as new.
 function applyManagerAttentionForEvent(
   db: DbTransaction,

@@ -17,7 +17,7 @@ Core concepts:
 Thread types:
 
 - standard — does coding, research, debugging, or other tasks.
-- manager — coordinates work across other threads. Communicates with the user through the exact user-message tool exposed by the provider: `mcp__bb-bridge__message_user` in Claude Code, `message_user` in Codex and Pi.
+- manager — coordinates work across other threads and communicates with the user directly in the manager thread.
 
 Threads can have a parent-child relationship. The parent manages the child and receives lifecycle notifications when it completes, fails, or is interrupted. Threads without a parent are managed by the user.
 

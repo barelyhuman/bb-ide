@@ -337,7 +337,7 @@ export function Overview() {
             senderThreadId={null}
             senderThreadTitle={null}
             text={
-              "[bb system]\n\nWelcome!\nStart with a short meet-and-greet via `message_user`."
+              "[bb system]\n\nWelcome!\nStart with a short meet-and-greet."
             }
             attachments={null}
             mentions={[]}
