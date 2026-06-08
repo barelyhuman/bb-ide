@@ -10,6 +10,7 @@ import {
 } from "@testing-library/react";
 import type { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ThreadWithRuntime } from "@bb/domain";
 import type { TimelineRow } from "@bb/server-contract";
 import {
   commandRow,
@@ -25,6 +26,7 @@ import {
   type ThreadTimelineRowsProps,
 } from "@/components/thread/timeline/ThreadTimelineRows";
 import {
+  threadQueryKey,
   threadTimelineTurnSummaryDetailsQueryKey,
 } from "@/hooks/queries/query-keys";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
@@ -37,6 +39,7 @@ type ThreadTimelineRowsPropsOverrides = Partial<
 
 interface ThreadTimelineRowsFixtureArgs {
   overrides?: ThreadTimelineRowsPropsOverrides;
+  seedQueryClient?: (queryClient: QueryClient) => void;
   timelineRows: TimelineRow[];
 }
 
@@ -50,6 +53,47 @@ interface ThreadTimelineRowsRenderResult extends RenderResult {
 
 interface RequestUrlRef {
   current: URL | null;
+}
+
+interface ThreadWithRuntimeFixtureArgs {
+  id: string;
+  projectId: string;
+  title: string | null;
+  titleFallback: string | null;
+  type?: ThreadWithRuntime["type"];
+}
+
+function threadWithRuntime({
+  id,
+  projectId,
+  title,
+  titleFallback,
+  type = "standard",
+}: ThreadWithRuntimeFixtureArgs): ThreadWithRuntime {
+  return {
+    archivedAt: null,
+    automationId: null,
+    createdAt: 1,
+    deletedAt: null,
+    environmentId: "environment-1",
+    id,
+    lastReadAt: null,
+    latestAttentionAt: 10,
+    parentThreadId: null,
+    pinnedAt: null,
+    projectId,
+    providerId: "provider-1",
+    runtime: {
+      displayStatus: "idle",
+      hostReconnectGraceExpiresAt: null,
+    },
+    status: "idle",
+    stopRequestedAt: null,
+    title,
+    titleFallback,
+    type,
+    updatedAt: 10,
+  };
 }
 
 function threadTimelineRowsProps({
@@ -69,6 +113,7 @@ function renderTimelineRows(
   args: ThreadTimelineRowsFixtureArgs,
 ): ThreadTimelineRowsRenderResult {
   const harness = createQueryClientTestHarness();
+  args.seedQueryClient?.(harness.queryClient);
   const view = render(
     <ThreadTimelineRows {...threadTimelineRowsProps(args)} />,
     {
@@ -140,6 +185,38 @@ afterEach(() => {
 });
 
 describe("ThreadTimelineRows", () => {
+  it("uses cached thread detail titles for manager-originated user rows", () => {
+    renderTimelineRows({
+      overrides: {
+        projectId: "project-1",
+      },
+      seedQueryClient: (queryClient) => {
+        queryClient.setQueryData<ThreadWithRuntime>(
+          threadQueryKey("thr_manager123"),
+          threadWithRuntime({
+            id: "thr_manager123",
+            projectId: "project-1",
+            title: "Ops manager",
+            titleFallback: "Ops manager",
+            type: "manager",
+          }),
+        );
+      },
+      timelineRows: [
+        conversationRow({
+          role: "user",
+          initiator: "agent",
+          senderThreadId: "thr_manager123",
+          text: "Manager-to-child status update.",
+        }),
+      ],
+    });
+
+    expect(
+      screen.getByTitle("Message from Ops manager"),
+    ).toBeTruthy();
+  });
+
   it("renders an unread divider before the first row newer than the frozen read cutoff", () => {
     renderTimelineRows({
       overrides: {

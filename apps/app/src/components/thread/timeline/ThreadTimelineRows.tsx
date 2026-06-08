@@ -10,7 +10,7 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import { QueryClientContext, type QueryClient } from "@tanstack/react-query";
-import type { ThreadListEntry, ThreadRuntimeDisplayStatus } from "@bb/domain";
+import type { ThreadRuntimeDisplayStatus, ThreadWithRuntime } from "@bb/domain";
 import type { TimelineRow } from "@bb/server-contract";
 import {
   assertNever,
@@ -68,6 +68,8 @@ import { NESTED_TIMELINE_GROUP_LINE_CLASS_NAME } from "./timeline-nested-group-l
 import { getThreadRoutePath } from "@/lib/app-route-paths";
 import { useThreadTimelineTurnSummaryDetails } from "@/hooks/queries/thread-queries";
 import {
+  allThreadQueryKeyPrefix,
+  THREAD_QUERY_KEY,
   THREADS_QUERY_KEY,
   threadsQueryKey,
   type ThreadTimelineTurnSummaryDetailsQueryIdentity,
@@ -141,8 +143,12 @@ interface UseSenderThreadMetadataByIdArgs {
 }
 
 interface SenderThreadTitleSource {
-  title: ThreadListEntry["title"];
-  titleFallback: ThreadListEntry["titleFallback"];
+  title: string | null;
+  titleFallback: string | null;
+}
+
+interface SenderThreadMetadataSource extends SenderThreadTitleSource {
+  id: string;
 }
 
 /**
@@ -468,6 +474,18 @@ function senderThreadTitle(source: SenderThreadTitleSource): string | null {
   return null;
 }
 
+function addSenderThreadMetadata(
+  metadataById: Map<string, SenderThreadMetadata>,
+  thread: SenderThreadMetadataSource,
+): void {
+  const title = senderThreadTitle(thread);
+  const existing = metadataById.get(thread.id);
+  if (existing && (existing.title !== null || title === null)) {
+    return;
+  }
+  metadataById.set(thread.id, { title });
+}
+
 function buildSenderThreadMetadataById({
   queryClient,
 }: BuildSenderThreadMetadataByIdArgs): ReadonlyMap<string, SenderThreadMetadata> {
@@ -480,12 +498,15 @@ function buildSenderThreadMetadataById({
     queryKey: threadsQueryKey(),
   })) {
     for (const thread of iterateThreadListCacheEntries(cachedList.data)) {
-      if (metadataById.has(thread.id)) {
-        continue;
-      }
-      metadataById.set(thread.id, {
-        title: senderThreadTitle(thread),
-      });
+      addSenderThreadMetadata(metadataById, thread);
+    }
+  }
+
+  for (const [, thread] of queryClient.getQueriesData<ThreadWithRuntime>({
+    queryKey: allThreadQueryKeyPrefix(),
+  })) {
+    if (thread) {
+      addSenderThreadMetadata(metadataById, thread);
     }
   }
 
@@ -513,11 +534,14 @@ function useSenderThreadMetadataById({
       return;
     }
 
-    // Sender titles are derived from the React Query thread-list cache rather
-    // than a hook query. Subscribe to thread-list cache updates so title
-    // changes still refresh rows without rebuilding a fresh Map every render.
+    // Sender titles are derived from React Query caches. Subscribe to thread
+    // list and detail updates so title changes still refresh rows without
+    // rebuilding a fresh Map every render.
     return queryClient.getQueryCache().subscribe((event) => {
-      if (event.query.queryKey[0] === THREADS_QUERY_KEY) {
+      if (
+        event.query.queryKey[0] === THREADS_QUERY_KEY ||
+        event.query.queryKey[0] === THREAD_QUERY_KEY
+      ) {
         setMetadataById(buildSenderThreadMetadataById({ queryClient }));
       }
     });
