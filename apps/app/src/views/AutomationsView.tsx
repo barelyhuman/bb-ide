@@ -6,6 +6,7 @@ import type {
   ThreadSchedule,
 } from "@bb/server-contract";
 import { PageShell } from "@/components/ui/page-shell.js";
+import { TruncatedList } from "@/components/ui/truncated-list.js";
 import { useAutomationsOverview } from "@/hooks/queries/thread-queries";
 import { getThreadRoutePath } from "@/lib/app-route-paths";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
@@ -67,10 +68,12 @@ function ThreadScheduleGroupSection({
           {project.name}
         </span>
       </div>
-      <div className="mt-1.5 flex flex-col gap-1.5">
-        {schedules.map((schedule) => (
+      <TruncatedList
+        className="mt-1.5"
+        items={schedules}
+        getKey={(schedule) => schedule.id}
+        renderItem={(schedule) => (
           <div
-            key={schedule.id}
             className={cn(
               "flex items-baseline justify-between gap-4 text-xs",
               !schedule.enabled && "opacity-60",
@@ -97,8 +100,8 @@ function ThreadScheduleGroupSection({
               })}
             </span>
           </div>
-        ))}
-      </div>
+        )}
+      />
     </section>
   );
 }

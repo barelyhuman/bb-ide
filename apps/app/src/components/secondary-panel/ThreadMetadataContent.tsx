@@ -35,6 +35,7 @@ import {
   getMergeBaseBranchCandidateGroups,
 } from "@/components/pickers/BranchPicker";
 import { ThreadUnarchiveButton } from "@/components/thread/ThreadUnarchiveButton";
+import { TruncatedList } from "@/components/ui/truncated-list.js";
 import { ChangedFilesDetailRow } from "@/components/workspace/ChangedFilesDetailRow";
 import {
   selectWorkspaceChangedFilesSections,
@@ -515,10 +516,11 @@ export function ThreadSchedulesRow({ schedules }: ThreadSchedulesRowProps) {
 
   return (
     <DetailRow label="Schedules" align="start" valueClassName="min-w-0">
-      <div className="flex flex-col gap-1.5">
-        {schedules.map((schedule) => (
+      <TruncatedList
+        items={schedules}
+        getKey={(schedule) => schedule.id}
+        renderItem={(schedule) => (
           <div
-            key={schedule.id}
             className={cn(
               "min-w-0 leading-snug",
               !schedule.enabled && "opacity-60",
@@ -536,8 +538,8 @@ export function ThreadSchedulesRow({ schedules }: ThreadSchedulesRowProps) {
               )}`}
             </div>
           </div>
-        ))}
-      </div>
+        )}
+      />
     </DetailRow>
   );
 }
