@@ -13,6 +13,7 @@ import {
   deleteThread,
   environments,
   events,
+  getEnvironment,
   getLatestThreadInterruptedReason,
   getThread,
   listThreadIdsWithLatestHostDaemonRestartInterruption,
@@ -185,6 +186,7 @@ interface RequestThreadStopForCurrentStateThread {
 }
 
 interface RequestPreStartThreadStopResult {
+  cancelHostId: string | null;
   environmentId: string | null;
   finalized: boolean;
 }
@@ -1055,7 +1057,7 @@ function requestPreStartThreadStop(
       };
       const currentThread = getThread(tx, thread.id);
       if (!currentThread) {
-        return { environmentId: null, finalized: true };
+        return { cancelHostId: null, environmentId: null, finalized: true };
       }
 
       const hasProvisioningContext =
@@ -1065,7 +1067,11 @@ function requestPreStartThreadStop(
         !isPreStartThreadStatus(currentThread.status) &&
         !hasProvisioningContext
       ) {
-        return { environmentId: currentThread.environmentId, finalized: false };
+        return {
+          cancelHostId: null,
+          environmentId: currentThread.environmentId,
+          finalized: false,
+        };
       }
 
       if (currentThread.stopRequestedAt === null) {
@@ -1080,25 +1086,54 @@ function requestPreStartThreadStop(
       forgetActiveThreadProvisionContext(currentThread.id);
 
       const environmentId = currentThread.environmentId;
+      const environment =
+        environmentId === null ? null : getEnvironment(tx, environmentId);
       const cancellation =
-        environmentId === null
+        environment === null
           ? "ready_to_finalize"
           : cancelEnvironmentProvisioningForThreadStopInTransaction(txDeps, {
-              environmentId,
+              environmentId: environment.id,
               threadId: currentThread.id,
             });
-      if (cancellation === "awaiting_host_cancel") {
-        return { environmentId, finalized: false };
+      if (cancellation === "awaiting_host_cancel" && environment !== null) {
+        return {
+          cancelHostId: environment.hostId,
+          environmentId: environment.id,
+          finalized: false,
+        };
       }
 
       const finalized = finalizeStoppedThreadInTransaction(txDeps, {
         threadId: currentThread.id,
       });
-      return { environmentId, finalized };
+      return { cancelHostId: null, environmentId, finalized };
     },
     { behavior: "immediate" },
   );
   notificationBuffer.flushInto(deps.hub);
+
+  if (!result.finalized && result.environmentId && result.cancelHostId) {
+    requestEnvironmentCleanup(deps, { environmentId: result.environmentId });
+    startLiveHostCommand(deps, {
+      command: {
+        type: "environment.provision.cancel",
+        environmentId: result.environmentId,
+      },
+      hostId: result.cancelHostId,
+      timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+      onError: (error) => {
+        deps.logger.warn(
+          {
+            err: error,
+            environmentId: result.environmentId,
+            threadId: thread.id,
+          },
+          "Live environment provision cancel command failed",
+        );
+      },
+    });
+    return;
+  }
 
   if (result.finalized && result.environmentId !== null) {
     requestEnvironmentCleanup(deps, { environmentId: result.environmentId });

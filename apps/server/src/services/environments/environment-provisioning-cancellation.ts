@@ -1,23 +1,16 @@
-import { and, eq, isNull, ne } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne } from "drizzle-orm";
 import {
   getEnvironment,
   threads,
-  type DbNotifier,
   type DbQueryConnection,
   type DbTransaction,
 } from "@bb/db";
-import { setEnvironmentStatus } from "@bb/db/internal-environment-lifecycle";
-import type { Environment } from "@bb/domain";
 
 export interface EnvironmentProvisionCancellationReadDeps {
   db: DbQueryConnection;
 }
 
-interface EnvironmentProvisionCancellationWriteDeps extends EnvironmentProvisionCancellationReadDeps {
-  hub: DbNotifier;
-}
-
-interface EnvironmentProvisionCancellationTransactionDeps extends EnvironmentProvisionCancellationWriteDeps {
+interface EnvironmentProvisionCancellationTransactionDeps extends EnvironmentProvisionCancellationReadDeps {
   db: DbTransaction;
 }
 
@@ -41,6 +34,7 @@ function hasOtherLiveThreadDependingOnEnvironmentProvision(
       and(
         eq(threads.environmentId, args.environmentId),
         ne(threads.id, args.threadId),
+        inArray(threads.status, ["created", "provisioning", "active"]),
         isNull(threads.archivedAt),
         isNull(threads.deletedAt),
         isNull(threads.stopRequestedAt),
@@ -49,18 +43,6 @@ function hasOtherLiveThreadDependingOnEnvironmentProvision(
     .limit(1)
     .get();
   return row !== undefined;
-}
-
-function restoreEnvironmentAfterProvisionCancellation(
-  deps: EnvironmentProvisionCancellationWriteDeps,
-  environment: Environment,
-): void {
-  if (environment.status !== "provisioning") {
-    return;
-  }
-  setEnvironmentStatus(deps.db, deps.hub, environment.id, {
-    status: environment.path ? "ready" : "error",
-  });
 }
 
 export function cancelEnvironmentProvisioningForThreadStopInTransaction(
@@ -76,6 +58,9 @@ export function cancelEnvironmentProvisioningForThreadStopInTransaction(
     return "ready_to_finalize";
   }
 
-  restoreEnvironmentAfterProvisionCancellation(deps, environment);
+  if (environment.status === "provisioning") {
+    return "awaiting_host_cancel";
+  }
+
   return "ready_to_finalize";
 }

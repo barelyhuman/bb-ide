@@ -1,5 +1,6 @@
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import {
+  events,
   type DbConnection,
   type DbNotifier,
   type DbQueryConnection,
@@ -64,7 +65,10 @@ import {
   finalizeStoppedThreadInTransaction,
   requestThreadStopForCurrentState,
 } from "../threads/thread-lifecycle.js";
-import { runEnvironmentCleanupAdvance } from "./environment-cleanup-internal.js";
+import {
+  requestEnvironmentCleanup,
+  runEnvironmentCleanupAdvance,
+} from "./environment-cleanup-internal.js";
 import {
   emptyCommandResultSideEffects,
   type CommandResultPostCommitAction,
@@ -308,14 +312,129 @@ function hasThreadProvisionCancellationIntent(
   return getThread(deps.db, threadId)?.stopRequestedAt !== null;
 }
 
+interface HasThreadProvisionCancellationOutcomeArgs {
+  provisioningId: string;
+  threadId: string;
+}
+
+interface HasLatestThreadProvisionCancellationOutcomeArgs {
+  environmentId: string | null;
+  threadId: string;
+}
+
+function hasThreadProvisionCancellationOutcome(
+  deps: EnvironmentProvisionReadDeps,
+  args: HasThreadProvisionCancellationOutcomeArgs,
+): boolean {
+  const rows = listStoredThreadProvisioningRowsByProvisioningId(deps.db, {
+    provisioningId: args.provisioningId,
+    threadId: args.threadId,
+  });
+
+  return rows.some((row) => {
+    const eventData = systemThreadProvisioningEventDataSchema.parse(
+      JSON.parse(row.data),
+    );
+    return (
+      eventData.provisioningId === args.provisioningId &&
+      eventData.status === "cancelled"
+    );
+  });
+}
+
+function hasLatestThreadProvisionCancellationOutcome(
+  deps: EnvironmentProvisionReadDeps,
+  args: HasLatestThreadProvisionCancellationOutcomeArgs,
+): boolean {
+  if (args.environmentId === null) {
+    return false;
+  }
+
+  const row = deps.db
+    .select({ data: events.data })
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        eq(events.environmentId, args.environmentId),
+        eq(events.type, "system/thread-provisioning"),
+      ),
+    )
+    .orderBy(desc(events.sequence))
+    .limit(1)
+    .get();
+  if (!row) {
+    return false;
+  }
+
+  const eventData = systemThreadProvisioningEventDataSchema.parse(
+    JSON.parse(row.data),
+  );
+  return eventData.status === "cancelled";
+}
+
+interface ShouldPreserveThreadProvisionCancellationOutcomeArgs {
+  provisioningId: string;
+  thread: LiveEnvironmentThread;
+}
+
 function shouldPreserveThreadProvisionCancellationOutcome(
   deps: EnvironmentProvisionReadDeps,
-  thread: LiveEnvironmentThread,
+  args: ShouldPreserveThreadProvisionCancellationOutcomeArgs,
 ): boolean {
   return (
-    thread.stopRequestedAt !== null ||
-    hasThreadProvisionCancellationIntent(deps, thread.id)
+    args.thread.stopRequestedAt !== null ||
+    hasThreadProvisionCancellationIntent(deps, args.thread.id) ||
+    hasThreadProvisionCancellationOutcome(deps, {
+      provisioningId: args.provisioningId,
+      threadId: args.thread.id,
+    }) ||
+    hasLatestThreadProvisionCancellationOutcome(deps, {
+      environmentId: args.thread.environmentId,
+      threadId: args.thread.id,
+    })
   );
+}
+
+interface HasOnlyCancelledOrStoppedProvisioningOutcomeThreadsArgs {
+  provisioningId: string;
+  threads: LiveEnvironmentThread[];
+}
+
+interface RestoreProvisioningEnvironmentAfterCancelledProvisioningOutcomeArgs {
+  environment: Environment;
+}
+
+function hasOnlyCancelledOrStoppedProvisioningOutcomeThreads(
+  deps: EnvironmentProvisionReadDeps,
+  args: HasOnlyCancelledOrStoppedProvisioningOutcomeThreadsArgs,
+): boolean {
+  return (
+    args.threads.length > 0 &&
+    args.threads.every((thread) =>
+      shouldPreserveThreadProvisionCancellationOutcome(deps, {
+        provisioningId: args.provisioningId,
+        thread,
+      }),
+    )
+  );
+}
+
+function restoreProvisioningEnvironmentAfterCancelledProvisioningOutcomeInTransaction(
+  deps: EnvironmentProvisionTransactionDeps,
+  args: RestoreProvisioningEnvironmentAfterCancelledProvisioningOutcomeArgs,
+): boolean {
+  if (args.environment.status === "destroyed") {
+    return false;
+  }
+
+  if (args.environment.status === "provisioning") {
+    setEnvironmentStatus(deps.db, deps.hub, args.environment.id, {
+      status: args.environment.path ? "ready" : "error",
+    });
+  }
+
+  return true;
 }
 
 interface ProvisionedEnvironmentBranchMetadata {
@@ -364,8 +483,25 @@ function recordEnvironmentProvisioningFailureInTransaction(
   }
   const liveThreads = listLiveEnvironmentThreads(deps, environment.id);
   const failureThreads = liveThreads.filter(
-    (thread) => !shouldPreserveThreadProvisionCancellationOutcome(deps, thread),
+    (thread) =>
+      !shouldPreserveThreadProvisionCancellationOutcome(deps, {
+        provisioningId: args.provisioningId,
+        thread,
+      }),
   );
+  if (
+    failureThreads.length === 0 &&
+    hasOnlyCancelledOrStoppedProvisioningOutcomeThreads(deps, {
+      provisioningId: args.provisioningId,
+      threads: liveThreads,
+    })
+  ) {
+    return restoreProvisioningEnvironmentAfterCancelledProvisioningOutcomeInTransaction(
+      deps,
+      { environment },
+    );
+  }
+
   if (environment.status !== "destroyed" && environment.status !== "error") {
     setEnvironmentStatus(deps.db, deps.hub, environment.id, {
       status: "error",
@@ -479,8 +615,10 @@ export function settleEnvironmentProvisionCommandResult(
       }
       if (
         thread.archivedAt !== null ||
-        thread.stopRequestedAt !== null ||
-        hasThreadProvisionCancellationIntent(args.deps, thread.id)
+        shouldPreserveThreadProvisionCancellationOutcome(args.deps, {
+          provisioningId: environmentProvisioningId,
+          thread,
+        })
       ) {
         continue;
       }
@@ -542,7 +680,7 @@ export function settleEnvironmentProvisionCommandResult(
     return { postCommitActions };
   }
 
-  const failureRecorded = recordEnvironmentProvisioningFailureInTransaction(
+  const failureHandled = recordEnvironmentProvisioningFailureInTransaction(
     args.deps,
     {
       environmentId: args.command.environmentId,
@@ -558,16 +696,20 @@ export function settleEnvironmentProvisionCommandResult(
       },
     },
   );
-  if (failureRecorded) {
+  if (failureHandled) {
     postCommitActions.push({
       name: "Environment cleanup advance after provision failure",
       context: {
         environmentId: args.command.environmentId,
       },
-      run: (deps) =>
+      run: (deps) => {
+        requestEnvironmentCleanup(deps, {
+          environmentId: args.command.environmentId,
+        });
         runEnvironmentCleanupAdvance(deps, {
           environmentId: args.command.environmentId,
-        }),
+        });
+      },
     });
   }
   return { postCommitActions };
@@ -634,6 +776,8 @@ export function settleEnvironmentProvisionCancelCommandResult(
 
   const postCommitActions: CommandResultPostCommitAction[] = [];
   const environment = getEnvironment(args.deps.db, args.command.environmentId);
+  const restoredProvisioningEnvironment =
+    environment?.status === "provisioning";
   if (environment?.status === "provisioning") {
     setEnvironmentStatus(args.deps.db, args.deps.hub, environment.id, {
       status: environment.path ? "ready" : "error",
@@ -648,16 +792,20 @@ export function settleEnvironmentProvisionCancelCommandResult(
       }) || finalizedThread;
   }
 
-  if (finalizedThread) {
+  if (finalizedThread || restoredProvisioningEnvironment) {
     postCommitActions.push({
       name: "Environment cleanup advance after provision cancellation",
       context: {
         environmentId: args.command.environmentId,
       },
-      run: (deps) =>
+      run: (deps) => {
+        requestEnvironmentCleanup(deps, {
+          environmentId: args.command.environmentId,
+        });
         runEnvironmentCleanupAdvance(deps, {
           environmentId: args.command.environmentId,
-        }),
+        });
+      },
     });
   }
 

@@ -5,6 +5,7 @@ import {
   listEvents,
   threads,
 } from "@bb/db";
+import { systemThreadProvisioningEventDataSchema } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../src/errors.js";
 import {
@@ -14,6 +15,8 @@ import {
 } from "../../src/services/environments/environment-provisioning-internal.js";
 import { runStartupRecoverySweep } from "../../src/services/system/periodic-sweeps.js";
 import { createThreadFromRequest } from "../../src/services/threads/thread-create.js";
+import { requestThreadStopForCurrentState } from "../../src/services/threads/thread-lifecycle.js";
+import { advanceThreadProvisioning } from "../../src/services/threads/thread-provisioning.js";
 import {
   seedEnvironment,
   seedHost,
@@ -24,7 +27,11 @@ import {
 import { textInput } from "../helpers/prompt-input.js";
 import {
   requireManagedWorktreeEnvironmentProvisionLiveCommand,
+  listQueuedEnvironmentCommands,
+  reportQueuedCommandError,
+  reportQueuedCommandSuccess,
   waitForQueuedCommand,
+  waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
 import { withTestHarness } from "../helpers/test-app.js";
 
@@ -327,6 +334,243 @@ describe("environment reprovisioning", () => {
     });
   });
 
+  it("preserves a stopped pre-start thread when stale provision failure settles", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-pre-start-provision-cancel",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/pre-start-provision-cancel-project",
+      });
+
+      const thread = await createThreadFromRequest(harness.deps, {
+        automationId: null,
+        environment: {
+          type: "host",
+          hostId: host.id,
+          workspace: {
+            type: "managed-worktree",
+            baseBranch: { kind: "default" },
+          },
+        },
+        input: textInput("stop before provisioning finishes"),
+        origin: "cli",
+        projectId: project.id,
+        providerId: "codex",
+        type: "standard",
+      });
+      const provisionCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "environment.provision" &&
+          command.initiator?.threadId === thread.id,
+      );
+      if (provisionCommand.command.type !== "environment.provision") {
+        throw new Error("Expected environment provision command");
+      }
+
+      const environment = getEnvironment(
+        harness.db,
+        provisionCommand.command.environmentId,
+      );
+      const currentThread = getThread(harness.db, thread.id);
+      if (!environment || !currentThread) {
+        throw new Error("Expected provisioned thread and environment");
+      }
+      requestThreadStopForCurrentState(harness.deps, currentThread, {
+        hostId: environment.hostId,
+        id: environment.id,
+      });
+
+      const cancelCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "environment.provision.cancel" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, cancelCommand, {
+        aborted: true,
+      });
+      await reportQueuedCommandError(harness, provisionCommand, {
+        errorCode: "host_unavailable",
+        errorMessage: "Host is not connected",
+      });
+
+      expect(getThread(harness.db, thread.id)).toMatchObject({
+        status: "idle",
+      });
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        cleanupRequestedAt: expect.any(Number),
+      });
+      const events = listEvents(harness.db, { threadId: thread.id });
+      expect(events.map((event) => event.type)).not.toContain("system/error");
+      const provisioningStatuses = events
+        .filter((event) => event.type === "system/thread-provisioning")
+        .map(
+          (event) =>
+            systemThreadProvisioningEventDataSchema.parse(
+              JSON.parse(event.data),
+            ).status,
+        );
+      expect(provisioningStatuses).toContain("cancelled");
+      expect(provisioningStatuses).not.toContain("failed");
+    });
+  });
+
+  it("cancels shared provisioning after the last stopped waiter and handles stale provision failure", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-shared-provision-cancel",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/shared-provision-cancel-project",
+      });
+
+      const firstThread = await createThreadFromRequest(harness.deps, {
+        automationId: null,
+        environment: {
+          type: "host",
+          hostId: host.id,
+          workspace: {
+            type: "managed-worktree",
+            baseBranch: { kind: "default" },
+          },
+        },
+        input: textInput("first shared provisioning thread"),
+        origin: "cli",
+        projectId: project.id,
+        providerId: "codex",
+        type: "standard",
+      });
+      const provisionCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "environment.provision" &&
+          command.initiator?.threadId === firstThread.id,
+      );
+      if (provisionCommand.command.type !== "environment.provision") {
+        throw new Error("Expected environment provision command");
+      }
+
+      const environment = getEnvironment(
+        harness.db,
+        provisionCommand.command.environmentId,
+      );
+      if (!environment) {
+        throw new Error("Expected provisioning environment");
+      }
+
+      const secondThread = await createThreadFromRequest(harness.deps, {
+        automationId: null,
+        environment: {
+          type: "reuse",
+          environmentId: environment.id,
+        },
+        input: textInput("second shared provisioning thread"),
+        origin: "cli",
+        projectId: project.id,
+        providerId: "codex",
+        type: "standard",
+      });
+      await advanceThreadProvisioning(harness.deps, {
+        threadId: secondThread.id,
+      });
+      expect(getThread(harness.db, secondThread.id)).toMatchObject({
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+
+      const currentFirstThread = getThread(harness.db, firstThread.id);
+      if (!currentFirstThread) {
+        throw new Error("Expected first shared provisioning thread");
+      }
+      requestThreadStopForCurrentState(harness.deps, currentFirstThread, {
+        hostId: environment.hostId,
+        id: environment.id,
+      });
+
+      expect(getThread(harness.db, firstThread.id)).toMatchObject({
+        status: "idle",
+        stopRequestedAt: null,
+      });
+      expect(
+        listQueuedEnvironmentCommands(
+          harness,
+          "environment.provision.cancel",
+          environment.id,
+        ),
+      ).toEqual([]);
+
+      const currentSecondThread = getThread(harness.db, secondThread.id);
+      if (!currentSecondThread) {
+        throw new Error("Expected second shared provisioning thread");
+      }
+      requestThreadStopForCurrentState(harness.deps, currentSecondThread, {
+        hostId: environment.hostId,
+        id: environment.id,
+      });
+
+      const cancelCommand = await waitForQueuedCommandAfter(
+        harness,
+        provisionCommand.row.cursor,
+        ({ command }) =>
+          command.type === "environment.provision.cancel" &&
+          command.environmentId === environment.id,
+      );
+      expect(getThread(harness.db, secondThread.id)).toMatchObject({
+        status: "provisioning",
+        stopRequestedAt: expect.any(Number),
+      });
+
+      await reportQueuedCommandError(harness, provisionCommand, {
+        errorCode: "host_unavailable",
+        errorMessage: "Host is not connected",
+      });
+
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        status: "error",
+        cleanupRequestedAt: expect.any(Number),
+        cleanupMode: "safe",
+      });
+      for (const threadId of [firstThread.id, secondThread.id]) {
+        const events = listEvents(harness.db, { threadId });
+        expect(events.map((event) => event.type)).not.toContain(
+          "system/error",
+        );
+        const provisioningStatuses = events
+          .filter((event) => event.type === "system/thread-provisioning")
+          .map(
+            (event) =>
+              systemThreadProvisioningEventDataSchema.parse(
+                JSON.parse(event.data),
+              ).status,
+          );
+        expect(provisioningStatuses).toContain("cancelled");
+        expect(provisioningStatuses).not.toContain("failed");
+      }
+
+      await reportQueuedCommandSuccess(harness, cancelCommand, {
+        aborted: true,
+      });
+
+      expect(getThread(harness.db, firstThread.id)).toMatchObject({
+        status: "idle",
+        stopRequestedAt: null,
+      });
+      expect(getThread(harness.db, secondThread.id)).toMatchObject({
+        status: "idle",
+        stopRequestedAt: null,
+      });
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        status: "error",
+        cleanupRequestedAt: expect.any(Number),
+        cleanupMode: "safe",
+      });
+    });
+  });
+
   it("marks orphaned provisioning environments interrupted on startup recovery", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
@@ -353,8 +597,11 @@ describe("environment reprovisioning", () => {
       expect(getThread(harness.db, thread.id)).toMatchObject({
         status: "error",
       });
-      expect(listEvents(harness.db, { threadId: thread.id }).map((event) => event.type))
-        .toEqual(["system/thread-provisioning", "system/error"]);
+      expect(
+        listEvents(harness.db, { threadId: thread.id }).map(
+          (event) => event.type,
+        ),
+      ).toEqual(["system/thread-provisioning", "system/error"]);
     });
   });
 });
