@@ -24,6 +24,8 @@ export interface RunGitOptions {
   allowFailure?: boolean;
   env?: NodeJS.ProcessEnv;
   signal?: AbortSignal;
+  maxBufferBytes?: number;
+  allowTruncatedStdout?: boolean;
 }
 
 interface ResolveGitProcessEnvArgs {
@@ -138,6 +140,14 @@ function isMaxBufferExceededError(error: unknown): boolean {
   );
 }
 
+function isStdoutMaxBufferExceededError(error: unknown): boolean {
+  return (
+    isMaxBufferExceededError(error) &&
+    error instanceof Error &&
+    error.message.includes("stdout maxBuffer")
+  );
+}
+
 function readCommandTimeoutMs(
   error: ExecFileException | undefined,
   timeoutMs: number | undefined,
@@ -229,7 +239,7 @@ export async function runGit(
       cwd: options.cwd,
       encoding: "utf8",
       env: resolveGitProcessEnv({ env: options.env }),
-      maxBuffer: DEFAULT_BUFFER_BYTES,
+      maxBuffer: options.maxBufferBytes ?? DEFAULT_BUFFER_BYTES,
       signal: options.signal,
       timeout: options.timeoutMs,
     });
@@ -246,6 +256,16 @@ export async function runGit(
     const timeoutMs = readCommandTimeoutMs(execError, options.timeoutMs);
     if (timeoutMs !== null) {
       throw createGitCommandTimedOutError(args, timeoutMs, error);
+    }
+    if (
+      options.allowTruncatedStdout === true &&
+      isStdoutMaxBufferExceededError(error)
+    ) {
+      return {
+        stdout: execError?.stdout ?? "",
+        stderr: execError?.stderr ?? "",
+        exitCode: 0,
+      };
     }
     if (options.allowFailure) {
       return {

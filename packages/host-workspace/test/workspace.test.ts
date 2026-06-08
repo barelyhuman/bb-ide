@@ -535,6 +535,30 @@ describe("Workspace", () => {
     expect(commitOnly.diff).toContain("+feature");
   });
 
+  it("truncates large git diff output before the process buffer fails", async () => {
+    const repoPath = await initRepo();
+    await runGit(["checkout", "-b", "feature"], { cwd: repoPath });
+    await fs.writeFile(
+      path.join(repoPath, "README.md"),
+      Array.from({ length: 200 }, (_, index) => `large diff line ${index}`)
+        .join("\n")
+        .concat("\n"),
+      "utf8",
+    );
+
+    const workspace = new Workspace(repoPath);
+    const diff = await workspace.getDiff({
+      target: { type: "all", mergeBaseBranch: "main" },
+      maxDiffBytes: 128,
+    });
+
+    expect(diff.truncated).toBe(true);
+    expect(Buffer.byteLength(diff.diff, "utf8")).toBeLessThanOrEqual(128);
+    expect(diff.diff).toContain("diff --git");
+    expect(diff.files).toContain("README.md");
+    expect(diff.shortstat).toContain("1 file changed");
+  });
+
   it("includes untracked files across multiple diff batches", async () => {
     const repoPath = await initRepo();
     const workspace = new Workspace(repoPath);
