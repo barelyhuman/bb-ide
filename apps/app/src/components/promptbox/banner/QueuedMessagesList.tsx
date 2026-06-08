@@ -84,7 +84,10 @@ const QueuedMessageRow = memo(function QueuedMessageRow({
     disabled: dragDisabled,
   });
   const rowStyle = {
-    transform: CSS.Transform.toString(transform),
+    // Translate only. `CSS.Transform.toString` would also emit the scaleX/scaleY
+    // dnd-kit derives for these variable-height rows, visibly squishing the
+    // dragged message.
+    transform: CSS.Translate.toString(transform),
     transition,
   };
 
