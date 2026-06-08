@@ -9,13 +9,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAtom } from "jotai";
-import {
-  closestCenter,
-  DndContext,
-  pointerWithin,
-  type CollisionDetection,
-  type DragEndEvent,
-} from "@dnd-kit/core";
+import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import {
   SortableContext,
   verticalListSortingStrategy,
@@ -428,17 +422,6 @@ function TopLevelSidebarSection({
     </SidebarStickyGroup>
   );
 }
-
-// The sidebar sections have wildly different heights (the Threads list is far
-// taller than the Projects list). `closestCenter` keys off the dragged
-// element's bounding-rect center, so a tall section's center sits far below the
-// cursor and a swap only registers once you over-drag past the other section's
-// center. Prefer the section the pointer is actually over, falling back to
-// center distance only when the pointer is outside every droppable.
-const sidebarSectionCollisionDetection: CollisionDetection = (args) => {
-  const pointerCollisions = pointerWithin(args);
-  return pointerCollisions.length > 0 ? pointerCollisions : closestCenter(args);
-};
 
 const SortableSidebarSection = memo(function SortableSidebarSection({
   id,
@@ -888,10 +871,7 @@ function ProjectListComponent({
   const {
     dndContextProps: sidebarSectionDndContextProps,
     consumeClickSuppression: consumeSidebarSectionClickSuppression,
-  } = useSidebarReorderDnd({
-    onDragEnd: handleReorderSidebarSection,
-    collisionDetection: sidebarSectionCollisionDetection,
-  });
+  } = useSidebarReorderDnd({ onDragEnd: handleReorderSidebarSection });
 
   const projectlessThreadListState = getProjectThreadListState({
     status: projectsState.status,

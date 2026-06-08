@@ -3,6 +3,7 @@ import {
   closestCenter,
   KeyboardSensor,
   MouseSensor,
+  pointerWithin,
   TouchSensor,
   useSensor,
   useSensors,
@@ -17,17 +18,25 @@ import {
   type ConsumeDragClickSuppression,
 } from "./useDragClickSuppression";
 
+/**
+ * Sidebar reorder lists mix uneven row heights — a tall expanded parent next
+ * to a collapsed leaf, or (for sections) a long Threads list beside a short
+ * one. `closestCenter` keys off the dragged element's center, so a swap only
+ * registers after you over-drag past a tall neighbor's center. Prefer the
+ * droppable the pointer is actually over, falling back to center distance when
+ * the pointer is outside every droppable (e.g. keyboard drag, which has none).
+ */
+const sidebarReorderCollisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+  return pointerCollisions.length > 0 ? pointerCollisions : closestCenter(args);
+};
+
 export interface UseSidebarReorderDndArgs {
   /**
    * Performs the reorder once a drag settles. The hook clears the drag-click
    * suppression timer before invoking it, so callers only own the reorder.
    */
   onDragEnd: (event: DragEndEvent) => void;
-  /**
-   * Defaults to `closestCenter`. Sections override it with a pointer-first
-   * strategy because their rows have wildly uneven heights.
-   */
-  collisionDetection?: CollisionDetection;
 }
 
 export type SidebarReorderDndContextProps = Pick<
@@ -59,7 +68,6 @@ export interface UseSidebarReorderDndResult {
  */
 export function useSidebarReorderDnd({
   onDragEnd,
-  collisionDetection = closestCenter,
 }: UseSidebarReorderDndArgs): UseSidebarReorderDndResult {
   const {
     beginDragClickSuppression,
@@ -104,18 +112,12 @@ export function useSidebarReorderDnd({
   const dndContextProps = useMemo<SidebarReorderDndContextProps>(
     () => ({
       sensors,
-      collisionDetection,
+      collisionDetection: sidebarReorderCollisionDetection,
       onDragStart: handleDragStart,
       onDragCancel: handleDragCancel,
       onDragEnd: handleDragEnd,
     }),
-    [
-      collisionDetection,
-      handleDragCancel,
-      handleDragEnd,
-      handleDragStart,
-      sensors,
-    ],
+    [handleDragCancel, handleDragEnd, handleDragStart, sensors],
   );
 
   return {
