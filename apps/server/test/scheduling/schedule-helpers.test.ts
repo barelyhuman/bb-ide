@@ -107,6 +107,20 @@ describe("schedule helpers", () => {
     });
   });
 
+  it("supports numeric cron ranges for fixed hours and weekdays", () => {
+    expect(
+      parseCronScheduleDefinition({
+        cron: "10 7-11 * * 1-5",
+        timezone: "America/Los_Angeles",
+      }),
+    ).toEqual({
+      kind: "weekly",
+      times: ["07:10", "08:10", "09:10", "10:10", "11:10"],
+      timezone: "America/Los_Angeles",
+      weekdays: ["mon", "tue", "wed", "thu", "fri"],
+    });
+  });
+
   it("supports cron schedules with multiple daily times", () => {
     expect(
       parseCronScheduleDefinition({
@@ -118,6 +132,24 @@ describe("schedule helpers", () => {
       times: ["09:00", "09:30", "17:00", "17:30"],
       timezone: "UTC",
     });
+  });
+
+  it("rejects numeric ranges that run more frequently than every five minutes", () => {
+    expect(() =>
+      validateScheduleDefinition({
+        cron: "0-4 8 * * *",
+        timezone: "UTC",
+      }),
+    ).toThrow(ScheduleValidationError);
+  });
+
+  it("rejects descending numeric ranges", () => {
+    expect(() =>
+      parseCronScheduleDefinition({
+        cron: "10 11-7 * * 1-5",
+        timezone: "UTC",
+      }),
+    ).toThrow(ScheduleValidationError);
   });
 
   it("rejects unsupported cron schedules", () => {

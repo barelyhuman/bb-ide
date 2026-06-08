@@ -243,7 +243,10 @@ export function registerScheduleCommands(
     .description("Create a schedule for a thread")
     .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .requiredOption("--name <name>", "Schedule name")
-    .requiredOption("--cron <expr>", "Five-field cron expression")
+    .requiredOption(
+      "--cron <expr>",
+      "Five-field cron expression with numeric lists/ranges",
+    )
     .requiredOption("--timezone <tz>", "IANA timezone, for example UTC")
     .requiredOption("--prompt <text>", "Prompt to submit when the schedule fires")
     .option("--disabled", "Create the schedule disabled")
@@ -254,7 +257,10 @@ export function registerScheduleCommands(
     .command("update <thread-id> <schedule-id>")
     .description("Update a thread schedule")
     .option("--name <name>", "Schedule name")
-    .option("--cron <expr>", "Five-field cron expression")
+    .option(
+      "--cron <expr>",
+      "Five-field cron expression with numeric lists/ranges",
+    )
     .option("--timezone <tz>", "IANA timezone")
     .option("--prompt <text>", "Prompt to submit when the schedule fires")
     .option("--json", "Print machine-readable JSON output")

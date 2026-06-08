@@ -49,6 +49,9 @@ bb thread schedule delete <thread-id> <schedule-id>
 Constraints:
 
 - Schedule names are unique per thread.
+- Cron expressions are five-field expressions. Numeric lists and ranges are
+  supported for fixed minute, hour, and day-of-week fields, such as
+  `10 7-11 * * 1-5`.
 - The cron month field must stay `*`.
 - Schedules must not run more frequently than every 5 minutes.
 - Scheduled turns deny permission escalation.

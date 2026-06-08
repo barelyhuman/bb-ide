@@ -56,8 +56,8 @@ const tooFrequentTrigger = createScheduleTrigger(
     times: ["08:00", "08:03"],
   }),
 );
-const invalidTimeTrigger = {
-  cron: "0 8-9 * * *",
+const unsupportedMonthTrigger = {
+  cron: "0 8 * 2 *",
   timezone: "UTC",
   triggerType: "schedule",
 };
@@ -348,7 +348,7 @@ describe("public automation routes", () => {
       });
 
       for (const trigger of [
-        invalidTimeTrigger,
+        unsupportedMonthTrigger,
         invalidTimezoneTrigger,
         tooFrequentTrigger,
       ] as const) {

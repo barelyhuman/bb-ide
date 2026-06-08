@@ -74,6 +74,15 @@ type ParsedHourField =
       kind: "interval";
     };
 
+interface NumberFieldBounds {
+  max: number;
+  min: number;
+}
+
+interface ParseSingleNumberFieldArgs extends NumberFieldBounds {
+  allowWildcard?: boolean;
+}
+
 export class ScheduleValidationError extends Error {}
 
 function parseExpression(args: {
@@ -185,11 +194,7 @@ function parseCronFieldParts(field: string): string[] {
 
 function parseSingleNumberField(
   field: string,
-  args: {
-    allowWildcard?: boolean;
-    max: number;
-    min: number;
-  },
+  args: ParseSingleNumberFieldArgs,
 ): number | null {
   if (args.allowWildcard && field === "*") {
     return null;
@@ -207,15 +212,45 @@ function parseSingleNumberField(
   return value;
 }
 
-function parseNumberListField(
+function parseRequiredNumberField(
   field: string,
-  args: {
-    max: number;
-    min: number;
-  },
+  args: NumberFieldBounds,
+): number {
+  const value = parseSingleNumberField(field, args);
+  if (value === null) {
+    throw new ScheduleValidationError("Unsupported cron expression");
+  }
+  return value;
+}
+
+function parseNumberFieldPartValues(
+  part: string,
+  args: NumberFieldBounds,
 ): number[] {
-  const values = parseCronFieldParts(field).map(
-    (part) => parseSingleNumberField(part, args) ?? 0,
+  const rangeMatch = /^(?<start>\d+)-(?<end>\d+)$/u.exec(part);
+  if (!rangeMatch?.groups?.start || !rangeMatch.groups.end) {
+    return [parseRequiredNumberField(part, args)];
+  }
+
+  const start = parseRequiredNumberField(rangeMatch.groups.start, args);
+  const end = parseRequiredNumberField(rangeMatch.groups.end, args);
+  if (start > end) {
+    throw new ScheduleValidationError("Unsupported cron expression");
+  }
+
+  const values: number[] = [];
+  for (let value = start; value <= end; value += 1) {
+    values.push(value);
+  }
+  return values;
+}
+
+function parseNumberFieldValues(
+  field: string,
+  args: NumberFieldBounds,
+): number[] {
+  const values = parseCronFieldParts(field).flatMap((part) =>
+    parseNumberFieldPartValues(part, args),
   );
   if (values.length === 0 || new Set(values).size !== values.length) {
     throw new ScheduleValidationError("Unsupported cron expression");
@@ -248,7 +283,7 @@ function parseHourField(field: string): ParsedHourField {
   }
 
   return {
-    hours: parseNumberListField(field, {
+    hours: parseNumberFieldValues(field, {
       max: 23,
       min: 0,
     }),
@@ -259,26 +294,8 @@ function parseHourField(field: string): ParsedHourField {
 function parseWeekdayField(field: string): WeekdayName[] {
   const weekdays = new Set<WeekdayName>();
 
-  for (const part of parseCronFieldParts(field)) {
-    const rangeMatch = /^(?<start>\d+)-(?<end>\d+)$/u.exec(part);
-    if (rangeMatch?.groups?.start && rangeMatch.groups.end) {
-      const start =
-        parseSingleNumberField(rangeMatch.groups.start, { max: 7, min: 0 }) ??
-        0;
-      const end =
-        parseSingleNumberField(rangeMatch.groups.end, { max: 7, min: 0 }) ?? 0;
-      if (start > end) {
-        throw new ScheduleValidationError("Unsupported cron expression");
-      }
-      for (let value = start; value <= end; value += 1) {
-        weekdays.add(toWeekdayName(value));
-      }
-      continue;
-    }
-
-    weekdays.add(
-      toWeekdayName(parseSingleNumberField(part, { max: 7, min: 0 }) ?? 0),
-    );
+  for (const value of parseNumberFieldValues(field, { max: 7, min: 0 })) {
+    weekdays.add(toWeekdayName(value));
   }
 
   return WEEKDAY_ORDER.filter((weekday) => weekdays.has(weekday));
@@ -410,7 +427,7 @@ export function parseCronScheduleDefinition(
     throw new ScheduleValidationError("Unsupported cron expression");
   }
 
-  const minutes = parseNumberListField(minuteField, { max: 59, min: 0 });
+  const minutes = parseNumberFieldValues(minuteField, { max: 59, min: 0 });
   const parsedHourField = parseHourField(hourField);
 
   if (dayOfMonthField === "*" && dayOfWeekField === "*") {
@@ -455,13 +472,10 @@ export function parseCronScheduleDefinition(
     if (parsedHourField.kind === "interval") {
       throw new ScheduleValidationError("Unsupported cron expression");
     }
-    const dayOfMonth = parseSingleNumberField(dayOfMonthField, {
+    const dayOfMonth = parseRequiredNumberField(dayOfMonthField, {
       max: 31,
       min: 1,
     });
-    if (dayOfMonth === null) {
-      throw new ScheduleValidationError("Unsupported cron expression");
-    }
     return {
       dayOfMonth,
       kind: "monthly",
