@@ -10,6 +10,6 @@ variables:
 ---
 [bb system]
 
-Managed thread failed: {{threadId}}{{titleSuffix}}
-Review that thread's error and decide whether to retry, clarify the task, or update the user.
+Managed thread update: {{threadId}}{{titleSuffix}} failed.
+Inspect the error and decide whether to retry, clarify the task, delegate a follow-up, or update the user.
 Inspect the managed thread directly before taking action; do not reapply its edits into the manager checkout unless the user explicitly asked for that.

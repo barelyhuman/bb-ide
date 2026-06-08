@@ -9,7 +9,12 @@ import {
   releaseQueuedMessageClaim,
   releaseStaleQueuedMessageClaims,
 } from "@bb/db";
-import type { Thread, ThreadQueuedMessage } from "@bb/domain";
+import type {
+  PromptInput,
+  Thread,
+  ThreadQueuedMessage,
+  ThreadTurnInitiator,
+} from "@bb/domain";
 import type {
   SendMessageRequest,
   SendQueuedMessageMode,
@@ -40,7 +45,7 @@ import { getLastProviderThreadId } from "./thread-events.js";
 import { ensureThreadCanStartRequest } from "./thread-lifecycle.js";
 import { requireReadyThreadEnvironment } from "./thread-turn-dispatch.js";
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
-import { sendThreadMessage } from "./thread-send.js";
+import { formatAgentThreadInput, sendThreadMessage } from "./thread-send.js";
 import { recordAcceptedPromptHistoryEntry } from "../prompt-history.js";
 import { requireThreadCommandEnvironment } from "./thread-command-environment.js";
 import { tryTransitionInTransaction } from "./thread-transitions.js";
@@ -84,12 +89,18 @@ interface QueuedMessageAutoSendRequestArgs {
   threadId: string;
 }
 
+interface FormatQueuedMessageInputForSenderArgs {
+  input: PromptInput[];
+  senderThreadId: string | null;
+}
+
 const STALE_QUEUED_MESSAGE_CLAIM_MS = 5 * 60 * 1000;
 const QUEUED_MESSAGE_CLAIM_LOST_CODE = "queued_message_claim_lost";
 
 function sendQueuedMessagePayload(
   queuedMessage: ThreadQueuedMessage,
   mode: SendQueuedMessageMode,
+  senderThreadId: string | null,
 ): SendMessageRequest {
   return {
     input: queuedMessage.content,
@@ -98,7 +109,20 @@ function sendQueuedMessagePayload(
     permissionMode: queuedMessage.permissionMode,
     reasoningLevel: queuedMessage.reasoningLevel,
     serviceTier: queuedMessage.serviceTier,
+    ...(senderThreadId !== null ? { senderThreadId } : {}),
   };
+}
+
+function formatQueuedMessageInputForSender(
+  args: FormatQueuedMessageInputForSenderArgs,
+): PromptInput[] {
+  if (args.senderThreadId === null) {
+    return args.input;
+  }
+  return formatAgentThreadInput({
+    input: args.input,
+    senderThreadId: args.senderThreadId,
+  });
 }
 
 function claimQueuedThreadMessageForSend(
@@ -192,7 +216,18 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
   const queuedMessage = toThreadQueuedMessage(args.queuedMessage);
   ensureThreadCanStartRequest(thread);
 
-  const payload = sendQueuedMessagePayload(queuedMessage, args.mode);
+  const senderThreadId = args.queuedMessage.senderThreadId;
+  const payload = sendQueuedMessagePayload(
+    queuedMessage,
+    args.mode,
+    senderThreadId,
+  );
+  const input = formatQueuedMessageInputForSender({
+    input: payload.input,
+    senderThreadId,
+  });
+  const initiator: ThreadTurnInitiator =
+    senderThreadId === null ? "user" : "agent";
   const execution = await buildExecutionOptions(
     deps,
     payload,
@@ -200,7 +235,7 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
     "client/turn/requested",
   );
   const permissionEscalation = resolvePermissionEscalation({
-    initiator: "user",
+    initiator,
     thread,
   });
   await ensureHostSessionReadyForWork(deps, {
@@ -211,7 +246,7 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
       deps,
       {
         hostId: environment.hostId,
-        input: payload.input,
+        input,
         thread,
       },
     );
@@ -237,10 +272,10 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
         const request = appendClientTurnEventInTransaction(tx, {
           environmentId: thread.environmentId,
           execution,
-          initiator: "user",
+          initiator,
           input: preparedInput.input,
           requestMethod: "turn/start",
-          senderThreadId: null,
+          senderThreadId,
           source: "tell",
           target: { kind: "new-turn" },
           threadId: thread.id,
@@ -251,7 +286,7 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
           {
             thread,
             input: preparedInput.input,
-            initiator: "user",
+            initiator,
             target: { kind: "new-turn" },
             requestSequence: request.sequence,
           },
@@ -310,7 +345,11 @@ async function sendClaimedQueuedMessageForThread(
   });
   await sendThreadMessage(deps, {
     environment,
-    payload: sendQueuedMessagePayload(queuedMessage, args.mode),
+    payload: sendQueuedMessagePayload(
+      queuedMessage,
+      args.mode,
+      args.queuedMessage.senderThreadId,
+    ),
     thread: args.thread,
     trigger: "auto-dispatch",
   });

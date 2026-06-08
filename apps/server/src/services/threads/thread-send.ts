@@ -71,12 +71,12 @@ export interface SendThreadMessageArgs {
   trigger: SendThreadMessageTrigger;
 }
 
-interface ResolveMessageSenderArgs {
+export interface ResolveMessageSenderArgs {
   senderThreadId?: string;
   targetThread: Thread;
 }
 
-interface FormatAgentThreadInputArgs {
+export interface FormatAgentThreadInputArgs {
   input: PromptInput[];
   senderThreadId: string;
 }
@@ -170,7 +170,7 @@ function resolveSendMode(
     }
     return "start";
   }
-  if (requestedMode === "steer") {
+  if (requestedMode === "steer" || requestedMode === "steer-if-active") {
     if (thread.status === "active") {
       return "steer";
     }
@@ -182,6 +182,16 @@ function resolveSendMode(
       threadNotWritableReasonForStatus(thread.status),
       "Thread is not active",
     );
+  }
+  if (requestedMode === "queue-if-active") {
+    if (thread.status === "active") {
+      throwThreadNotWritable(
+        thread,
+        "already_active",
+        "Thread is already active",
+      );
+    }
+    return "start";
   }
   if (thread.status === "active") {
     return "auto";
@@ -212,7 +222,7 @@ function ensureRuntimeCanAcceptActiveSend(
   );
 }
 
-function resolveMessageSenderThreadId(
+export function resolveMessageSenderThreadId(
   deps: Pick<AppDeps, "db">,
   args: ResolveMessageSenderArgs,
 ): string | null {
@@ -240,7 +250,7 @@ function buildAgentThreadMessageText(
   });
 }
 
-function formatAgentThreadInput(
+export function formatAgentThreadInput(
   args: FormatAgentThreadInputArgs,
 ): PromptInput[] {
   const firstTextIndex = args.input.findIndex((item) => item.type === "text");

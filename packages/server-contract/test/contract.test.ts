@@ -76,6 +76,8 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Queued messages may inherit the thread's default reasoning level.",
   "createQueuedMessageRequestSchema.permissionMode":
     "Queued messages may inherit the thread's default permission mode.",
+  "createQueuedMessageRequestSchema.senderThreadId":
+    "Queued messages omit senderThreadId unless they originate from another thread.",
   "createQueuedMessageRequestSchema.serviceTier":
     "Queued messages may inherit the thread's default service tier.",
   "createQueuedMessageRequestSchema.executionInputSources":
@@ -936,10 +938,10 @@ describe("server-contract canonical schemas", () => {
     expect(
       sendMessageRequestSchema.parse({
         input: [{ type: "text", text: "Follow up" }],
-        mode: "auto",
+        mode: "queue-if-active",
       }),
     ).toMatchObject({
-      mode: "auto",
+      mode: "queue-if-active",
     });
 
     expect(sendQueuedMessageRequestSchema.parse({ mode: "auto" })).toEqual({
@@ -1259,10 +1261,10 @@ describe("server-contract canonical schemas", () => {
     expect(
       sendMessageRequestSchema.parse({
         input: [{ type: "text", text: "Use the thread defaults" }],
-        mode: "auto",
+        mode: "queue-if-active",
       }),
     ).toMatchObject({
-      mode: "auto",
+      mode: "queue-if-active",
     });
 
     expect(

@@ -511,6 +511,7 @@ export const queuedThreadMessages = sqliteTable(
       .notNull()
       .references(() => threads.id, { onDelete: "cascade" }),
     content: text("content").notNull(),
+    senderThreadId: text("sender_thread_id"),
     model: text("model").notNull(),
     reasoningLevel: text("reasoning_level").notNull(),
     permissionMode: text("permission_mode").$type<PermissionMode>().notNull(),

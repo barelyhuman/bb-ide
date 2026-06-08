@@ -3,10 +3,19 @@ import { renderTemplate } from "@bb/templates";
 import type { LoggedPendingInteractionWorkSessionDeps } from "../../types.js";
 import { queueManagerSystemMessage } from "./manager-system-messages.js";
 
-interface RenderManagedThreadTurnStatusMessageArgs {
+export interface ManagedThreadTurnNotificationBatchItem {
   managedThreadId: string;
   title: string | null;
   turnStatus: ThreadEventTurnStatus;
+}
+
+interface ManagedThreadTurnNotificationBatch {
+  items: ManagedThreadTurnNotificationBatchItem[];
+  timer: ReturnType<typeof setTimeout>;
+}
+
+interface RenderManagedThreadTurnStatusBatchMessageArgs {
+  items: ManagedThreadTurnNotificationBatchItem[];
 }
 
 interface RenderManagedThreadNeedsAttentionMessageArgs {
@@ -27,30 +36,142 @@ interface QueueManagedThreadNeedsAttentionNotificationArgs {
   title: string | null;
 }
 
+const MANAGED_THREAD_TURN_NOTIFICATION_BATCH_DELAY_MS = 2_000;
+const managedThreadTurnNotificationBatches = new Map<
+  string,
+  ManagedThreadTurnNotificationBatch
+>();
+
 function formatManagedThreadTitleSuffix(title: string | null): string {
   return title ? ` (${title})` : "";
 }
 
-function renderManagedThreadTurnStatusMessage(
-  args: RenderManagedThreadTurnStatusMessageArgs,
+function formatManagedThreadTurnStatusLabel(
+  turnStatus: ThreadEventTurnStatus,
 ): string {
-  const variables = {
-    threadId: args.managedThreadId,
-    titleSuffix: formatManagedThreadTitleSuffix(args.title),
-  };
-
-  switch (args.turnStatus) {
+  switch (turnStatus) {
     case "completed":
-      return renderTemplate("systemMessageManagedThreadComplete", variables);
+      return "completed";
     case "failed":
-      return renderTemplate("systemMessageManagedThreadFailed", variables);
+      return "failed";
     case "interrupted":
-      return renderTemplate("systemMessageManagedThreadInterrupted", variables);
+      return "interrupted";
     default: {
-      const exhaustiveCheck: never = args.turnStatus;
+      const exhaustiveCheck: never = turnStatus;
       return exhaustiveCheck;
     }
   }
+}
+
+function formatManagedThreadTurnStatusLine(
+  item: ManagedThreadTurnNotificationBatchItem,
+): string {
+  if (item.turnStatus === "interrupted") {
+    return `- interrupted: ${item.managedThreadId}${formatManagedThreadTitleSuffix(item.title)}. Inspect this thread directly before taking action. If it was stopped manually by the user, treat that as intentional; do not resume, restart, retry, replace, or continue the work unless the user explicitly asks.`;
+  }
+  return `- ${formatManagedThreadTurnStatusLabel(item.turnStatus)}: ${item.managedThreadId}${formatManagedThreadTitleSuffix(item.title)}`;
+}
+
+export function renderManagedThreadTurnStatusBatchMessage(
+  args: RenderManagedThreadTurnStatusBatchMessageArgs,
+): string {
+  return renderTemplate("systemMessageManagedThreadOutcomeBatch", {
+    updates: args.items.map(formatManagedThreadTurnStatusLine).join("\n"),
+  });
+}
+
+function managedThreadTurnNotificationLogMessage(
+  turnStatus: ThreadEventTurnStatus,
+): string {
+  switch (turnStatus) {
+    case "completed":
+      return "Failed to queue manager completed-thread notification";
+    case "failed":
+      return "Failed to queue manager failed-thread notification";
+    case "interrupted":
+      return "Failed to queue manager interrupted-thread notification";
+    default: {
+      const exhaustiveCheck: never = turnStatus;
+      return exhaustiveCheck;
+    }
+  }
+}
+
+async function flushManagedThreadTurnNotificationBatch(
+  deps: LoggedPendingInteractionWorkSessionDeps,
+  managerThreadId: string,
+): Promise<void> {
+  const batch = managedThreadTurnNotificationBatches.get(managerThreadId);
+  if (!batch) {
+    return;
+  }
+  managedThreadTurnNotificationBatches.delete(managerThreadId);
+
+  try {
+    await queueManagerSystemMessage(deps, {
+      managerThreadId,
+      messageText: renderManagedThreadTurnStatusBatchMessage({
+        items: batch.items,
+      }),
+    });
+  } catch (error) {
+    deps.logger.error(
+      {
+        err: error,
+        managerThreadId,
+        managedThreads: batch.items.map((item) => ({
+          managedThreadId: item.managedThreadId,
+          turnStatus: item.turnStatus,
+        })),
+      },
+      "Failed to queue batched manager turn notifications",
+    );
+  }
+}
+
+function scheduleManagedThreadTurnNotificationBatchFlush(
+  deps: LoggedPendingInteractionWorkSessionDeps,
+  managerThreadId: string,
+): ReturnType<typeof setTimeout> {
+  return setTimeout(() => {
+    void flushManagedThreadTurnNotificationBatch(deps, managerThreadId);
+  }, MANAGED_THREAD_TURN_NOTIFICATION_BATCH_DELAY_MS);
+}
+
+function queueManagedThreadTurnNotificationBatchItem(
+  deps: LoggedPendingInteractionWorkSessionDeps,
+  args: QueueManagedThreadTurnNotificationArgs,
+): void {
+  const existingBatch = managedThreadTurnNotificationBatches.get(
+    args.managerThreadId,
+  );
+  if (existingBatch) {
+    existingBatch.items.push({
+      managedThreadId: args.managedThreadId,
+      title: args.title,
+      turnStatus: args.turnStatus,
+    });
+    clearTimeout(existingBatch.timer);
+    existingBatch.timer = scheduleManagedThreadTurnNotificationBatchFlush(
+      deps,
+      args.managerThreadId,
+    );
+    return;
+  }
+
+  managedThreadTurnNotificationBatches.set(args.managerThreadId, {
+    items: [
+      {
+        managedThreadId: args.managedThreadId,
+        title: args.title,
+        turnStatus: args.turnStatus,
+      },
+    ],
+    timer: scheduleManagedThreadTurnNotificationBatchFlush(
+      deps,
+      args.managerThreadId,
+    ),
+  });
 }
 
 function renderManagedThreadNeedsAttentionMessage(
@@ -73,10 +194,7 @@ export async function queueManagedThreadTurnNotificationBestEffort(
   args: QueueManagedThreadTurnNotificationArgs,
 ): Promise<void> {
   try {
-    await queueManagerSystemMessage(deps, {
-      managerThreadId: args.managerThreadId,
-      messageText: renderManagedThreadTurnStatusMessage(args),
-    });
+    queueManagedThreadTurnNotificationBatchItem(deps, args);
   } catch (error) {
     deps.logger.error(
       {
@@ -85,7 +203,7 @@ export async function queueManagedThreadTurnNotificationBestEffort(
         turnStatus: args.turnStatus,
         err: error,
       },
-      "Failed to queue manager turn notification",
+      managedThreadTurnNotificationLogMessage(args.turnStatus),
     );
   }
 }

@@ -64,7 +64,7 @@ Inspecting:
 Messaging:
 
   bb thread tell <id> <message>            Send a follow-up message
-    --mode <mode>                          Message mode (e.g., steer)
+    --mode <mode>                          Message mode: queue (default), steer, or auto
     --model <model>                        Model override for this turn
     --reasoning-level <level>              Reasoning level override
 

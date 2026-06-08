@@ -31,6 +31,7 @@ import {
   timelineTurnSummaryDetailsResponseSchema,
   uploadedPromptAttachmentSchema,
 } from "@bb/server-contract";
+import { renderTemplate } from "@bb/templates";
 import { z } from "zod";
 import { describe, expect, it } from "vitest";
 import {
@@ -67,6 +68,12 @@ const threadReadResponseSchema = z.object({
 const threadEventWaitResponseSchema = z.object({
   seq: z.number(),
   type: z.string(),
+});
+
+const clientTurnRequestedDataSchema = z.object({
+  initiator: z.string(),
+  input: z.array(z.object({ text: z.string(), type: z.literal("text") })),
+  senderThreadId: z.string().nullable(),
 });
 
 type TimelineTurnRow = Extract<TimelineRow, { kind: "turn" }>;
@@ -1057,6 +1064,121 @@ describe("public thread data routes", () => {
       );
       expect(deleteResponse.status).toBe(200);
       await expect(readJson(deleteResponse)).resolves.toEqual({ ok: true });
+      expect(getQueuedThreadMessage(harness.db, queuedMessage.id)).toBeNull();
+    });
+  });
+
+  it("queues public send requests with sender context while the target thread is active", async () => {
+    await withTestHarness(async (harness) => {
+      const { project, thread } = seedThreadFixture(harness, {
+        thread: {
+          status: "active",
+        },
+      });
+      const senderThread = seedThread(harness.deps, {
+        projectId: project.id,
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            input: [{ type: "text", text: "Queued active follow-up" }],
+            mode: "queue-if-active",
+            model: "gpt-5",
+            permissionMode: "full",
+            reasoningLevel: "medium",
+            serviceTier: "default",
+            senderThreadId: senderThread.id,
+          }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({ ok: true });
+      const queuedRows = listQueuedThreadMessages(harness.db, thread.id);
+      expect(queuedRows).toMatchObject([
+        {
+          senderThreadId: senderThread.id,
+          threadId: thread.id,
+        },
+      ]);
+      expect(JSON.parse(queuedRows[0]?.content ?? "null")).toEqual([
+        { type: "text", text: "Queued active follow-up", mentions: [] },
+      ]);
+      expect(
+        harness.db
+          .select({ id: events.id })
+          .from(events)
+          .where(eq(events.threadId, thread.id))
+          .all(),
+      ).toHaveLength(0);
+    });
+  });
+
+  it("sends queued sender messages as agent-originated turn requests", async () => {
+    await withTestHarness(async (harness) => {
+      const { project, thread } = seedThreadFixture(harness);
+      const senderThread = seedThread(harness.deps, {
+        projectId: project.id,
+      });
+
+      const createResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/queued-messages`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            input: [{ type: "text", text: "Queued agent follow-up" }],
+            model: "gpt-5",
+            permissionMode: "full",
+            reasoningLevel: "medium",
+            serviceTier: "default",
+            senderThreadId: senderThread.id,
+          }),
+        },
+      );
+      expect(createResponse.status).toBe(201);
+      const queuedMessage = queuedMessageIdResponseSchema.parse(
+        await readJson(createResponse),
+      );
+
+      const sendResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/queued-messages/${queuedMessage.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ mode: "auto" }),
+        },
+      );
+
+      expect(sendResponse.status).toBe(200);
+      const requestedEvent = harness.db
+        .select({ data: events.data })
+        .from(events)
+        .where(eq(events.threadId, thread.id))
+        .get();
+      const requestedData = clientTurnRequestedDataSchema.parse(
+        requestedEvent ? JSON.parse(requestedEvent.data) : null,
+      );
+      expect(requestedData).toMatchObject({
+        initiator: "agent",
+        senderThreadId: senderThread.id,
+      });
+      expect(requestedData.input[0]?.text).toBe(
+        renderTemplate("agentThreadMessage", {
+          messageText: "Queued agent follow-up",
+          senderThreadId: senderThread.id,
+        }),
+      );
       expect(getQueuedThreadMessage(harness.db, queuedMessage.id)).toBeNull();
     });
   });

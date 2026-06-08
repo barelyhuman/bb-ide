@@ -62,7 +62,13 @@ export {
   FILE_LIST_QUERY_MAX_LENGTH,
 } from "@bb/domain";
 
-export const sendMessageModeSchema = z.enum(["auto", "start", "steer"]);
+export const sendMessageModeSchema = z.enum([
+  "queue-if-active",
+  "steer-if-active",
+  "auto",
+  "start",
+  "steer",
+]);
 
 export const AUTOMATION_NAME_MAX_LENGTH = 200;
 export const SCHEDULE_CRON_MAX_LENGTH = 100;
@@ -824,6 +830,7 @@ export const createQueuedMessageRequestSchema = z.object({
   reasoningLevel: reasoningLevelSchema.optional(),
   permissionMode: permissionModeSchema.optional(),
   executionInputSources: existingThreadExecutionInputSourcesSchema.optional(),
+  senderThreadId: z.string().min(1).optional(),
 });
 export type CreateQueuedMessageRequest = z.infer<
   typeof createQueuedMessageRequestSchema
@@ -948,8 +955,7 @@ export const updateEnvironmentRequestSchema = z
   })
   .partial()
   .refine(
-    (value) =>
-      value.mergeBaseBranch !== undefined || value.name !== undefined,
+    (value) => value.mergeBaseBranch !== undefined || value.name !== undefined,
     "At least one field must be provided",
   );
 export type UpdateEnvironmentRequest = z.infer<

@@ -237,6 +237,12 @@ function dropEnvironmentDestroyAttemptIdColumn(db: DbConnection): void {
     .run();
 }
 
+function dropQueuedMessageSenderThreadIdColumn(db: DbConnection): void {
+  db.$client
+    .prepare("ALTER TABLE queued_thread_messages DROP COLUMN sender_thread_id")
+    .run();
+}
+
 function readIndexNames(args: ReadIndexNamesArgs): string[] {
   return args.db.$client
     .prepare<TableNameParameters, IndexNameRow>(
@@ -2004,6 +2010,7 @@ describe("migrate", () => {
         .run(threadSchedulesMigrationWhen);
       dropEnvironmentNameColumn(db);
       dropEnvironmentDestroyAttemptIdColumn(db);
+      dropQueuedMessageSenderThreadIdColumn(db);
       db.$client
         .prepare(
           `
@@ -2195,6 +2202,7 @@ describe("migrate", () => {
         .run(terminalSessionRuntimeStateHonestyWhen);
       dropEnvironmentNameColumn(db);
       dropEnvironmentDestroyAttemptIdColumn(db);
+      dropQueuedMessageSenderThreadIdColumn(db);
 
       migrate(db);
 

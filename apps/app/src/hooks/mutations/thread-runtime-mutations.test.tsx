@@ -505,6 +505,47 @@ describe("thread runtime mutations", () => {
     });
   });
 
+  it("does not insert an accepted turn when queue-if-active queues for an active thread", async () => {
+    vi.mocked(api.sendThreadMessage).mockResolvedValue(undefined);
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const queuedMessagesKey = threadQueuedMessagesQueryKey("thread-1");
+    queryClient.setQueryData<ThreadWithRuntime>(
+      threadQueryKey("thread-1"),
+      makeThreadWithRuntime({ status: "active" }),
+    );
+    queryClient.setQueryData<ThreadTimelineResponse>(
+      threadTimelineQueryKey("thread-1"),
+      makeTimelineResponse(),
+    );
+    queryClient.setQueryData<ThreadQueuedMessageListResponse>(
+      queuedMessagesKey,
+      [],
+    );
+    const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        id: "thread-1",
+        input: textInput({ text: "Queue this instead" }),
+        mode: "queue-if-active",
+      });
+    });
+
+    expect(
+      queryClient.getQueryData<ThreadTimelineResponse>(
+        threadTimelineQueryKey("thread-1"),
+      )?.rows,
+    ).toEqual([]);
+    expect(
+      queryClient.getQueryData<PromptHistoryResponse>(
+        threadPromptHistoryQueryKey("thread-1"),
+      ),
+    ).toBeUndefined();
+    expect(queryClient.getQueryState(queuedMessagesKey)?.isInvalidated).toBe(
+      true,
+    );
+  });
+
   it("skips optimistic pending steer timeline writes when thread data is missing", async () => {
     let resolveSend: (() => void) | null = null;
     vi.mocked(api.sendThreadMessage).mockImplementation(

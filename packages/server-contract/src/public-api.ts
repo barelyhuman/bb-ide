@@ -524,10 +524,11 @@ export type PublicApiSchema = {
   "/threads/:id/send": {
     /**
      * Send a message to a thread.
-     * Idle thread → starts a new turn. Active thread with mode=steer → steers the current turn.
-     * senderThreadId marks immediate agent-to-agent CLI messages so the server can add reply guidance.
-     * Queued-message routes intentionally omit it because they are stored queued messages,
-     * not immediate sends from a live sender thread.
+     * mode=queue-if-active queues when the thread is active, otherwise starts a new turn.
+     * mode=steer-if-active steers when the thread is active, otherwise starts a new turn.
+     * Legacy mode=auto starts idle threads and sends to active turns with the provider's auto target.
+     * Legacy mode=start only starts idle threads; legacy mode=steer steers active threads and starts idle threads.
+     * senderThreadId marks agent-to-agent CLI messages so the server can add reply guidance.
      */
     $post: Endpoint<PathId & { json: SendMessageRequest }, { ok: true }>;
   };
@@ -537,7 +538,7 @@ export type PublicApiSchema = {
   };
   "/threads/:id/queued-messages": {
     $get: Endpoint<PathId, ThreadQueuedMessageListResponse>;
-    /** Create a queued message. Use /threads/:id/send for immediate agent-to-agent messages. */
+    /** Create a queued message. senderThreadId preserves agent-to-agent context until the queued message sends. */
     $post: Endpoint<
       PathId & { json: CreateQueuedMessageRequest },
       ThreadQueuedMessage,

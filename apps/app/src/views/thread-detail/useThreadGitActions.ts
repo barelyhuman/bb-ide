@@ -357,7 +357,7 @@ export function useThreadGitActions({
         await sendMessage.mutateAsync({
           id: threadId,
           input,
-          mode: "auto",
+          mode: "queue-if-active",
         });
         appToast.success("Message sent", { id: toastId });
       } catch (error) {

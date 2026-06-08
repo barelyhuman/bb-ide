@@ -147,11 +147,20 @@ interface OptimisticTurnRequestKindArgs {
   threadStatus: ThreadWithRuntime["status"] | null;
 }
 
-export interface SendThreadMessageTransaction {
+export interface SendThreadMessageAcceptedTurnTransaction {
+  kind: "accepted-turn";
   optimisticCreatedAt: number;
   optimisticRowId: string;
   previousThread: ThreadWithRuntime | undefined;
 }
+
+export interface SendThreadMessageQueuedTransaction {
+  kind: "queued-message";
+}
+
+export type SendThreadMessageTransaction =
+  | SendThreadMessageAcceptedTurnTransaction
+  | SendThreadMessageQueuedTransaction;
 
 export interface ReorderQueuedMessageTransaction {
   previousQueuedMessages: ThreadQueuedMessageListResponse | undefined;
@@ -230,13 +239,20 @@ function optimisticTurnRequestKind({
   mode,
   threadStatus,
 }: OptimisticTurnRequestKindArgs): OptimisticTurnRequestKind {
-  if (mode === "steer") {
+  if (mode === "steer" || mode === "steer-if-active") {
     return "steer";
   }
   if (mode === "auto" && threadStatus === "active") {
     return "steer";
   }
   return "message";
+}
+
+function requestWillQueueForActiveThread(
+  request: SendThreadMessageMutationRequest,
+  thread: ThreadWithRuntime | undefined,
+): boolean {
+  return request.mode === "queue-if-active" && thread?.status === "active";
 }
 
 function buildOptimisticUserMessageRow({
@@ -325,7 +341,10 @@ export function applyCreateThreadResult({
   request,
   thread,
 }: CreateThreadSuccessArgs): void {
-  queryClient.setQueryData<ThreadWithRuntime>(threadQueryKey(thread.id), thread);
+  queryClient.setQueryData<ThreadWithRuntime>(
+    threadQueryKey(thread.id),
+    thread,
+  );
   optimisticallyInsertThread(queryClient, thread);
   prependProjectPromptHistory(
     queryClient,
@@ -351,8 +370,19 @@ export async function beginSendThreadMessageTransaction({
   queryClient,
   request,
 }: SendThreadMessageTransactionArgs): Promise<SendThreadMessageTransaction> {
+  await queryClient.cancelQueries({ queryKey: threadQueryKey(request.id) });
+
+  const previousThread = queryClient.getQueryData<ThreadWithRuntime>(
+    threadQueryKey(request.id),
+  );
+  if (requestWillQueueForActiveThread(request, previousThread)) {
+    await queryClient.cancelQueries({
+      queryKey: threadQueuedMessagesQueryKey(request.id),
+    });
+    return { kind: "queued-message" };
+  }
+
   await Promise.all([
-    queryClient.cancelQueries({ queryKey: threadQueryKey(request.id) }),
     queryClient.cancelQueries({
       queryKey: threadTimelineQueryKeyPrefix(request.id),
     }),
@@ -360,10 +390,6 @@ export async function beginSendThreadMessageTransaction({
       queryKey: threadTimelineTurnSummaryDetailsQueryKeyPrefix(request.id),
     }),
   ]);
-
-  const previousThread = queryClient.getQueryData<ThreadWithRuntime>(
-    threadQueryKey(request.id),
-  );
   const optimisticCreatedAt = Date.now();
 
   updateCachedThread(queryClient, request.id, (thread) => ({
@@ -393,6 +419,7 @@ export async function beginSendThreadMessageTransaction({
   insertOptimisticTimelineRow(queryClient, request.id, optimisticRow);
 
   return {
+    kind: "accepted-turn",
     previousThread,
     optimisticCreatedAt,
     optimisticRowId: optimisticRow.id,
@@ -404,7 +431,10 @@ export function rollbackSendThreadMessageTransaction({
   request,
   transaction,
 }: RollbackSendThreadMessageTransactionArgs): void {
-  if (transaction?.optimisticRowId) {
+  if (transaction?.kind !== "accepted-turn") {
+    return;
+  }
+  if (transaction.optimisticRowId) {
     removeOptimisticTimelineRow(
       queryClient,
       request.id,
@@ -427,6 +457,10 @@ export function applySendThreadMessageSuccess({
   request,
   transaction,
 }: ApplySendThreadMessageSuccessArgs): void {
+  if (transaction?.kind === "queued-message") {
+    invalidateThreadQueueQueries({ queryClient, threadId: request.id });
+    return;
+  }
   prependThreadPromptHistory(
     queryClient,
     request.id,
@@ -563,7 +597,10 @@ export function rollbackStopThreadTransaction({
     return;
   }
 
-  queryClient.setQueryData(threadQueryKey(threadId), transaction.previousThread);
+  queryClient.setQueryData(
+    threadQueryKey(threadId),
+    transaction.previousThread,
+  );
   restoreThreadLists(queryClient, transaction.previousThreadLists);
 }
 
