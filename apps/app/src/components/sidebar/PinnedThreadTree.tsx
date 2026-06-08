@@ -1,29 +1,14 @@
+import { memo, useCallback } from "react";
+import { DndContext } from "@dnd-kit/core";
 import {
-  memo,
-  useCallback,
-  type MouseEventHandler,
-} from "react";
-import {
-  closestCenter,
-  DndContext,
-  KeyboardSensor,
-  MouseSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
-import {
-  sortableKeyboardCoordinates,
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import type { NeighborReorderRequest } from "@/lib/neighbor-reorder";
 import { ThreadTreeNodeRow } from "./ProjectRow";
 import { useSidebarSortable } from "./sortableMotion";
+import { useSidebarReorderDnd } from "./useSidebarReorderDnd";
 import type { ProjectThreadNode } from "./projectThreadGroups";
-import { useDragClickSuppression } from "./useDragClickSuppression";
 import {
   useNeighborReorderSortable,
   type UseNeighborReorderSortableArgs,
@@ -63,8 +48,6 @@ interface PinnedRootItemProps
   extends Omit<SortablePinnedRootItemProps, "disabled"> {
   consumeClickSuppression?: () => boolean;
 }
-
-type PinnedThreadTreeClickCaptureHandler = MouseEventHandler<HTMLDivElement>;
 
 function getPinnedRootNodeId(node: ProjectThreadNode): string {
   return node.thread.id;
@@ -164,48 +147,8 @@ export const PinnedThreadTree = memo(function PinnedThreadTree({
     items: rootNodes,
     onReorder: handleReorderPinnedRoot,
   });
-  const {
-    beginDragClickSuppression,
-    clearDragClickSuppressionSoon,
-    consumeDragClickSuppression,
-  } = useDragClickSuppression();
-  const sensors = useSensors(
-    useSensor(MouseSensor, {
-      activationConstraint: { distance: 4 },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 200, tolerance: 6 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
-  );
-  const handleDragStart = useCallback(
-    (_event: DragStartEvent) => {
-      beginDragClickSuppression();
-    },
-    [beginDragClickSuppression],
-  );
-  const handleDragCancel = useCallback(() => {
-    clearDragClickSuppressionSoon();
-  }, [clearDragClickSuppressionSoon]);
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      clearDragClickSuppressionSoon();
-      handleSortableDragEnd(event);
-    },
-    [clearDragClickSuppressionSoon, handleSortableDragEnd],
-  );
-  const handleClickCapture = useCallback<PinnedThreadTreeClickCaptureHandler>(
-    (event) => {
-      if (!consumeDragClickSuppression()) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-    },
-    [consumeDragClickSuppression],
-  );
+  const { dndContextProps, consumeClickSuppression, onClickCapture } =
+    useSidebarReorderDnd({ onDragEnd: handleSortableDragEnd });
 
   if (renderedRootNodes.length === 0) {
     return null;
@@ -215,16 +158,10 @@ export const PinnedThreadTree = memo(function PinnedThreadTree({
     <div
       data-sidebar-sticky-section=""
       className="relative space-y-0.5 group-data-[collapsible=icon]:hidden"
-      onClickCapture={handleClickCapture}
+      onClickCapture={onClickCapture}
     >
       {renderedRootNodes.length > 1 ? (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={handleDragStart}
-          onDragCancel={handleDragCancel}
-          onDragEnd={handleDragEnd}
-        >
+        <DndContext {...dndContextProps}>
           <SortableContext
             items={renderedRootNodeIds}
             strategy={verticalListSortingStrategy}
@@ -255,7 +192,7 @@ export const PinnedThreadTree = memo(function PinnedThreadTree({
             onProjectSelect={onProjectSelect}
             onToggleThreadCollapsed={onToggleThreadCollapsed}
             onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
-            consumeClickSuppression={consumeDragClickSuppression}
+            consumeClickSuppression={consumeClickSuppression}
           />
         ))
       )}

@@ -7,19 +7,8 @@ import {
   type MouseEventHandler,
   type ReactNode,
 } from "react";
+import { DndContext } from "@dnd-kit/core";
 import {
-  closestCenter,
-  DndContext,
-  KeyboardSensor,
-  MouseSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
-import {
-  sortableKeyboardCoordinates,
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
@@ -96,10 +85,8 @@ import {
   useSidebarSortable,
   type SidebarSortableDragBindings,
 } from "./sortableMotion";
-import {
-  useDragClickSuppression,
-  type ConsumeDragClickSuppression,
-} from "./useDragClickSuppression";
+import { useSidebarReorderDnd } from "./useSidebarReorderDnd";
+import type { ConsumeDragClickSuppression } from "./useDragClickSuppression";
 import {
   useNeighborReorderSortable,
   type UseNeighborReorderSortableArgs,
@@ -1171,48 +1158,10 @@ export const ProjectThreadTree = memo(function ProjectThreadTree({
     onReorder: handleReorderManager,
   });
   const {
-    beginDragClickSuppression: beginManagerDragClickSuppression,
-    clearDragClickSuppressionSoon: clearManagerDragClickSuppressionSoon,
-    consumeDragClickSuppression: consumeManagerClickSuppression,
-  } = useDragClickSuppression();
-  const managerSensors = useSensors(
-    useSensor(MouseSensor, {
-      activationConstraint: { distance: 4 },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 200, tolerance: 6 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
-  );
-  const handleManagerDragStart = useCallback(
-    (_event: DragStartEvent) => {
-      beginManagerDragClickSuppression();
-    },
-    [beginManagerDragClickSuppression],
-  );
-  const handleManagerDragCancel = useCallback(() => {
-    clearManagerDragClickSuppressionSoon();
-  }, [clearManagerDragClickSuppressionSoon]);
-  const handleManagerDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      clearManagerDragClickSuppressionSoon();
-      handleSortableManagerDragEnd(event);
-    },
-    [clearManagerDragClickSuppressionSoon, handleSortableManagerDragEnd],
-  );
-  const handleManagerListClickCapture =
-    useCallback<ProjectThreadListClickCaptureHandler>(
-      (event) => {
-        if (!consumeManagerClickSuppression()) {
-          return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-      },
-      [consumeManagerClickSuppression],
-    );
+    dndContextProps: managerDndContextProps,
+    consumeClickSuppression: consumeManagerClickSuppression,
+    onClickCapture: handleManagerListClickCapture,
+  } = useSidebarReorderDnd({ onDragEnd: handleSortableManagerDragEnd });
 
   if (threadListState.status === "loading") {
     return (
@@ -1256,13 +1205,7 @@ export const ProjectThreadTree = memo(function ProjectThreadTree({
       onClickCapture={handleManagerListClickCapture}
     >
       {renderedRootManagerNodes.length > 1 ? (
-        <DndContext
-          sensors={managerSensors}
-          collisionDetection={closestCenter}
-          onDragStart={handleManagerDragStart}
-          onDragCancel={handleManagerDragCancel}
-          onDragEnd={handleManagerDragEnd}
-        >
+        <DndContext {...managerDndContextProps}>
           <SortableContext
             items={renderedRootManagerThreadIds}
             strategy={verticalListSortingStrategy}

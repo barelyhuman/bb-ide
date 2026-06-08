@@ -12,18 +12,11 @@ import { useAtom } from "jotai";
 import {
   closestCenter,
   DndContext,
-  KeyboardSensor,
-  MouseSensor,
   pointerWithin,
-  TouchSensor,
-  useSensor,
-  useSensors,
   type CollisionDetection,
   type DragEndEvent,
-  type DragStartEvent,
 } from "@dnd-kit/core";
 import {
-  sortableKeyboardCoordinates,
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
@@ -114,10 +107,8 @@ import {
   useSidebarSortable,
   type SidebarSortableDragBindings,
 } from "./sortableMotion";
-import {
-  useDragClickSuppression,
-  type ConsumeDragClickSuppression,
-} from "./useDragClickSuppression";
+import { useSidebarReorderDnd } from "./useSidebarReorderDnd";
+import type { ConsumeDragClickSuppression } from "./useDragClickSuppression";
 import {
   useNeighborReorderSortable,
   type UseNeighborReorderSortableArgs,
@@ -672,42 +663,9 @@ function ProjectListComponent({
     onReorder: handleReorderProject,
   });
   const {
-    beginDragClickSuppression: beginProjectDragClickSuppression,
-    clearDragClickSuppressionSoon: clearProjectDragClickSuppressionSoon,
-    consumeDragClickSuppression: consumeProjectClickSuppression,
-  } = useDragClickSuppression();
-  const {
-    beginDragClickSuppression: beginSidebarSectionDragClickSuppression,
-    clearDragClickSuppressionSoon: clearSidebarSectionDragClickSuppressionSoon,
-    consumeDragClickSuppression: consumeSidebarSectionClickSuppression,
-  } = useDragClickSuppression();
-  const projectSensors = useSensors(
-    useSensor(MouseSensor, {
-      activationConstraint: { distance: 4 },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 200, tolerance: 6 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
-  );
-  const handleProjectDragStart = useCallback(
-    (_event: DragStartEvent) => {
-      beginProjectDragClickSuppression();
-    },
-    [beginProjectDragClickSuppression],
-  );
-  const handleProjectDragCancel = useCallback(() => {
-    clearProjectDragClickSuppressionSoon();
-  }, [clearProjectDragClickSuppressionSoon]);
-  const handleProjectDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      clearProjectDragClickSuppressionSoon();
-      handleSortableProjectDragEnd(event);
-    },
-    [clearProjectDragClickSuppressionSoon, handleSortableProjectDragEnd],
-  );
+    dndContextProps: projectDndContextProps,
+    consumeClickSuppression: consumeProjectClickSuppression,
+  } = useSidebarReorderDnd({ onDragEnd: handleSortableProjectDragEnd });
   const handleReorderManager = useCallback<
     NonNullable<ProjectRowProps["onReorderManager"]>
   >(
@@ -897,29 +855,8 @@ function ProjectListComponent({
     [setCollapsedEnvironmentIdList],
   );
 
-  const sidebarSectionSensors = useSensors(
-    useSensor(MouseSensor, {
-      activationConstraint: { distance: 4 },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 200, tolerance: 6 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
-  );
-  const handleSidebarSectionDragStart = useCallback(
-    (_event: DragStartEvent) => {
-      beginSidebarSectionDragClickSuppression();
-    },
-    [beginSidebarSectionDragClickSuppression],
-  );
-  const handleSidebarSectionDragCancel = useCallback(() => {
-    clearSidebarSectionDragClickSuppressionSoon();
-  }, [clearSidebarSectionDragClickSuppressionSoon]);
-  const handleSidebarSectionDragEnd = useCallback(
+  const handleReorderSidebarSection = useCallback(
     (event: DragEndEvent) => {
-      clearSidebarSectionDragClickSuppressionSoon();
       const { active, over } = event;
       if (
         !over ||
@@ -946,12 +883,15 @@ function ProjectListComponent({
         nextOrder.map((item) => item.id).filter(isSidebarSectionId),
       );
     },
-    [
-      clearSidebarSectionDragClickSuppressionSoon,
-      setSidebarSectionOrderList,
-      visibleSidebarSectionOrder,
-    ],
+    [setSidebarSectionOrderList, visibleSidebarSectionOrder],
   );
+  const {
+    dndContextProps: sidebarSectionDndContextProps,
+    consumeClickSuppression: consumeSidebarSectionClickSuppression,
+  } = useSidebarReorderDnd({
+    onDragEnd: handleReorderSidebarSection,
+    collisionDetection: sidebarSectionCollisionDetection,
+  });
 
   const projectlessThreadListState = getProjectThreadListState({
     status: projectsState.status,
@@ -979,13 +919,7 @@ function ProjectListComponent({
           <SidebarMenuSkeleton />
         </>
       ) : renderedProjects.length > 1 ? (
-        <DndContext
-          sensors={projectSensors}
-          collisionDetection={closestCenter}
-          onDragStart={handleProjectDragStart}
-          onDragCancel={handleProjectDragCancel}
-          onDragEnd={handleProjectDragEnd}
-        >
+        <DndContext {...projectDndContextProps}>
           <SortableContext
             items={renderedProjectIds}
             strategy={verticalListSortingStrategy}
@@ -1111,13 +1045,7 @@ function ProjectListComponent({
 
   return (
     <ProjectListShell>
-      <DndContext
-        sensors={sidebarSectionSensors}
-        collisionDetection={sidebarSectionCollisionDetection}
-        onDragStart={handleSidebarSectionDragStart}
-        onDragCancel={handleSidebarSectionDragCancel}
-        onDragEnd={handleSidebarSectionDragEnd}
-      >
+      <DndContext {...sidebarSectionDndContextProps}>
         <SortableContext
           items={visibleSidebarSectionOrder}
           strategy={verticalListSortingStrategy}
