@@ -501,10 +501,7 @@ describe("useThreadUnreadDividerState", () => {
     const divider = await screen.findByRole("separator", {
       name: "New messages",
     });
-    expectElementBefore(
-      divider,
-      screen.getByRole("button", { name: /Message from Agent/u }),
-    );
+    expectElementBefore(divider, screen.getByTitle("Message from Agent"));
   });
 
   it("places the divider for manager threads", async () => {

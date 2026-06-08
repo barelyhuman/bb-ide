@@ -171,7 +171,7 @@ describe("ConversationMessageContent", () => {
     expect(screen.queryByRole("link", { name: "Boundary thread" })).toBeNull();
   });
 
-  it("renders agent-originated messages as expandable timeline rows and hides bb reply guidance", () => {
+  it("renders agent-originated message rows with sender links and hides bb reply guidance", () => {
     render(
       <MemoryRouter>
         <ConversationMessageContent
@@ -195,29 +195,17 @@ describe("ConversationMessageContent", () => {
       </MemoryRouter>,
     );
 
-    expect(
-      screen.getByRole("button", {
-        name: /Message from Frontend manager/u,
-      }),
-    ).toBeTruthy();
+    expect(screen.getByText("Message from")).toBeTruthy();
     const senderLink = screen.getByRole("link", {
       name: "Frontend manager",
     });
     expect(senderLink.getAttribute("href")).toBe(
       "/projects/proj_123/threads/thr_sender123",
     );
-    expect(screen.queryByText(/Line 4/u)).toBeNull();
-
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: /Message from Frontend manager/u,
-      }),
-    );
 
     expect(screen.queryByText("thr_sender123")).toBeNull();
     expect(screen.queryByText(/\[bb message from thread/u)).toBeNull();
     expect(screen.queryByText(/bb thread tell/u)).toBeNull();
-    expect(screen.getByText(/Line 4/u)).toBeTruthy();
   });
 
   it("renders generated agent steer status inside the expanded body", () => {
@@ -249,7 +237,7 @@ describe("ConversationMessageContent", () => {
     expect(screen.getByText("steer")).toBeTruthy();
   });
 
-  it("renders mention pills in expanded agent-originated rows with shifted offsets", () => {
+  it("renders mention pills in agent-originated rows with shifted offsets", () => {
     const token = "@thread:thr_target";
     const text = `[bb message from thread:thr_sender123; reply with \`bb thread tell thr_sender123 "<your response>"\`]\n\nAsk ${token} to review.`;
     const start = text.indexOf(token);
@@ -285,12 +273,6 @@ describe("ConversationMessageContent", () => {
           turnRequest={{ kind: "message", status: "accepted" }}
         />
       </MemoryRouter>,
-    );
-
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: /Message from Frontend manager/u,
-      }),
     );
 
     const mention = screen.getByRole("link", { name: "API planning" });
