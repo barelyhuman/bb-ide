@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { setTimeout as delay } from "node:timers/promises";
 import { jsonValueSchema, type JsonObject, type JsonValue } from "@bb/domain";
 import {
   parseProviderModelConfig,
@@ -20,7 +21,10 @@ type OptionalJsonValue = JsonValue | null | undefined;
 const CODEX_TRANSCRIPTION_PROVIDER = "codex";
 const OPENAI_TRANSCRIPTION_PROVIDER = "openai";
 const VOICE_TRANSCRIPTION_MAX_BYTES = 25 * 1024 * 1024;
-const VOICE_TRANSCRIPTION_TIMEOUT_MS = 60_000;
+const CODEX_VOICE_TRANSCRIPTION_ATTEMPT_TIMEOUT_MS = 10_000;
+const CODEX_VOICE_TRANSCRIPTION_MAX_ATTEMPTS = 2;
+const CODEX_VOICE_TRANSCRIPTION_RETRY_DELAY_MS = 250;
+const OPENAI_VOICE_TRANSCRIPTION_TIMEOUT_MS = 10_000;
 
 function parseTranscriptionModel(model: string): ProviderModelInfo {
   return parseProviderModelConfig({
@@ -100,11 +104,29 @@ function shouldTreatAsVoiceTimeout(error: Error): boolean {
   );
 }
 
+function shouldRetryCodexVoiceTranscription(error: Error): boolean {
+  return (
+    error instanceof ApiError &&
+    (error.body.code === "codex_rate_limited" ||
+      error.body.code === "codex_request_timeout" ||
+      error.body.code === "command_timeout")
+  );
+}
+
 function buildTranscriptionTimeoutError(): ApiError {
   return new ApiError(
     504,
     "transcription_timeout",
     "Voice transcription timed out",
+    true,
+  );
+}
+
+function buildTranscriptionUnavailableError(): ApiError {
+  return new ApiError(
+    503,
+    "transcription_unavailable",
+    "Voice transcription is temporarily unavailable. Please try again in a moment.",
     true,
   );
 }
@@ -118,27 +140,65 @@ async function transcribeWithCodexHostDaemon(
   const audioBase64 = Buffer.from(await args.file.arrayBuffer()).toString(
     "base64",
   );
-  try {
-    const result = await runLiveCommandAndWait(deps, {
-      hostId,
-      timeoutMs: VOICE_TRANSCRIPTION_TIMEOUT_MS,
-      command: {
-        type: "codex.voice.transcribe",
-        model: modelInfo.modelId,
-        audioBase64,
-        mimeType: args.file.type || "application/octet-stream",
-        filename: args.file.name || "voice-input",
-        prompt: trimPrompt(args.prompt),
-        timeoutMs: VOICE_TRANSCRIPTION_TIMEOUT_MS,
-      },
-    });
-    return result.text;
-  } catch (error) {
-    if (error instanceof Error && shouldTreatAsVoiceTimeout(error)) {
-      throw buildTranscriptionTimeoutError();
+  const prompt = trimPrompt(args.prompt);
+  for (
+    let attempt = 1;
+    attempt <= CODEX_VOICE_TRANSCRIPTION_MAX_ATTEMPTS;
+    attempt += 1
+  ) {
+    try {
+      const result = await runLiveCommandAndWait(deps, {
+        hostId,
+        timeoutMs: CODEX_VOICE_TRANSCRIPTION_ATTEMPT_TIMEOUT_MS,
+        command: {
+          type: "codex.voice.transcribe",
+          model: modelInfo.modelId,
+          audioBase64,
+          mimeType: args.file.type || "application/octet-stream",
+          filename: args.file.name || "voice-input",
+          prompt,
+          timeoutMs: CODEX_VOICE_TRANSCRIPTION_ATTEMPT_TIMEOUT_MS,
+        },
+      });
+      return result.text;
+    } catch (error) {
+      if (!(error instanceof Error)) {
+        throw error;
+      }
+
+      if (!shouldRetryCodexVoiceTranscription(error)) {
+        throw error;
+      }
+
+      if (attempt < CODEX_VOICE_TRANSCRIPTION_MAX_ATTEMPTS) {
+        deps.logger.info(
+          {
+            attempt,
+            errorCode:
+              error instanceof ApiError ? error.body.code : error.name,
+            maxAttempts: CODEX_VOICE_TRANSCRIPTION_MAX_ATTEMPTS,
+            timeoutMs: CODEX_VOICE_TRANSCRIPTION_ATTEMPT_TIMEOUT_MS,
+          },
+          "Voice transcription failed transiently; retrying",
+        );
+        await delay(CODEX_VOICE_TRANSCRIPTION_RETRY_DELAY_MS);
+        continue;
+      }
+
+      if (shouldTreatAsVoiceTimeout(error)) {
+        throw buildTranscriptionTimeoutError();
+      }
+      if (
+        error instanceof ApiError &&
+        error.body.code === "codex_rate_limited"
+      ) {
+        throw buildTranscriptionUnavailableError();
+      }
+      throw error;
     }
-    throw error;
   }
+
+  throw buildTranscriptionTimeoutError();
 }
 
 async function transcribeWithOpenAi(
@@ -167,7 +227,7 @@ async function transcribeWithOpenAi(
   const timer = setTimeout(() => {
     timedOut = true;
     abortController.abort();
-  }, VOICE_TRANSCRIPTION_TIMEOUT_MS);
+  }, OPENAI_VOICE_TRANSCRIPTION_TIMEOUT_MS);
   timer.unref();
 
   let response: Response;

@@ -34,6 +34,7 @@ const CODEX_SSE_EVENT_MAX_CHARS = 1024 * 1024;
 const CODEX_TRANSCRIPTION_RESPONSE_MAX_BYTES = 1024 * 1024;
 
 type ReadOverflowBehavior = "throw" | "truncate";
+type CodexRequestOperation = "inference" | "transcription";
 
 interface TimeoutFetchArgs {
   timeoutMs: number;
@@ -93,6 +94,12 @@ interface ChatGptTranscriptionFetchArgs {
 interface OpenAiTranscriptionFetchArgs {
   auth: CodexOpenAiApiKeyCredentials;
   command: VoiceTranscribeCommand;
+}
+
+interface CodexHttpErrorArgs {
+  operation: CodexRequestOperation;
+  response: Response;
+  readTimeoutMs: number;
 }
 
 interface CodexResponseFormat {
@@ -332,6 +339,78 @@ async function readErrorText(
     readTimeoutMs,
   }).catch(() => "");
   return text.length > 400 ? `${text.slice(0, 400)}...` : text;
+}
+
+function codexRequestErrorCode(status: number): string {
+  if (status === 401) {
+    return "codex_auth_failed";
+  }
+  if (status === 429) {
+    return "codex_rate_limited";
+  }
+  return "codex_request_failed";
+}
+
+function extractJsonErrorMessage(value: JsonValue): string | null {
+  if (typeof value === "string") {
+    const normalized = value.replace(/\s+/g, " ").trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const message = extractJsonErrorMessage(item);
+      if (message) {
+        return message;
+      }
+    }
+    return null;
+  }
+
+  const object = jsonObject(value);
+  if (!object) {
+    return null;
+  }
+
+  for (const key of ["message", "detail", "error"]) {
+    const child = object[key];
+    if (child === undefined) {
+      continue;
+    }
+    const message = extractJsonErrorMessage(child);
+    if (message) {
+      return message;
+    }
+  }
+  return null;
+}
+
+function extractProviderErrorMessage(rawText: string): string | null {
+  const normalized = rawText.replace(/\s+/g, " ").trim();
+  if (normalized.length === 0) {
+    return null;
+  }
+
+  try {
+    return extractJsonErrorMessage(parseJsonValue(normalized)) ?? normalized;
+  } catch {
+    return normalized;
+  }
+}
+
+async function createCodexHttpError({
+  operation,
+  response,
+  readTimeoutMs,
+}: CodexHttpErrorArgs): Promise<ExpectedCommandDispatchError> {
+  const providerMessage = extractProviderErrorMessage(
+    await readErrorText(response, readTimeoutMs),
+  );
+  const details = providerMessage ? `: ${providerMessage}` : "";
+  return new ExpectedCommandDispatchError(
+    codexRequestErrorCode(response.status),
+    `Codex ${operation} request failed with HTTP ${response.status}${details}`,
+  );
 }
 
 function getCodexResponseText(response: JsonObject): string | null {
@@ -681,10 +760,11 @@ export async function completeCodexInference(
   const response = await fetchResponses({ auth, command, request });
 
   if (!response.ok) {
-    throw new ExpectedCommandDispatchError(
-      response.status === 401 ? "codex_auth_failed" : "codex_request_failed",
-      `Codex inference request failed with HTTP ${response.status}: ${await readErrorText(response, command.timeoutMs)}`,
-    );
+    throw await createCodexHttpError({
+      operation: "inference",
+      response,
+      readTimeoutMs: command.timeoutMs,
+    });
   }
 
   const rawText = await readResponseTextFromSse(response, {
@@ -792,10 +872,11 @@ export async function transcribeCodexVoice(
   const response = await fetchTranscription({ auth, command });
 
   if (!response.ok) {
-    throw new ExpectedCommandDispatchError(
-      response.status === 401 ? "codex_auth_failed" : "codex_request_failed",
-      `Codex transcription request failed with HTTP ${response.status}: ${await readErrorText(response, command.timeoutMs)}`,
-    );
+    throw await createCodexHttpError({
+      operation: "transcription",
+      response,
+      readTimeoutMs: command.timeoutMs,
+    });
   }
 
   const responseText = await readLimitedResponseText(response, {

@@ -527,6 +527,49 @@ describe("Codex ChatGPT client", () => {
     expect(body.get("prompt")).toBe("context");
   });
 
+  it("reports ChatGPT transcription rate limits with the nested provider message", async () => {
+    const homeDir = await makeTempHome();
+    const accessToken = createAccessToken({
+      accountId: "account-123",
+      expSeconds: Math.floor(Date.now() / 1000) + 3600,
+    });
+    await writeCodexAuth({
+      homeDir,
+      accessToken,
+      refreshToken: "refresh-token",
+    });
+    const fetchMock = setupFetchMock();
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          detail: {
+            detail:
+              "Transcription is temporarily unavailable. Please try again later.",
+          },
+        }),
+        {
+          status: 429,
+        },
+      ),
+    );
+
+    await expect(
+      transcribeCodexVoice({
+        type: "codex.voice.transcribe",
+        model: "gpt-4o-mini-transcribe",
+        audioBase64: Buffer.from("audio").toString("base64"),
+        mimeType: "audio/webm",
+        filename: "prompt.webm",
+        prompt: null,
+        timeoutMs: 30000,
+      }),
+    ).rejects.toMatchObject({
+      code: "codex_rate_limited",
+      message:
+        "Codex transcription request failed with HTTP 429: Transcription is temporarily unavailable. Please try again later.",
+    });
+  });
+
   it("rejects oversized Codex transcription responses", async () => {
     const homeDir = await makeTempHome();
     await writeCodexApiKeyAuth({

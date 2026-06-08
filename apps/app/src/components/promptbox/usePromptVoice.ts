@@ -40,8 +40,6 @@ export function usePromptVoice(
   return useMemo<PromptVoiceConfig>(
     () => ({
       state: voiceInput.state,
-      errorMessage:
-        voiceInput.state === "error" ? voiceInput.errorMessage : undefined,
       isSupported: voiceInput.isSupported,
       start: voiceInput.start,
       stop: voiceInput.stop,
@@ -49,7 +47,6 @@ export function usePromptVoice(
     }),
     [
       voiceInput.state,
-      voiceInput.errorMessage,
       voiceInput.isSupported,
       voiceInput.start,
       voiceInput.stop,

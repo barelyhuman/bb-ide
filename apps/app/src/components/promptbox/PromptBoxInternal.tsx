@@ -173,8 +173,6 @@ export type PromptVoiceState = "idle" | "recording" | "transcribing" | "error";
 
 export interface PromptVoiceConfig {
   state: PromptVoiceState;
-  /** Display-ready summary of the last error. Only set when state === "error". */
-  errorMessage?: string;
   isSupported: boolean;
   start: () => void | Promise<void>;
   stop: () => void;
@@ -1108,10 +1106,6 @@ export function PromptBoxInternal({
   const isVoiceRecording = voice?.state === "recording";
   const isVoiceProcessing = voice?.state === "transcribing";
   const isVoiceBusy = isVoiceRecording || isVoiceProcessing;
-  const voiceErrorMessage =
-    voice?.state === "error"
-      ? (voice.errorMessage ?? "Voice input failed.")
-      : null;
   const showVoiceActionGroup = isVoiceRecording || isVoiceProcessing;
   const canSubmit =
     (hasSubmittableInput || allowEmptyInput) &&
@@ -1543,14 +1537,6 @@ export function PromptBoxInternal({
       {attachmentError ? (
         <div className="mx-3 mb-1 mt-1 text-xs text-destructive">
           {attachmentError}
-        </div>
-      ) : null}
-
-      {voiceErrorMessage ? (
-        <div className="mx-3 mb-1 mt-1 rounded-md border border-surface-destructive-border bg-surface-destructive px-2 py-1 text-xs text-destructive">
-          <span className="block truncate" title={voiceErrorMessage}>
-            {voiceErrorMessage}
-          </span>
         </div>
       ) : null}
 

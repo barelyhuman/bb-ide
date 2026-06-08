@@ -140,10 +140,8 @@ export interface GetProjectDefaultExecutionOptionsRequest {
   threadType: ThreadType;
 }
 
-const MAX_ERROR_MESSAGE_LENGTH = 180;
 const HTML_DOCUMENT_PATTERN = /<!doctype html|<html[\s>]/i;
 const ERROR_EXTRACT_OPTS = {
-  maxLength: MAX_ERROR_MESSAGE_LENGTH,
   legacyKeys: ["detail"] as const,
 };
 

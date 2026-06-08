@@ -1,5 +1,5 @@
-import { assertNever } from "@bb/core-ui";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { appToast } from "@/components/ui/app-toast";
 
 type VoiceInputState = "idle" | "recording" | "transcribing" | "error";
 
@@ -15,7 +15,6 @@ interface UseVoiceInputOptions {
 
 const MIN_RECORDING_DURATION_MS = 1_000;
 const CHUNK_TIMESLICE_MS = 250;
-const MAX_ERROR_MESSAGE_LENGTH = 180;
 
 const HTML_DOCUMENT_PATTERN = /<!doctype html|<html[\s>]/i;
 
@@ -42,9 +41,6 @@ function sanitizeErrorMessage(raw: string): string | null {
     return null;
   }
 
-  if (normalized.length > MAX_ERROR_MESSAGE_LENGTH) {
-    return `${normalized.slice(0, MAX_ERROR_MESSAGE_LENGTH - 1)}...`;
-  }
   return normalized;
 }
 
@@ -107,10 +103,12 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
   const transcriptionAbortRef = useRef<AbortController | null>(null);
 
   const [state, setState] = useState<VoiceInputState>("idle");
-  const [errorMessage, setErrorMessage] = useState<string | undefined>(
-    undefined,
-  );
   const [isSupported, setIsSupported] = useState(false);
+
+  const showError = useCallback((message: string) => {
+    setState("error");
+    appToast.error("Voice input failed", { description: message });
+  }, []);
 
   const stopMediaStream = useCallback(() => {
     const stream = streamRef.current;
@@ -156,8 +154,7 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
 
   const start = useCallback(async () => {
     if (!isSupported) {
-      setState("error");
-      setErrorMessage("Voice input is not supported in this browser");
+      showError("Voice input is not supported in this browser");
       return;
     }
     if (state === "recording" || state === "transcribing") {
@@ -179,7 +176,6 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
       mediaRecorderRef.current = recorder;
 
       recorder.onstart = () => {
-        setErrorMessage(undefined);
         setState("recording");
       };
 
@@ -190,8 +186,7 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
       };
 
       recorder.onerror = () => {
-        setState("error");
-        setErrorMessage("Voice recording failed");
+        showError("Voice recording failed");
       };
 
       recorder.onstop = async () => {
@@ -201,7 +196,6 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
           shouldTranscribeRef.current = true;
           chunksRef.current = [];
           promptContextRef.current = undefined;
-          setErrorMessage(undefined);
           setState("idle");
           return;
         }
@@ -211,8 +205,7 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
         const durationMs = Date.now() - startedAtMs;
 
         if (durationMs < MIN_RECORDING_DURATION_MS) {
-          setState("error");
-          setErrorMessage("Recording too short (minimum 1 second)");
+          showError("Recording too short (minimum 1 second)");
           chunksRef.current = [];
           promptContextRef.current = undefined;
           return;
@@ -221,8 +214,7 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
         const chunks = chunksRef.current;
         chunksRef.current = [];
         if (chunks.length === 0) {
-          setState("error");
-          setErrorMessage("No audio was captured");
+          showError("No audio was captured");
           promptContextRef.current = undefined;
           return;
         }
@@ -248,16 +240,13 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
             throw new Error("Voice transcription returned an empty result.");
           }
           options.onTranscript(normalized);
-          setErrorMessage(undefined);
           setState("idle");
         } catch (error) {
           if (error instanceof DOMException && error.name === "AbortError") {
-            setErrorMessage(undefined);
             setState("idle");
             return;
           }
-          setState("error");
-          setErrorMessage(resolveRecordingErrorMessage(error));
+          showError(resolveRecordingErrorMessage(error));
         } finally {
           if (transcriptionAbortRef.current === abortController) {
             transcriptionAbortRef.current = null;
@@ -274,10 +263,9 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
       promptContextRef.current = undefined;
       shouldTranscribeRef.current = true;
       transcriptionAbortRef.current = null;
-      setState("error");
-      setErrorMessage(resolveRecordingErrorMessage(error));
+      showError(resolveRecordingErrorMessage(error));
     }
-  }, [isSupported, options, state, stopMediaStream]);
+  }, [isSupported, options, showError, state, stopMediaStream]);
 
   const stop = useCallback(() => {
     if (state !== "recording") {
@@ -292,10 +280,9 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
     try {
       recorder.stop();
     } catch (error) {
-      setState("error");
-      setErrorMessage(resolveRecordingErrorMessage(error));
+      showError(resolveRecordingErrorMessage(error));
     }
-  }, [state]);
+  }, [showError, state]);
 
   const cancel = useCallback(() => {
     if (state === "recording") {
@@ -305,8 +292,7 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
         try {
           recorder.stop();
         } catch (error) {
-          setState("error");
-          setErrorMessage(resolveRecordingErrorMessage(error));
+          showError(resolveRecordingErrorMessage(error));
         }
       }
       return;
@@ -318,29 +304,12 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
         abortController.abort();
         transcriptionAbortRef.current = null;
       }
-      setErrorMessage(undefined);
       setState("idle");
     }
-  }, [state]);
-
-  const statusLabel = useMemo(() => {
-    switch (state) {
-      case "recording":
-        return "Recording...";
-      case "transcribing":
-        return "Transcribing...";
-      case "error":
-        return errorMessage ?? "Voice input failed";
-      case "idle":
-        return null;
-    }
-    return assertNever(state);
-  }, [errorMessage, state]);
+  }, [showError, state]);
 
   return {
     state,
-    statusLabel,
-    errorMessage,
     isSupported,
     isRecording: state === "recording",
     isProcessing: state === "transcribing",
