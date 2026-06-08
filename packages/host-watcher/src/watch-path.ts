@@ -1,8 +1,10 @@
+import fs from "node:fs/promises";
 import path from "node:path";
-import parcelWatcher from "@parcel/watcher";
-import { calculateExponentialBackoffDelay } from "@bb/domain";
+import {
+  RootSubscription,
+  type ParcelWatcherEventBatch,
+} from "./root-subscription.js";
 import { createDebouncedCallbackScheduler } from "./watch-callback-scheduler.js";
-import { pathExists } from "./path-exists.js";
 import type {
   PathChangeEvent,
   PathChangeCallback,
@@ -15,14 +17,6 @@ const PATH_CHANGE_WATCH_DEBOUNCE_MS = 75;
 const PATH_CHANGE_WATCH_MAX_WAIT_MS = 500;
 const PATH_CHANGE_WATCH_RETRY_DELAY_MS = 250;
 const PATH_CHANGE_WATCH_MAX_RETRY_DELAY_MS = 30_000;
-
-type ParcelWatcherSubscribe = typeof parcelWatcher.subscribe;
-type ParcelWatcherCallback = Parameters<ParcelWatcherSubscribe>[1];
-type ParcelWatcherAsyncSubscription = Awaited<
-  ReturnType<ParcelWatcherSubscribe>
->;
-type ParcelWatcherError = Parameters<ParcelWatcherCallback>[0];
-type ParcelWatcherEventBatch = Parameters<ParcelWatcherCallback>[1];
 
 interface PathChangeWatcherArgs extends PathChangeWatchArgs {
   path: string;
@@ -83,14 +77,9 @@ function collectTouchedTargetPaths(
 class PathChangeWatcher {
   private disposed = false;
   private readonly changedPaths = new Set<string>();
-  private missingTargetWarningReported = false;
-  private readonly pendingStarts = new Set<Promise<void>>();
-  private readonly pendingStops = new Set<Promise<void>>();
-  private retryAttempt = 0;
-  private retryTimer: ReturnType<typeof setTimeout> | null = null;
-  private subscription: ParcelWatcherAsyncSubscription | null = null;
+  private readonly subscription: RootSubscription;
   private readonly changeScheduler;
-  private readonly targetPath;
+  private readonly targetPath: string;
 
   constructor(private readonly args: PathChangeWatcherArgs) {
     this.targetPath = path.resolve(args.path);
@@ -115,149 +104,59 @@ class PathChangeWatcher {
         }
       },
     });
+    this.subscription = new RootSubscription({
+      rootPath: this.targetPath,
+      retryDelayMs: args.retryDelayMs,
+      maxRetryDelayMs: args.maxRetryDelayMs,
+      onEvents: (events) => {
+        const touchedPaths = collectTouchedTargetPaths(this.targetPath, events);
+        if (touchedPaths.length === 0) {
+          return;
+        }
+        for (const touchedPath of touchedPaths) {
+          this.changedPaths.add(touchedPath);
+        }
+        this.changeScheduler.schedule();
+      },
+      onDroppedEvents: () => {
+        void this.rescanAfterDroppedEvents();
+      },
+      onWatchError: (message) => {
+        this.args.onWatchError({ message, rootPath: this.targetPath });
+      },
+    });
   }
 
   start(): void {
-    const pendingStart = this.startAsync().finally(() => {
-      this.pendingStarts.delete(pendingStart);
-    });
-    this.pendingStarts.add(pendingStart);
+    this.subscription.start();
   }
 
   async dispose(): Promise<void> {
     this.disposed = true;
     this.changeScheduler.dispose();
     this.changedPaths.clear();
-    if (this.retryTimer !== null) {
-      clearTimeout(this.retryTimer);
-      this.retryTimer = null;
-    }
-    if (this.subscription !== null) {
-      const subscription = this.subscription;
-      this.subscription = null;
-      await this.stopSubscription(subscription);
-    }
-    await Promise.all([...this.pendingStarts]);
-    await this.awaitPendingStops();
+    await this.subscription.dispose();
   }
 
-  private async awaitPendingStops(): Promise<void> {
-    while (this.pendingStops.size > 0) {
-      await Promise.all([...this.pendingStops]);
-    }
-  }
-
-  private stopSubscription(
-    subscription: ParcelWatcherAsyncSubscription,
-  ): Promise<void> {
-    const pendingStop = subscription
-      .unsubscribe()
-      .catch(() => {
-        // Ignore unsubscribe failures during watcher teardown.
-      })
-      .finally(() => {
-        this.pendingStops.delete(pendingStop);
-      });
-    this.pendingStops.add(pendingStop);
-    return pendingStop;
-  }
-
-  private scheduleRetry(): void {
-    if (
-      this.disposed ||
-      this.retryTimer !== null ||
-      this.subscription !== null
-    ) {
-      return;
-    }
-    this.retryAttempt += 1;
-    this.retryTimer = setTimeout(
-      () => {
-        this.retryTimer = null;
-        this.start();
-      },
-      calculateExponentialBackoffDelay({
-        attempt: this.retryAttempt,
-        baseDelayMs: this.args.retryDelayMs,
-        maxDelayMs: this.args.maxRetryDelayMs,
-      }),
-    );
-  }
-
-  private async startAsync(): Promise<void> {
-    if (this.disposed || this.subscription !== null) {
-      return;
-    }
-
-    if (!(await pathExists(this.targetPath))) {
-      if (!this.missingTargetWarningReported) {
-        this.missingTargetWarningReported = true;
-        this.args.onWatchError({
-          message: `Watched path does not exist yet: ${this.targetPath}`,
-          rootPath: this.targetPath,
-        });
-      }
-      this.scheduleRetry();
-      return;
-    }
-    if (this.disposed) {
-      return;
-    }
-
+  /**
+   * Dropped FSEvents mean we missed an unknown set of changes under the root.
+   * Re-emit every immediate child as changed so downstream collectors resolve
+   * each tracked target afresh and reconcile against current on-disk state.
+   */
+  private async rescanAfterDroppedEvents(): Promise<void> {
+    let entries: string[];
     try {
-      const subscription = await parcelWatcher.subscribe(
-        this.targetPath,
-        (error: ParcelWatcherError, events: ParcelWatcherEventBatch) => {
-          if (this.disposed) {
-            return;
-          }
-          if (error) {
-            this.args.onWatchError({
-              message: toErrorMessage(error),
-              rootPath: this.targetPath,
-            });
-            this.handleSubscriptionFailure();
-            return;
-          }
-          const touchedPaths = collectTouchedTargetPaths(
-            this.targetPath,
-            events,
-          );
-          if (touchedPaths.length === 0) {
-            return;
-          }
-          for (const touchedPath of touchedPaths) {
-            this.changedPaths.add(touchedPath);
-          }
-          this.changeScheduler.schedule();
-        },
-      );
-      if (this.disposed) {
-        await this.stopSubscription(subscription);
-        return;
-      }
-      this.missingTargetWarningReported = false;
-      this.retryAttempt = 0;
-      this.subscription = subscription;
-    } catch (error) {
-      if (this.disposed) {
-        return;
-      }
-      this.args.onWatchError({
-        message: toErrorMessage(error),
-        rootPath: this.targetPath,
-      });
-      this.scheduleRetry();
+      entries = await fs.readdir(this.targetPath);
+    } catch {
+      return;
     }
-  }
-
-  private handleSubscriptionFailure(): void {
-    if (this.subscription !== null) {
-      const subscription = this.subscription;
-      this.subscription = null;
-      void this.stopSubscription(subscription);
+    if (this.disposed || entries.length === 0) {
+      return;
     }
-    this.scheduleRetry();
+    for (const entry of entries) {
+      this.changedPaths.add(path.join(this.targetPath, entry));
+    }
+    this.changeScheduler.schedule();
   }
 }
 

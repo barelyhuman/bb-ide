@@ -345,4 +345,57 @@ describe.sequential("watchPathChanges", () => {
 
     stopWatching();
   });
+
+  it("rescans children without warning when FSEvents drops events", async () => {
+    const dataDir = await makeTempDir("bb-watch-path-dropped-");
+    const threadStorageRoot = path.join(dataDir, "thread-storage");
+    await fs.mkdir(path.join(threadStorageRoot, "thread-1"), {
+      recursive: true,
+    });
+    await fs.mkdir(path.join(threadStorageRoot, "thread-2"), {
+      recursive: true,
+    });
+    const onChange = vi.fn();
+    const onWatchError = vi.fn();
+    const { callbacks, subscribeCallCount, watchPathChanges } =
+      await importWatchPathWithMockedWatcher();
+
+    const stopWatching = watchPathChanges(threadStorageRoot, {
+      onChange,
+      onWatchError,
+    });
+
+    try {
+      const [callback] = await waitFor(
+        () => callbacks,
+        (currentCallbacks) => currentCallbacks.length === 1,
+      );
+
+      callback(
+        new Error(
+          "Events were dropped by the FSEvents client. File system must be re-scanned.",
+        ),
+        [],
+      );
+
+      // The dropped-events error is recoverable: no watch error is surfaced,
+      // the subscription is re-established, and every tracked child is re-emitted
+      // so downstream collectors reconcile against current on-disk state.
+      await waitFor(
+        () => onChange.mock.calls.length,
+        (callCount) => callCount >= 1,
+      );
+      await waitFor(subscribeCallCount, (count) => count === 2);
+
+      expect(onWatchError).not.toHaveBeenCalled();
+      expect(onChange).toHaveBeenCalledWith({
+        changedPaths: [
+          path.join(threadStorageRoot, "thread-1"),
+          path.join(threadStorageRoot, "thread-2"),
+        ],
+      });
+    } finally {
+      stopWatching();
+    }
+  });
 });
