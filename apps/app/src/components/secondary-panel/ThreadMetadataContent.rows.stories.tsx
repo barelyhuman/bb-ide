@@ -31,9 +31,7 @@ const noop = () => {};
 function RowStage({ children }: { children: ReactNode }) {
   return (
     <PanelStage>
-      <ThreadMetadataCard hasFlexibleHeight={false}>
-        {children}
-      </ThreadMetadataCard>
+      <ThreadMetadataCard>{children}</ThreadMetadataCard>
     </PanelStage>
   );
 }

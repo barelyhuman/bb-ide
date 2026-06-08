@@ -560,7 +560,7 @@ export function ChangedFilesRow({
     <ChangedFilesDetailRow
       sections={selectWorkspaceChangedFilesSections(workspaceStatus)}
       onFileClick={onChangedFileClick}
-      rowClassName="min-h-0 flex-1"
+      rowClassName="min-h-32 flex-1"
       rowValueClassName="min-h-0 flex-1"
       listClassName="h-full"
     />
@@ -582,7 +582,7 @@ export function ManagerWorkspaceRow({
   return (
     <DetailRow
       orientation="vertical"
-      className="min-h-0 flex-1"
+      className="min-h-32 flex-1"
       valueClassName="min-h-0 flex-1 overflow-hidden"
       labelClassName="flex items-center justify-between gap-2"
       label={
@@ -697,26 +697,22 @@ export function hasAnyThreadMetadata({
 }
 
 interface DetailCardWrapperProps {
-  hasFlexibleHeight: boolean;
   children: ReactNode;
 }
 
 /**
  * Shared DetailCard styling used by ThreadMetadataContent and the per-row
  * stories so a single row in isolation looks the same as it does inside the
- * full panel.
+ * full panel. Owns the info tab's vertical scroll: the rows scroll as a group
+ * so no section (e.g. Manager workspace) can be pushed out of reach. Any
+ * flex-filling row carries its own min-height so it stays usable once the
+ * group scrolls.
  */
-export function ThreadMetadataCard({
-  hasFlexibleHeight,
-  children,
-}: DetailCardWrapperProps) {
+export function ThreadMetadataCard({ children }: DetailCardWrapperProps) {
   return (
     <DetailCard
       appearance="flat"
-      className={cn(
-        "h-full min-h-0",
-        hasFlexibleHeight ? "flex-1" : "shrink-0",
-      )}
+      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
     >
       {children}
     </DetailCard>
@@ -751,13 +747,8 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
     onChangedFileClick,
   } = props;
 
-  const hasFlexibleHeight =
-    storage !== undefined ||
-    (thread.type !== "manager" &&
-      selectWorkspaceChangedFilesSections(workspaceStatus).length > 0);
-
   return (
-    <ThreadMetadataCard hasFlexibleHeight={hasFlexibleHeight}>
+    <ThreadMetadataCard>
       <KindRow thread={thread} />
       <ManagerSelectorRow
         thread={thread}

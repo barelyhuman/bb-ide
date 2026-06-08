@@ -426,7 +426,7 @@ const METADATA_SKELETON_ROW_VALUE_WIDTHS = ["w-40", "w-28", "w-36", "w-24"];
 function ThreadMetadataLoadingSkeleton() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <ThreadMetadataCard hasFlexibleHeight={false}>
+      <ThreadMetadataCard>
         {METADATA_SKELETON_ROW_VALUE_WIDTHS.map((valueWidth, index) => (
           <div
             key={index}
