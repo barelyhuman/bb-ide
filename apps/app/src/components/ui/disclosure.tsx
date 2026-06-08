@@ -118,6 +118,71 @@ export interface ExpandablePanelProps {
   contentClassName?: string;
 }
 
+interface AnimatedExpandablePanelContentProps {
+  bodyClassName?: string;
+  collapsedContent: ReactNode;
+  contentClassName?: string;
+  isExpanded: boolean;
+  renderedBody: ReactNode;
+}
+
+function AnimatedExpandablePanelContent({
+  bodyClassName,
+  collapsedContent,
+  contentClassName,
+  isExpanded,
+  renderedBody,
+}: AnimatedExpandablePanelContentProps) {
+  const regionRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useBrowserLayoutEffect(() => {
+    const region = regionRef.current;
+    const target = contentRef.current;
+    if (!region || !target) {
+      return;
+    }
+
+    const syncHeight = () => {
+      region.style.height = `${target.offsetHeight}px`;
+    };
+
+    syncHeight();
+
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(syncHeight);
+    resizeObserver.observe(target);
+    return () => resizeObserver.disconnect();
+  }, [collapsedContent, isExpanded, renderedBody]);
+
+  return (
+    <div
+      ref={regionRef}
+      className={cn(
+        "relative transition-[height] duration-200 ease-out",
+        bodyClassName,
+      )}
+      style={{
+        overflowX: "visible",
+        overflowY: "clip",
+      }}
+    >
+      <div ref={contentRef}>
+        {isExpanded ? (
+          <div className={cn("px-2 pb-1 pt-0", contentClassName)}>
+            {renderedBody}
+          </div>
+        ) : (
+          collapsedContent
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function ExpandablePanel({
   isExpanded,
   summaryContent,
@@ -152,9 +217,9 @@ export function ExpandablePanel({
   // Signal to AutoHeightContainer / HeightTransition wrappers that a
   // CSS-driven layout animation is in flight, so they snap their wrapper to
   // inner.height each frame instead of running their own lagging 180ms
-  // transition. Without this, three layers compound (this grid animation +
-  // wrapper transition + bottom-anchor) and the timeline slides for ~280ms
-  // instead of the row's intended 200ms.
+  // transition. Without this, parent height wrappers can compound with the
+  // row's own animation and make the bottom-anchored timeline slide longer
+  // than the row's intended 200ms.
   const setLayoutAnimationInFlightCount = useSetAtom(
     layoutAnimationInFlightCountAtom,
   );
@@ -230,37 +295,40 @@ export function ExpandablePanel({
         }
         summaryContent={summaryContent}
       />
-      {!isExpanded && collapsedContent ? collapsedContent : null}
-      <div
-        aria-hidden={!isExpanded}
-        className={cn(
-          "grid",
-          hasCollapsedContent
-            ? null
-            : "transition-[grid-template-rows,opacity] duration-200 ease-out",
-          isExpanded
-            ? "pointer-events-auto grid-rows-[1fr] opacity-100"
-            : "pointer-events-none grid-rows-[0fr] opacity-0",
-          bodyClassName,
-        )}
-      >
-        <div className="overflow-hidden">
-          <div
-            className={cn(
-              "px-2 pb-1 pt-0",
-              hasCollapsedContent
-                ? null
-                : "transition-[transform,opacity] duration-200 ease-out will-change-transform",
-              isExpanded || hasCollapsedContent
-                ? "translate-y-0 opacity-100"
-                : "-translate-y-1 opacity-0",
-              contentClassName,
-            )}
-          >
-            {renderedBody}
+      {hasCollapsedContent ? (
+        <AnimatedExpandablePanelContent
+          bodyClassName={bodyClassName}
+          collapsedContent={collapsedContent}
+          contentClassName={contentClassName}
+          isExpanded={isExpanded}
+          renderedBody={renderedBody}
+        />
+      ) : (
+        <div
+          aria-hidden={!isExpanded}
+          className={cn(
+            "grid transition-[grid-template-rows,opacity] duration-200 ease-out",
+            isExpanded
+              ? "pointer-events-auto grid-rows-[1fr] opacity-100"
+              : "pointer-events-none grid-rows-[0fr] opacity-0",
+            bodyClassName,
+          )}
+        >
+          <div className="overflow-hidden">
+            <div
+              className={cn(
+                "px-2 pb-1 pt-0 transition-[transform,opacity] duration-200 ease-out will-change-transform",
+                isExpanded
+                  ? "translate-y-0 opacity-100"
+                  : "-translate-y-1 opacity-0",
+                contentClassName,
+              )}
+            >
+              {renderedBody}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
