@@ -311,7 +311,7 @@ function threadCommandFailureMessageForInterruption(
     case "manual-stop":
       return null;
     case "host-daemon-restarted":
-      return "Live runtime work failed because the host daemon disconnected";
+      return "Thread interrupted because the host daemon disconnected";
     // Legacy persisted watchdog interruption; no current producer.
     case "provider-turn-idle":
       return "Live runtime work failed because the provider stopped sending progress";
@@ -327,7 +327,7 @@ function threadCommandFailureDetailForInterruption(
     case "manual-stop":
       return "Thread stopped by user request";
     case "host-daemon-restarted":
-      return "Host daemon restarted while the thread was running";
+      return "Please retry the thread to continue.";
     // Legacy persisted watchdog interruption; no current producer.
     case "provider-turn-idle":
       return "Provider stopped sending progress while the thread was running";

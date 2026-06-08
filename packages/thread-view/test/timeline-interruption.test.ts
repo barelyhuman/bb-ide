@@ -152,9 +152,8 @@ describe("timeline interruption projection", () => {
       }),
       event.systemError({
         code: "thread_command_failed",
-        message:
-          "Live runtime work failed because the host daemon disconnected",
-        detail: "Host daemon restarted while the thread was running",
+        message: "Thread interrupted because the host daemon disconnected",
+        detail: "Please retry the thread to continue.",
         createdAt: 6_000,
       }),
       event.systemThreadInterrupted({
@@ -166,8 +165,8 @@ describe("timeline interruption projection", () => {
     expect(getTopLevelSystemRows(timeline.rows)).toEqual([
       expect.objectContaining({
         systemKind: "error",
-        title: "Live runtime work failed because the host daemon disconnected",
-        detail: "Host daemon restarted while the thread was running",
+        title: "Thread interrupted because the host daemon disconnected",
+        detail: "Please retry the thread to continue.",
       }),
     ]);
   });

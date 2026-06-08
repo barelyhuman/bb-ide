@@ -481,7 +481,8 @@ describe("active thread disconnect reconciliation triggers", () => {
       });
       expect(JSON.parse(rows[1]!.data)).toMatchObject({
         code: "thread_command_failed",
-        detail: "Host daemon restarted while the thread was running",
+        message: "Thread interrupted because the host daemon disconnected",
+        detail: "Please retry the thread to continue.",
       });
       expect(JSON.parse(rows[2]!.data)).toEqual({
         reason: "host-daemon-restarted",
@@ -522,7 +523,8 @@ describe("active thread disconnect reconciliation triggers", () => {
         expect.objectContaining({
           data: expect.objectContaining({
             code: "thread_command_failed",
-            detail: "Host daemon restarted while the thread was running",
+            message: "Thread interrupted because the host daemon disconnected",
+            detail: "Please retry the thread to continue.",
           }),
           type: "system/error",
         }),
