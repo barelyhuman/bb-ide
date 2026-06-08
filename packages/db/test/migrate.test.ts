@@ -1101,6 +1101,16 @@ describe("migrate", () => {
           1000,
           1000,
           1000
+        ),
+        (
+          'thr_deferred_bad_stop_reason',
+          'proj_deferred_cleanup',
+          'env_deferred_cleanup',
+          'codex',
+          'active',
+          1000,
+          1000,
+          1000
         );
         INSERT INTO thread_operations (
           id,
@@ -1126,6 +1136,14 @@ describe("migrate", () => {
             'requested',
             '{"interruptionReason":"host-daemon-restarted"}',
             2500
+          ),
+          (
+            'top_deferred_bad_stop_reason',
+            'thr_deferred_bad_stop_reason',
+            'stop',
+            'queued',
+            '{"interruptionReason":"legacy-freeform-reason"}',
+            2550
           );
         INSERT INTO environment_operations (
           id,
@@ -1257,6 +1275,19 @@ describe("migrate", () => {
         threadId: "thr_deferred_cleanup",
         turnId: null,
         type: "system/thread/interrupted",
+      });
+      expect(
+        db.$client
+          .prepare<[], Pick<MigratedEventRow, "data">>(
+            `
+              SELECT data
+              FROM events
+              WHERE id = 'evt_top_deferred_bad_stop_reason'
+            `,
+          )
+          .get(),
+      ).toEqual({
+        data: '{"reason":"manual-stop"}',
       });
 
       const migrationCreatedAts = db.$client
@@ -1553,6 +1584,26 @@ describe("migrate", () => {
           1000,
           1000
         );
+        INSERT INTO threads (
+          id,
+          project_id,
+          environment_id,
+          provider_id,
+          status,
+          latest_attention_at,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          'thr_legacy_bad_stop_reason',
+          'proj_legacy_operation_backfill',
+          'env_legacy_operation_backfill',
+          'codex',
+          'active',
+          1000,
+          1000,
+          1000
+        );
         INSERT INTO thread_operations (
           id,
           thread_id,
@@ -1628,6 +1679,44 @@ describe("migrate", () => {
           NULL,
           2500,
           2500
+        );
+        INSERT INTO thread_operations (
+          id,
+          thread_id,
+          kind,
+          state,
+          payload,
+          provisioning_id,
+          provisioning_stage,
+          provisioning_environment_id,
+          provision_event_sequence,
+          workspace_ready_event_sequence,
+          command_id,
+          requested_at,
+          queued_at,
+          completed_at,
+          failure_reason,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          'top_legacy_bad_stop_reason',
+          'thr_legacy_bad_stop_reason',
+          'stop',
+          'queued',
+          '{"interruptionReason":"legacy-freeform-reason"}',
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+          2550,
+          2560,
+          NULL,
+          NULL,
+          2550,
+          2560
         );
         INSERT INTO environment_operations (
           id,
@@ -1837,6 +1926,19 @@ describe("migrate", () => {
         threadId: "thr_legacy_operation_backfill",
         turnId: null,
         type: "system/thread/interrupted",
+      });
+      expect(
+        db.$client
+          .prepare<[], Pick<MigratedEventRow, "data">>(
+            `
+              SELECT data
+              FROM events
+              WHERE id = 'evt_top_legacy_bad_stop_reason'
+            `,
+          )
+          .get(),
+      ).toEqual({
+        data: '{"reason":"manual-stop"}',
       });
       expect(
         db.$client

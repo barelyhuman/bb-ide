@@ -102,10 +102,12 @@ SELECT
   NULL,
   json_object(
     'reason',
-    COALESCE(
-      json_extract(`thread_operations`.`payload`, '$.interruptionReason'),
-      'manual-stop'
-    )
+    CASE json_extract(`thread_operations`.`payload`, '$.interruptionReason')
+      WHEN 'manual-stop' THEN 'manual-stop'
+      WHEN 'host-daemon-restarted' THEN 'host-daemon-restarted'
+      WHEN 'provider-turn-idle' THEN 'provider-turn-idle'
+      ELSE 'manual-stop'
+    END
   ),
   `thread_operations`.`requested_at`
 FROM `thread_operations`
