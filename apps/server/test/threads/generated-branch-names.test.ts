@@ -1,7 +1,11 @@
-import { getThread } from "@bb/db";
-import { threadSchema } from "@bb/domain";
+import { getEnvironment, getThread, listEvents } from "@bb/db";
+import {
+  systemThreadProvisioningEventDataSchema,
+  threadSchema,
+} from "@bb/domain";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  listQueuedEnvironmentCommands,
   requireManagedWorktreeEnvironmentProvisionLiveCommand,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
@@ -12,6 +16,7 @@ import { textInput } from "../helpers/prompt-input.js";
 import { seedHostSession, seedProjectWithSource } from "../helpers/seed.js";
 import { createTestAppHarness, withTestHarness } from "../helpers/test-app.js";
 import { InferenceTimeoutError } from "../../src/services/ai/inference.js";
+import { runEnvironmentProvisioningSweep } from "../../src/services/system/periodic-sweeps.js";
 import { generateThreadMetadataWithOutcome } from "../../src/services/threads/title-generation.js";
 
 const piAiMocks = vi.hoisted(() => ({
@@ -113,6 +118,226 @@ describe("generated managed branch names", () => {
         `bb/improve-branch-names-${thread.id}`,
       );
       expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("shows managed thread provisioning before metadata inference completes", async () => {
+    let resolveMetadata: (metadata: MockThreadMetadata) => void = () => {
+      throw new Error("Metadata inference was not started");
+    };
+    piAiMocks.getModel.mockReturnValue({ provider: "test" });
+    piAiMocks.complete.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveMetadata = (metadata) => {
+            resolve(mockThreadMetadataCompletion(metadata));
+          };
+        }),
+    );
+
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-managed-early-provisioning-row",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/managed-early-provisioning-row-project",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          origin: "app",
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [
+            {
+              type: "text",
+              text: "Show provisioning before generated branch metadata finishes",
+            },
+          ],
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: {
+              type: "managed-worktree",
+              baseBranch: { kind: "default" },
+            },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const thread = threadSchema.parse(await readJson(response));
+
+      await vi.waitFor(() => {
+        const provisioningRows = listEvents(harness.db, {
+          threadId: thread.id,
+        }).filter((event) => event.type === "system/thread-provisioning");
+        expect(provisioningRows.length).toBeGreaterThan(0);
+      });
+
+      const updatedThread = getThread(harness.db, thread.id);
+      if (!updatedThread?.environmentId) {
+        throw new Error("Expected provisioning thread to have an environment");
+      }
+      expect(
+        listQueuedEnvironmentCommands(
+          harness,
+          "environment.provision",
+          updatedThread.environmentId,
+        ),
+      ).toEqual([]);
+      expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
+
+      const [firstProvisioningRow] = listEvents(harness.db, {
+        threadId: thread.id,
+      }).filter((event) => event.type === "system/thread-provisioning");
+      if (!firstProvisioningRow) {
+        throw new Error("Expected thread provisioning row");
+      }
+      const firstProvisioning = systemThreadProvisioningEventDataSchema.parse(
+        JSON.parse(firstProvisioningRow.data),
+      );
+      expect(firstProvisioning.environmentId).toBe(updatedThread.environmentId);
+      expect(firstProvisioning.entries[0]?.key).toBe("workspace-started");
+
+      resolveMetadata({
+        branchSlug: "early-visible-provisioning",
+        title: "Early Visible Provisioning",
+      });
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "environment.provision",
+      );
+      const managedCommand =
+        requireManagedWorktreeEnvironmentProvisionLiveCommand(queued);
+      expect(managedCommand.command.branchName).toBe(
+        `bb/early-visible-provisioning-${thread.id}`,
+      );
+    });
+  });
+
+  it("does not fail prepared managed environments during provisioning sweeps", async () => {
+    let resolveMetadata: (metadata: MockThreadMetadata) => void = () => {
+      throw new Error("Metadata inference was not started");
+    };
+    piAiMocks.getModel.mockReturnValue({ provider: "test" });
+    piAiMocks.complete.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveMetadata = (metadata) => {
+            resolve(mockThreadMetadataCompletion(metadata));
+          };
+        }),
+    );
+
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-managed-prepared-sweep",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/managed-prepared-sweep-project",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          origin: "app",
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [
+            {
+              type: "text",
+              text: "Keep prepared provisioning safe during sweeps",
+            },
+          ],
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: {
+              type: "managed-worktree",
+              baseBranch: { kind: "default" },
+            },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const thread = threadSchema.parse(await readJson(response));
+
+      await vi.waitFor(() => {
+        const updatedThread = getThread(harness.db, thread.id);
+        expect(updatedThread?.environmentId).toBeTruthy();
+        expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
+        const provisioningRows = listEvents(harness.db, {
+          threadId: thread.id,
+        }).filter((event) => event.type === "system/thread-provisioning");
+        expect(provisioningRows.length).toBeGreaterThan(0);
+      });
+
+      const preparedThread = getThread(harness.db, thread.id);
+      if (!preparedThread?.environmentId) {
+        throw new Error("Expected prepared thread to have an environment");
+      }
+      const preparedEnvironment = getEnvironment(
+        harness.db,
+        preparedThread.environmentId,
+      );
+      expect(preparedEnvironment?.status).toBe("ready");
+      expect(preparedEnvironment?.path).toBeNull();
+      expect(
+        listQueuedEnvironmentCommands(
+          harness,
+          "environment.provision",
+          preparedThread.environmentId,
+        ),
+      ).toEqual([]);
+
+      await runEnvironmentProvisioningSweep(harness.deps);
+
+      const sweptEnvironment = getEnvironment(
+        harness.db,
+        preparedThread.environmentId,
+      );
+      expect(sweptEnvironment?.status).toBe("ready");
+      expect(getThread(harness.db, thread.id)?.status).toBe("provisioning");
+      expect(
+        listEvents(harness.db, { threadId: thread.id }).map(
+          (event) => event.type,
+        ),
+      ).not.toContain("system/error");
+      expect(
+        listQueuedEnvironmentCommands(
+          harness,
+          "environment.provision",
+          preparedThread.environmentId,
+        ),
+      ).toEqual([]);
+
+      resolveMetadata({
+        branchSlug: "prepared-sweep-safe",
+        title: "Prepared Sweep Safe",
+      });
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "environment.provision",
+      );
+      const managedCommand =
+        requireManagedWorktreeEnvironmentProvisionLiveCommand(queued);
+      expect(managedCommand.command.branchName).toBe(
+        `bb/prepared-sweep-safe-${thread.id}`,
+      );
+      expect(
+        getEnvironment(harness.db, preparedThread.environmentId)?.status,
+      ).toBe("provisioning");
     });
   });
 
@@ -404,55 +629,61 @@ describe("generated managed branch names", () => {
   });
 
   it("falls back to thread ID branch names when inference is unavailable", async () => {
-    await withTestHarness({
-      inferenceModel: "openai/gpt-4o-mini",
-      openAiApiKey: "",
-    }, async (harness) => {
-      const { host } = seedHostSession(harness.deps, {
-        id: "host-generated-branch-fallback",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-        path: "/tmp/generated-branch-fallback-project",
-      });
+    await withTestHarness(
+      {
+        inferenceModel: "openai/gpt-4o-mini",
+        openAiApiKey: "",
+      },
+      async (harness) => {
+        const { host } = seedHostSession(harness.deps, {
+          id: "host-generated-branch-fallback",
+        });
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+          path: "/tmp/generated-branch-fallback-project",
+        });
 
-      const response = await harness.app.request("/api/v1/threads", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          origin: "app",
-          projectId: project.id,
-          providerId: "codex",
-          model: "gpt-5",
-          input: [
-            {
-              type: "text",
-              text: "Improve the generated branch naming fallback path",
+        const response = await harness.app.request("/api/v1/threads", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            origin: "app",
+            projectId: project.id,
+            providerId: "codex",
+            model: "gpt-5",
+            input: [
+              {
+                type: "text",
+                text: "Improve the generated branch naming fallback path",
+              },
+            ],
+            environment: {
+              type: "host",
+              hostId: host.id,
+              workspace: {
+                type: "managed-worktree",
+                baseBranch: { kind: "default" },
+              },
             },
-          ],
-          environment: {
-            type: "host",
-            hostId: host.id,
-            workspace: {
-              type: "managed-worktree",
-              baseBranch: { kind: "default" },
-            },
-          },
-        }),
-      });
+          }),
+        });
 
-      expect(response.status).toBe(201);
-      const thread = threadSchema.parse(await readJson(response));
-      const queued = await waitForQueuedCommand(
-        harness,
-        ({ command }) => command.type === "environment.provision",
-      );
-      const managedCommand =
-        requireManagedWorktreeEnvironmentProvisionLiveCommand(queued);
-      expect(managedCommand.command.branchName).toBe(`bb/${thread.id}`);
-      expect(piAiMocks.getModel).toHaveBeenCalledWith("openai", "gpt-4o-mini");
-      expect(piAiMocks.complete).not.toHaveBeenCalled();
-    });
+        expect(response.status).toBe(201);
+        const thread = threadSchema.parse(await readJson(response));
+        const queued = await waitForQueuedCommand(
+          harness,
+          ({ command }) => command.type === "environment.provision",
+        );
+        const managedCommand =
+          requireManagedWorktreeEnvironmentProvisionLiveCommand(queued);
+        expect(managedCommand.command.branchName).toBe(`bb/${thread.id}`);
+        expect(piAiMocks.getModel).toHaveBeenCalledWith(
+          "openai",
+          "gpt-4o-mini",
+        );
+        expect(piAiMocks.complete).not.toHaveBeenCalled();
+      },
+    );
   });
 
   it("ignores independently generated branch slugs when a title is available", async () => {

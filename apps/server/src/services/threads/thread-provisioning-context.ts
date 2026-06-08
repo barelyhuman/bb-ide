@@ -78,6 +78,7 @@ export type ThreadProvisionOperationPayload = z.infer<
 export const threadProvisioningStageValues = [
   "metadata-pending",
   "environment-pending",
+  "environment-prepared",
   "environment-attached",
   "environment-provisioning",
   "workspace-ready",
@@ -118,6 +119,16 @@ export type ThreadProvisionEnvironmentPendingContext =
     };
   };
 
+export type ThreadProvisionEnvironmentPreparedContext =
+  ThreadProvisionContext & {
+    state: ThreadProvisioningState & {
+      environmentId: string;
+      provisionEventSequence: number;
+      stage: "environment-prepared";
+      workspaceReadyEventSequence: null;
+    };
+  };
+
 export type ThreadProvisionEnvironmentAttachedContext =
   ThreadProvisionContext & {
     state: ThreadProvisioningState & {
@@ -152,6 +163,12 @@ export type ThreadProvisionAttachableContext =
   | ThreadProvisionEnvironmentProvisioningContext
   | ThreadProvisionWorkspaceReadyContext;
 
+export type ThreadProvisionProvisionRequestableContext =
+  | ThreadProvisionEnvironmentPreparedContext
+  | ThreadProvisionEnvironmentAttachedContext
+  | ThreadProvisionEnvironmentProvisioningContext
+  | ThreadProvisionWorkspaceReadyContext;
+
 export type ThreadProvisionProvisionableContext =
   | ThreadProvisionEnvironmentAttachedContext
   | ThreadProvisionEnvironmentProvisioningContext
@@ -173,6 +190,11 @@ export interface CreateEnvironmentAttachedContextArgs {
   attachedEnvironmentId: string;
 }
 
+export interface CreateEnvironmentPreparedContextArgs {
+  attachedEnvironmentId: string;
+  provisionEventSequence: number;
+}
+
 export interface CreateEnvironmentProvisioningContextArgs {
   provisionEventSequence: number;
 }
@@ -190,6 +212,10 @@ export interface CreateWorkspaceReadyContextArgs {
   workspaceReadyEventSequence: number;
 }
 
+export interface ResolvePreparedEnvironmentMetadataArgs {
+  branchSlug: string | null;
+}
+
 export function attachedEnvironmentIdForContext(
   context: ThreadProvisionContext,
 ): string | null {
@@ -204,6 +230,8 @@ export function isAttachableContext(
       return false;
     case "environment-pending":
       return context.state.environmentId === null;
+    case "environment-prepared":
+      return false;
     case "environment-attached":
     case "environment-provisioning":
     case "workspace-ready":
@@ -244,6 +272,17 @@ export function isEnvironmentProvisioningContext(
   );
 }
 
+export function isEnvironmentPreparedContext(
+  context: ThreadProvisionContext,
+): context is ThreadProvisionEnvironmentPreparedContext {
+  return (
+    context.state.stage === "environment-prepared" &&
+    context.state.environmentId !== null &&
+    context.state.provisionEventSequence !== null &&
+    context.state.workspaceReadyEventSequence === null
+  );
+}
+
 export function isWorkspaceReadyContext(
   context: ThreadProvisionContext,
 ): context is ThreadProvisionWorkspaceReadyContext {
@@ -260,6 +299,7 @@ export function isProvisionableContext(
   switch (context.state.stage) {
     case "metadata-pending":
     case "environment-pending":
+    case "environment-prepared":
       return false;
     case "environment-attached":
     case "environment-provisioning":
@@ -325,8 +365,24 @@ export function createEnvironmentAttachedContext(
   };
 }
 
+export function createEnvironmentPreparedContext(
+  context: ThreadProvisionMetadataPendingContext,
+  args: CreateEnvironmentPreparedContextArgs,
+): ThreadProvisionEnvironmentPreparedContext {
+  return {
+    request: context.request,
+    state: {
+      environmentId: args.attachedEnvironmentId,
+      provisionEventSequence: args.provisionEventSequence,
+      provisioningId: context.state.provisioningId,
+      stage: "environment-prepared",
+      workspaceReadyEventSequence: null,
+    },
+  };
+}
+
 export function createEnvironmentProvisioningContext(
-  context: ThreadProvisionProvisionableContext,
+  context: ThreadProvisionProvisionRequestableContext,
   args: CreateEnvironmentProvisioningContextArgs,
 ): ThreadProvisionEnvironmentProvisioningContext {
   return {
@@ -338,6 +394,19 @@ export function createEnvironmentProvisioningContext(
       stage: "environment-provisioning",
       workspaceReadyEventSequence: null,
     },
+  };
+}
+
+export function resolvePreparedEnvironmentMetadata(
+  context: ThreadProvisionEnvironmentPreparedContext,
+  args: ResolvePreparedEnvironmentMetadataArgs,
+): ThreadProvisionEnvironmentPreparedContext {
+  return {
+    request: {
+      ...context.request,
+      branchSlug: args.branchSlug,
+    },
+    state: context.state,
   };
 }
 
