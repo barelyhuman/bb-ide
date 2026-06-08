@@ -692,6 +692,65 @@ describe("public global app routes", () => {
     });
   });
 
+  it("returns a typed conflict when app data writes collide with the file layout", async () => {
+    await withTestHarness(async (harness) => {
+      const applicationId = "conflict-data";
+      await writeApplication(harness.config.dataDir, {
+        manifestVersion: 1,
+        id: applicationId,
+        name: "Conflict Data",
+        entry: "index.html",
+        capabilities: ["data"],
+      });
+
+      const fileResponse = await harness.app.request(
+        `/api/v1/apps/${applicationId}/data/state`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ value: { state: true } }),
+        },
+      );
+      expect(fileResponse.status).toBe(200);
+
+      const childUnderFileResponse = await harness.app.request(
+        `/api/v1/apps/${applicationId}/data/state/nested.json`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ value: { nested: true } }),
+        },
+      );
+      expect(childUnderFileResponse.status).toBe(409);
+      expect(await readJson(childUnderFileResponse)).toMatchObject({
+        code: "app_data_path_conflict",
+      });
+
+      const nestedFileResponse = await harness.app.request(
+        `/api/v1/apps/${applicationId}/data/collection/item.json`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ value: { item: true } }),
+        },
+      );
+      expect(nestedFileResponse.status).toBe(200);
+
+      const fileOverDirectoryResponse = await harness.app.request(
+        `/api/v1/apps/${applicationId}/data/collection`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ value: { collection: true } }),
+        },
+      );
+      expect(fileOverDirectoryResponse.status).toBe(409);
+      expect(await readJson(fileOverDirectoryResponse)).toMatchObject({
+        code: "app_data_path_conflict",
+      });
+    });
+  });
+
   it("creates and deletes apps atomically on the filesystem", async () => {
     await withTestHarness(async (harness) => {
       const createResponse = await harness.app.request("/api/v1/apps", {

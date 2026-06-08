@@ -215,6 +215,9 @@ const LOGO_EXTENSIONS: readonly LogoExtension[] = ["svg", "png", "jpg", "jpeg"];
 const APP_SESSION_TOKEN_PREFIX = "appsess_";
 const INVALID_APP_MANIFEST_MESSAGE =
   "App manifest failed validation. Inspect manifest.json or rebuild the app.";
+const APP_DATA_PATH_CONFLICT_CODE = "app_data_path_conflict";
+const APP_DATA_PATH_CONFLICT_MESSAGE =
+  "App data path conflicts with an existing app data value or directory";
 
 class InvalidAppManifestError extends ApiError {
   readonly applicationId: ApplicationId;
@@ -236,6 +239,14 @@ function sha256(bytes: Buffer): string {
 
 function canonicalizeJson(value: JsonValue): string {
   return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function appDataPathConflictError(dataPath: AppDataPath): ApiError {
+  return new ApiError(
+    409,
+    APP_DATA_PATH_CONFLICT_CODE,
+    `${APP_DATA_PATH_CONFLICT_MESSAGE}: ${dataPath}`,
+  );
 }
 
 function parseApplicationId(rawApplicationId: string): ApplicationId {
@@ -1075,8 +1086,30 @@ async function writeApplicationDataEntry(
   if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
     throw new ApiError(400, "invalid_request", "Invalid app data path");
   }
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, content, "utf8");
+  try {
+    await mkdir(path.dirname(filePath), { recursive: true });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (isFsErrorWithCode(error, "EEXIST") ||
+        isFsErrorWithCode(error, "ENOTDIR"))
+    ) {
+      throw appDataPathConflictError(args.dataPath);
+    }
+    throw error;
+  }
+  try {
+    await writeFile(filePath, content, "utf8");
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (isFsErrorWithCode(error, "EISDIR") ||
+        isFsErrorWithCode(error, "ENOTDIR"))
+    ) {
+      throw appDataPathConflictError(args.dataPath);
+    }
+    throw error;
+  }
   return readApplicationDataEntry(args);
 }
 
