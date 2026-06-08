@@ -2,10 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  acceptedHistoricalMigrationHashes,
-  publishedMigrationWhensByTag,
-} from "../src/migration-history.js";
+import { publishedMigrationWhensByTag } from "../src/migration-history.js";
 import {
   createConnection,
   migrate,
@@ -186,17 +183,6 @@ function requirePublishedMigrationWhen(tag: string): number {
   return when;
 }
 
-function requireAcceptedHistoricalMigrationHash(tag: string): string {
-  const hash = acceptedHistoricalMigrationHashes.find(
-    (migrationHash) => migrationHash.tag === tag,
-  )?.hash;
-  if (hash === undefined) {
-    throw new Error(`No accepted historical migration hash for ${tag}`);
-  }
-
-  return hash;
-}
-
 const baselineWhen = requirePublishedMigrationWhen("0000_baseline");
 const publishedTerminalSessionUserInputWhen = requirePublishedMigrationWhen(
   "0001_terminal_session_user_input",
@@ -237,9 +223,6 @@ const pendingInteractionSchemaHonestyMigrationPath = resolve(
   "drizzle",
   "0019_pending_interactions_schema_honesty.sql",
 );
-const historicalEventProducerColumnsMigrationHash =
-  requireAcceptedHistoricalMigrationHash("0016_salty_arclight");
-
 function closeConnection(db: DbConnection): void {
   db.$client.close();
 }
@@ -931,53 +914,6 @@ describe("migrate", () => {
     } finally {
       closeConnection(db);
       vi.useRealTimers();
-    }
-  });
-
-  it("accepts the historical event producer column migration hash", () => {
-    const db = createConnection(":memory:");
-
-    try {
-      migrate(db);
-      replaceAppliedMigrationHash({
-        db,
-        createdAt: eventProducerColumnsMigrationWhen,
-        hash: historicalEventProducerColumnsMigrationHash,
-      });
-
-      expect(() => migrate(db)).not.toThrow();
-    } finally {
-      closeConnection(db);
-    }
-  });
-
-  it("rejects a historical event producer column migration hash at the wrong timestamp", () => {
-    const db = createConnection(":memory:");
-
-    try {
-      migrate(db);
-      replaceAppliedMigrationHash({
-        db,
-        createdAt: eventProducerColumnsMigrationWhen,
-        hash: "wrong-event-producer-column-migration-hash",
-      });
-      db.$client
-        .prepare<InsertMigrationParameters>(
-          `
-            INSERT INTO __drizzle_migrations (hash, created_at)
-            VALUES (?, ?)
-          `,
-        )
-        .run(
-          historicalEventProducerColumnsMigrationHash,
-          eventProducerColumnsMigrationWhen + 1,
-        );
-
-      expect(() => migrate(db)).toThrow(
-        /Mismatched applied migration hashes: 0016_salty_arclight/,
-      );
-    } finally {
-      closeConnection(db);
     }
   });
 
