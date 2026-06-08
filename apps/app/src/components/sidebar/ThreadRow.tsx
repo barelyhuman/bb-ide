@@ -7,10 +7,6 @@ import {
   type ReactNode,
 } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
-import type {
-  DraggableAttributes,
-  DraggableSyntheticListeners,
-} from "@dnd-kit/core";
 import type { ThreadListEntry } from "@bb/domain";
 import {
   getThreadConversationCollapsedAtom,
@@ -59,6 +55,7 @@ import {
   getSidebarThreadRowPaddingLeft,
 } from "./sidebarRowClasses";
 import type { ConsumeDragClickSuppression } from "./useDragClickSuppression";
+import type { SidebarSortableDragBindings } from "./sortableMotion";
 
 interface ThreadRowBaseOptions {
   depth: number;
@@ -80,15 +77,8 @@ export type ThreadRowOptions =
       stickyLevel?: number;
       onToggleCollapsed: (threadId: string) => void;
       consumeClickSuppression?: ConsumeDragClickSuppression;
-      dragBindings?: ThreadRowDragBindings;
+      dragBindings?: SidebarSortableDragBindings;
     });
-
-export interface ThreadRowDragBindings {
-  attributes: DraggableAttributes;
-  disabled: boolean;
-  listeners: DraggableSyntheticListeners;
-  setActivatorNodeRef: (element: HTMLDivElement | null) => void;
-}
 
 interface ThreadRowProps {
   projectId: string;
@@ -111,7 +101,7 @@ type ThreadRowClickCaptureHandler = MouseEventHandler<HTMLDivElement>;
 interface ThreadRowContainerArgs {
   children: ReactNode;
   className: string;
-  dragBindings?: ThreadRowDragBindings;
+  dragBindings?: SidebarSortableDragBindings;
   onClickCapture?: ThreadRowClickCaptureHandler;
   stickyLevel?: number;
   style: CSSProperties;

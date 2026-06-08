@@ -1,8 +1,6 @@
 import {
   memo,
   useCallback,
-  useMemo,
-  type CSSProperties,
   type MouseEventHandler,
 } from "react";
 import {
@@ -19,14 +17,11 @@ import {
 import {
   sortableKeyboardCoordinates,
   SortableContext,
-  useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import type { NeighborReorderRequest } from "@/lib/neighbor-reorder";
 import { ThreadTreeNodeRow } from "./ProjectRow";
-import type { ThreadRowDragBindings } from "./ThreadRow";
-import { SIDEBAR_SORTABLE_TRANSITION } from "./sortableMotion";
+import { useSidebarSortable } from "./sortableMotion";
 import type { ProjectThreadNode } from "./projectThreadGroups";
 import { useDragClickSuppression } from "./useDragClickSuppression";
 import {
@@ -69,7 +64,6 @@ interface PinnedRootItemProps
   consumeClickSuppression?: () => boolean;
 }
 
-type PinnedRootDragBindings = ThreadRowDragBindings;
 type PinnedThreadTreeClickCaptureHandler = MouseEventHandler<HTMLDivElement>;
 
 function getPinnedRootNodeId(node: ProjectThreadNode): string {
@@ -114,36 +108,10 @@ const SortablePinnedRootItem = memo(function SortablePinnedRootItem({
   onToggleThreadCollapsed,
   selectedThreadId,
 }: SortablePinnedRootItemProps) {
-  const nodeId = getPinnedRootNodeId(node);
-  const {
-    attributes,
-    isDragging,
-    listeners,
-    setActivatorNodeRef,
-    setNodeRef,
-    transform,
-    transition,
-  } = useSortable({
-    id: nodeId,
+  const { dragBindings, setNodeRef, style } = useSidebarSortable({
+    id: getPinnedRootNodeId(node),
     disabled,
-    transition: SIDEBAR_SORTABLE_TRANSITION,
   });
-  const style = useMemo<CSSProperties>(
-    () => ({
-      transform: CSS.Transform.toString(transform),
-      transition,
-    }),
-    [transform, transition],
-  );
-  const dragBindings = useMemo<PinnedRootDragBindings>(
-    () => ({
-      attributes,
-      disabled,
-      listeners,
-      setActivatorNodeRef,
-    }),
-    [attributes, disabled, listeners, setActivatorNodeRef],
-  );
 
   return (
     <ThreadTreeNodeRow
@@ -161,7 +129,6 @@ const SortablePinnedRootItem = memo(function SortablePinnedRootItem({
       dragBindings={dragBindings}
       sortableRef={setNodeRef}
       sortableStyle={style}
-      isDragging={isDragging}
     />
   );
 });

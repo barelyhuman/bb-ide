@@ -17,16 +17,12 @@ import {
   useSensors,
   type DragEndEvent,
   type DragStartEvent,
-  type DraggableAttributes,
-  type DraggableSyntheticListeners,
 } from "@dnd-kit/core";
 import {
   sortableKeyboardCoordinates,
   SortableContext,
-  useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import type { ThreadListEntry } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { NavLink, useNavigate } from "react-router-dom";
@@ -81,7 +77,6 @@ import { appToast } from "@/components/ui/app-toast";
 import {
   ThreadRow,
   ThreadStatusGlyph,
-  type ThreadRowDragBindings,
   type ThreadRowOptions,
 } from "./ThreadRow";
 import {
@@ -97,7 +92,10 @@ import {
   getSidebarThreadGroupLineLeft,
   getSidebarThreadRowPaddingLeft,
 } from "./sidebarRowClasses";
-import { SIDEBAR_SORTABLE_TRANSITION } from "./sortableMotion";
+import {
+  useSidebarSortable,
+  type SidebarSortableDragBindings,
+} from "./sortableMotion";
 import {
   useDragClickSuppression,
   type ConsumeDragClickSuppression,
@@ -124,13 +122,6 @@ export type ProjectThreadListState =
       status: "unavailable";
     };
 
-export interface ProjectRowDragBindings {
-  attributes: DraggableAttributes;
-  disabled: boolean;
-  listeners: DraggableSyntheticListeners;
-  setActivatorNodeRef: (element: HTMLDivElement | null) => void;
-}
-
 export interface ProjectManagerReorderCallbacks {
   onSettled: () => void;
 }
@@ -151,14 +142,13 @@ export interface ProjectRowProps {
   onToggleThreadCollapsed: (threadId: string) => void;
   onToggleEnvironmentCollapsed: (environmentId: string) => void;
   isManagerReorderPending?: boolean;
-  isProjectDragging?: boolean;
   onReorderManager?: (
     projectId: string,
     request: NeighborReorderRequest,
     callbacks: ProjectManagerReorderCallbacks,
   ) => void;
   consumeProjectClickSuppression?: ConsumeDragClickSuppression;
-  projectDragBindings?: ProjectRowDragBindings;
+  projectDragBindings?: SidebarSortableDragBindings;
   projectRowRef?: (element: HTMLLIElement | null) => void;
   projectRowStyle?: CSSProperties;
 }
@@ -209,8 +199,7 @@ interface ThreadTreeNodeRowProps {
   onToggleThreadCollapsed: (threadId: string) => void;
   onToggleEnvironmentCollapsed: (environmentId: string) => void;
   consumeClickSuppression?: ConsumeDragClickSuppression;
-  isDragging?: boolean;
-  dragBindings?: ThreadRowDragBindings;
+  dragBindings?: SidebarSortableDragBindings;
   sortableRef?: (element: HTMLDivElement | null) => void;
   sortableStyle?: CSSProperties;
 }
@@ -415,7 +404,7 @@ interface GetThreadRowOptionsArgs {
   childActivity: CollapsedChildActivity;
   childCount: number;
   consumeClickSuppression?: ConsumeDragClickSuppression;
-  dragBindings?: ThreadRowDragBindings;
+  dragBindings?: SidebarSortableDragBindings;
   isCollapsed: boolean;
   isEnvGrouped: boolean;
   isParent: boolean;
@@ -1002,7 +991,6 @@ export const ThreadTreeNodeRow = memo(function ThreadTreeNodeRow({
   onToggleThreadCollapsed,
   onToggleEnvironmentCollapsed,
   consumeClickSuppression,
-  isDragging = false,
   dragBindings,
   sortableRef,
   sortableStyle,
@@ -1071,7 +1059,7 @@ export const ThreadTreeNodeRow = memo(function ThreadTreeNodeRow({
     <SidebarStickyGroup
       ref={sortableRef}
       style={sortableStyle}
-      className={cn("space-y-0.5", isDragging && "relative z-20")}
+      className="space-y-0.5"
     >
       {row}
       {showChildren ? (
@@ -1107,39 +1095,16 @@ const SortableRootThreadNodeRow = memo(function SortableRootThreadNodeRow({
   node,
   ...props
 }: SortableRootThreadNodeRowProps) {
-  const threadId = node.thread.id;
-  const {
-    attributes,
-    isDragging,
-    listeners,
-    setActivatorNodeRef,
-    setNodeRef,
-    transform,
-    transition,
-  } = useSortable({
-    id: threadId,
+  const { dragBindings, setNodeRef, style } = useSidebarSortable({
+    id: node.thread.id,
     disabled,
-    transition: SIDEBAR_SORTABLE_TRANSITION,
   });
-  const style = useMemo<CSSProperties>(
-    () => ({
-      transform: CSS.Transform.toString(transform),
-      transition,
-    }),
-    [transform, transition],
-  );
 
   return (
     <ThreadTreeNodeRow
       {...props}
       node={node}
-      isDragging={isDragging}
-      dragBindings={{
-        attributes,
-        disabled,
-        listeners,
-        setActivatorNodeRef,
-      }}
+      dragBindings={dragBindings}
       sortableRef={setNodeRef}
       sortableStyle={style}
     />
@@ -1380,7 +1345,6 @@ function ProjectRowComponent({
   onToggleThreadCollapsed,
   onToggleEnvironmentCollapsed,
   isManagerReorderPending = false,
-  isProjectDragging = false,
   onReorderManager,
   consumeProjectClickSuppression,
   projectDragBindings,
@@ -1415,7 +1379,6 @@ function ProjectRowComponent({
       <SidebarMenuItem
         ref={projectRowRef}
         style={projectRowStyle}
-        className={cn(isProjectDragging && "relative z-30")}
         onClickCapture={handleProjectRowClickCapture}
       >
         <ProjectActionsContextMenu
@@ -1689,7 +1652,6 @@ function areProjectRowPropsEqual(
     prev.onToggleThreadCollapsed !== next.onToggleThreadCollapsed ||
     prev.onToggleEnvironmentCollapsed !== next.onToggleEnvironmentCollapsed ||
     prev.isManagerReorderPending !== next.isManagerReorderPending ||
-    prev.isProjectDragging !== next.isProjectDragging ||
     prev.onReorderManager !== next.onReorderManager ||
     prev.consumeProjectClickSuppression !==
       next.consumeProjectClickSuppression ||

@@ -21,16 +21,12 @@ import {
   type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
-  type DraggableAttributes,
-  type DraggableSyntheticListeners,
 } from "@dnd-kit/core";
 import {
   sortableKeyboardCoordinates,
   SortableContext,
-  useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import type { AppSummary, ProjectResponse } from "@bb/server-contract";
 import {
   findLocalPathProjectSourceForHost,
@@ -89,7 +85,6 @@ import {
 import { ProjectRow, ProjectThreadTree } from "./ProjectRow";
 import { SidebarAppsSection } from "./SidebarAppsSection";
 import type {
-  ProjectRowDragBindings,
   ProjectRowProps,
   ProjectThreadListState,
 } from "./ProjectRow";
@@ -115,7 +110,10 @@ import {
   SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
   SIDEBAR_STANDARD_ROW_PADDING_CLASS,
 } from "./sidebarRowClasses";
-import { SIDEBAR_SORTABLE_TRANSITION } from "./sortableMotion";
+import {
+  useSidebarSortable,
+  type SidebarSortableDragBindings,
+} from "./sortableMotion";
 import {
   useDragClickSuppression,
   type ConsumeDragClickSuppression,
@@ -203,19 +201,12 @@ interface SortableProjectRowProps extends ProjectRowProps {
   reorderDisabled: boolean;
 }
 
-interface SidebarSectionDragBindings {
-  attributes: DraggableAttributes;
-  disabled: boolean;
-  listeners: DraggableSyntheticListeners;
-  setActivatorNodeRef: (element: HTMLDivElement | null) => void;
-}
-
 interface TopLevelSidebarSectionProps {
   label: string;
   children: ReactNode;
   actions?: ReactNode;
   actionsAlwaysVisible?: boolean;
-  dragBindings?: SidebarSectionDragBindings;
+  dragBindings?: SidebarSortableDragBindings;
   sectionRef?: (element: HTMLDivElement | null) => void;
   sectionStyle?: CSSProperties;
   consumeClickSuppression?: ConsumeDragClickSuppression;
@@ -463,40 +454,10 @@ const SortableSidebarSection = memo(function SortableSidebarSection({
   disabled,
   ...props
 }: SortableSidebarSectionProps) {
-  const {
-    attributes,
-    isDragging,
-    listeners,
-    setActivatorNodeRef,
-    setNodeRef,
-    transform,
-    transition,
-  } = useSortable({
+  const { dragBindings, setNodeRef, style } = useSidebarSortable({
     id,
     disabled,
-    transition: SIDEBAR_SORTABLE_TRANSITION,
   });
-  const style = useMemo<CSSProperties>(
-    () => ({
-      transform: CSS.Translate.toString(transform),
-      transition,
-      // Each section's sticky header creates its own stacking context
-      // (`isolation: isolate`), so a dragged section paints behind the other
-      // section's rows unless we lift it above them while dragging.
-      position: isDragging ? "relative" : undefined,
-      zIndex: isDragging ? 20 : undefined,
-    }),
-    [isDragging, transform, transition],
-  );
-  const dragBindings = useMemo<SidebarSectionDragBindings>(
-    () => ({
-      attributes,
-      disabled,
-      listeners,
-      setActivatorNodeRef,
-    }),
-    [attributes, disabled, listeners, setActivatorNodeRef],
-  );
 
   return (
     <TopLevelSidebarSection
@@ -513,44 +474,16 @@ const SortableProjectRow = memo(function SortableProjectRow({
   reorderDisabled,
   ...props
 }: SortableProjectRowProps) {
-  const {
-    attributes,
-    isDragging,
-    listeners,
-    setActivatorNodeRef,
-    setNodeRef,
-    transform,
-    transition,
-  } = useSortable({
+  const { dragBindings, setNodeRef, style } = useSidebarSortable({
     id: project.id,
     disabled: reorderDisabled,
-    transition: SIDEBAR_SORTABLE_TRANSITION,
   });
-  const style = useMemo<CSSProperties>(
-    () => ({
-      transform: CSS.Translate.toString(transform),
-      transition,
-      position: isDragging ? "relative" : undefined,
-      zIndex: isDragging ? 20 : undefined,
-    }),
-    [isDragging, transform, transition],
-  );
-  const projectDragBindings = useMemo<ProjectRowDragBindings>(
-    () => ({
-      attributes,
-      disabled: reorderDisabled,
-      listeners,
-      setActivatorNodeRef,
-    }),
-    [attributes, listeners, reorderDisabled, setActivatorNodeRef],
-  );
 
   return (
     <ProjectRow
       {...props}
       project={project}
-      isProjectDragging={isDragging}
-      projectDragBindings={projectDragBindings}
+      projectDragBindings={dragBindings}
       projectRowRef={setNodeRef}
       projectRowStyle={style}
     />
