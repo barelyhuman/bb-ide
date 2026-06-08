@@ -17,6 +17,7 @@ import {
   resolveAppsRootPath,
 } from "@bb/config/app-storage-paths";
 import {
+  appDataListResponseSchema,
   appDetailSchema,
   appSummarySchema,
   type AppManifest,
@@ -607,6 +608,87 @@ describe("public global app routes", () => {
         path: "state.json",
         value: { secret: true },
       });
+    });
+  });
+
+  it("lists app data entries by exact file, directory, and empty prefixes", async () => {
+    await withTestHarness(async (harness) => {
+      const applicationId = "prefix-data";
+      await writeApplication(harness.config.dataDir, {
+        manifestVersion: 1,
+        id: applicationId,
+        name: "Prefix Data",
+        entry: "index.html",
+        capabilities: ["data"],
+      });
+      const appDataRoot = resolveApplicationDataPath(
+        harness.config.dataDir,
+        applicationId,
+      );
+      await mkdir(path.join(appDataRoot, "state", "nested"), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(appDataRoot, "state", "one.json"),
+        '{"one":true}\n',
+        "utf8",
+      );
+      await writeFile(
+        path.join(appDataRoot, "state", "nested", "two.json"),
+        '{"two":true}\n',
+        "utf8",
+      );
+      await writeFile(
+        path.join(appDataRoot, "other.json"),
+        '{"other":true}\n',
+        "utf8",
+      );
+
+      const fileResponse = await harness.app.request(
+        `/api/v1/apps/${applicationId}/data?prefix=state/one.json`,
+      );
+      expect(fileResponse.status).toBe(200);
+      const filePayload = appDataListResponseSchema.parse(
+        await readJson(fileResponse),
+      );
+      expect(filePayload.entries.map((entry) => entry.path)).toEqual([
+        "state/one.json",
+      ]);
+
+      const directoryResponse = await harness.app.request(
+        `/api/v1/apps/${applicationId}/data?prefix=state`,
+      );
+      expect(directoryResponse.status).toBe(200);
+      const directoryPayload = appDataListResponseSchema.parse(
+        await readJson(directoryResponse),
+      );
+      expect(directoryPayload.entries.map((entry) => entry.path)).toEqual([
+        "state/nested/two.json",
+        "state/one.json",
+      ]);
+
+      const missingResponse = await harness.app.request(
+        `/api/v1/apps/${applicationId}/data?prefix=state/missing.json`,
+      );
+      expect(missingResponse.status).toBe(200);
+      const missingPayload = appDataListResponseSchema.parse(
+        await readJson(missingResponse),
+      );
+      expect(missingPayload.entries).toEqual([]);
+
+      const fileAsDirectoryResponse = await harness.app.request(
+        `/api/v1/apps/${applicationId}/data?prefix=state/one.json/missing`,
+      );
+      expect(fileAsDirectoryResponse.status).toBe(200);
+      const fileAsDirectoryPayload = appDataListResponseSchema.parse(
+        await readJson(fileAsDirectoryResponse),
+      );
+      expect(fileAsDirectoryPayload.entries).toEqual([]);
+
+      const invalidResponse = await harness.app.request(
+        `/api/v1/apps/${applicationId}/data?prefix=../state`,
+      );
+      expect(invalidResponse.status).toBe(400);
     });
   });
 

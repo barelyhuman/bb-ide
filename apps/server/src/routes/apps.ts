@@ -1017,7 +1017,14 @@ async function listApplicationDataEntries(
         }),
       ];
     } catch (error) {
-      if (!(error instanceof ApiError && error.body.code === "ENOENT")) {
+      if (
+        !(
+          (error instanceof ApiError && error.body.code === "ENOENT") ||
+          (error instanceof Error &&
+            (isFsErrorWithCode(error, "EISDIR") ||
+              isFsErrorWithCode(error, "ENOTDIR")))
+        )
+      ) {
         throw error;
       }
     }
@@ -1034,7 +1041,11 @@ async function listApplicationDataEntries(
   try {
     dataPaths = await listAppDataFilePaths(appDataRoot, listRoot);
   } catch (error) {
-    if (error instanceof Error && isFsErrorWithCode(error, "ENOENT")) {
+    if (
+      error instanceof Error &&
+      (isFsErrorWithCode(error, "ENOENT") ||
+        isFsErrorWithCode(error, "ENOTDIR"))
+    ) {
       return [];
     }
     throw error;
