@@ -2,7 +2,7 @@ import type { DbNotifier, DbTransaction } from "@bb/db";
 import type {
   HostDaemonCommand,
   HostDaemonCommandResult,
-  HostDaemonDurableCommandType,
+  HostDaemonSettledCommandType,
 } from "@bb/host-daemon-contract";
 import type { InteractiveLifecycleCoordinationDeps } from "../lifecycle-coordination-deps.js";
 import type { AppDeps } from "../types.js";
@@ -30,7 +30,7 @@ interface LiveHostCommandResultReportBase {
 }
 
 export type LiveHostCommandSuccessResultReportForType<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 > = LiveHostCommandResultReportBase & {
   type: TType;
   ok: true;
@@ -38,7 +38,7 @@ export type LiveHostCommandSuccessResultReportForType<
 };
 
 export type LiveHostCommandFailureResultReportForType<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 > = LiveHostCommandResultReportBase & {
   type: TType;
   ok: false;
@@ -47,31 +47,31 @@ export type LiveHostCommandFailureResultReportForType<
 };
 
 type LiveHostCommandSuccessResultReportByType = {
-  [TType in HostDaemonDurableCommandType]:
+  [TType in HostDaemonSettledCommandType]:
     LiveHostCommandSuccessResultReportForType<TType>;
 };
 
 type LiveHostCommandFailureResultReportByType = {
-  [TType in HostDaemonDurableCommandType]:
+  [TType in HostDaemonSettledCommandType]:
     LiveHostCommandFailureResultReportForType<TType>;
 };
 
 export type LiveHostCommandResultReport =
-  | LiveHostCommandSuccessResultReportByType[HostDaemonDurableCommandType]
-  | LiveHostCommandFailureResultReportByType[HostDaemonDurableCommandType];
+  | LiveHostCommandSuccessResultReportByType[HostDaemonSettledCommandType]
+  | LiveHostCommandFailureResultReportByType[HostDaemonSettledCommandType];
 
 export type HostDaemonCommandForType<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 > = Extract<HostDaemonCommand, { type: TType }>;
 
 export type CommandResultReportForType<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 > =
   | LiveHostCommandSuccessResultReportForType<TType>
   | LiveHostCommandFailureResultReportForType<TType>;
 
 export type CommandResultFailureReportForType<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 > = Extract<CommandResultReportForType<TType>, { ok: false }>;
 
 interface CommandResultPostCommitActionContext {

@@ -39,7 +39,10 @@ export {
 const INJECTED_SKILL_NAME_PATTERN =
   /^(?!.*--)[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u;
 
-export const HOST_DAEMON_DURABLE_COMMAND_TYPES = [
+// Settled commands run over live host RPC, but their results use command-result
+// semantics because server-owned lifecycle/effects may depend on settlement.
+// They are not persisted to the legacy host_daemon_commands table.
+export const HOST_DAEMON_SETTLED_COMMAND_TYPES = [
   "thread.start",
   "turn.submit",
   "thread.stop",
@@ -55,26 +58,25 @@ export const HOST_DAEMON_DURABLE_COMMAND_TYPES = [
   "host.delete_path_relative",
   "environment.provision",
   "environment.provision.cancel",
-  "environment.cleanup_preflight",
   "environment.destroy",
   "workspace.commit",
   "workspace.squash_merge",
 ] as const;
-export const hostDaemonDurableCommandTypeSchema = z.enum(
-  HOST_DAEMON_DURABLE_COMMAND_TYPES,
+export const hostDaemonSettledCommandTypeSchema = z.enum(
+  HOST_DAEMON_SETTLED_COMMAND_TYPES,
 );
-export type HostDaemonDurableCommandType = z.infer<
-  typeof hostDaemonDurableCommandTypeSchema
+export type HostDaemonSettledCommandType = z.infer<
+  typeof hostDaemonSettledCommandTypeSchema
 >;
 
-const hostDaemonCommandTypes = new Set<string>(
-  HOST_DAEMON_DURABLE_COMMAND_TYPES,
+const hostDaemonSettledCommandTypes = new Set<string>(
+  HOST_DAEMON_SETTLED_COMMAND_TYPES,
 );
 
-export function isHostDaemonDurableCommandType(
+export function isHostDaemonSettledCommandType(
   type: string,
-): type is HostDaemonDurableCommandType {
-  return hostDaemonCommandTypes.has(type);
+): type is HostDaemonSettledCommandType {
+  return hostDaemonSettledCommandTypes.has(type);
 }
 
 export const workspaceContextSchema = z.object({
@@ -597,6 +599,7 @@ export const HOST_DAEMON_ONLINE_RPC_COMMAND_TYPES = [
   "host.read_file_relative",
   "provider.list",
   "provider.list_models",
+  "environment.cleanup_preflight",
   "workspace.status",
   "workspace.diff",
 ] as const;
@@ -662,6 +665,7 @@ export const hostDaemonOnlineRpcCommandSchema = z.union([
   hostReadFileRelativeCommandSchema,
   providerListCommandSchema,
   providerListModelsCommandSchema,
+  environmentCleanupPreflightCommandSchema,
   workspaceStatusCommandSchema,
   workspaceDiffCommandSchema,
 ]);
@@ -682,6 +686,7 @@ export const hostDaemonRetryableOnlineRpcCommandSchema = z.union([
   hostReadFileRelativeCommandSchema,
   providerListCommandSchema,
   providerListModelsCommandSchema,
+  environmentCleanupPreflightCommandSchema,
   workspaceStatusCommandSchema,
   workspaceDiffCommandSchema,
 ]);
@@ -720,7 +725,6 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   hostDeleteFileRelativeCommandSchema,
   hostDeletePathRelativeCommandSchema,
   environmentProvisionCancelCommandSchema,
-  environmentCleanupPreflightCommandSchema,
   environmentDestroyCommandSchema,
   workspaceCommitCommandSchema,
   workspaceSquashMergeCommandSchema,
@@ -738,7 +742,7 @@ export const hostDaemonRpcCommandSchema = z.union([
 export type HostDaemonRpcCommand = z.infer<typeof hostDaemonRpcCommandSchema>;
 export const hostDaemonRpcCommandTypeSchema = z.union([
   hostDaemonOnlineRpcCommandTypeSchema,
-  hostDaemonDurableCommandTypeSchema,
+  hostDaemonSettledCommandTypeSchema,
 ]);
 export type HostDaemonRpcCommandType = z.infer<
   typeof hostDaemonRpcCommandTypeSchema
@@ -747,7 +751,7 @@ export type HostDaemonRpcCommandType = z.infer<
 export function isHostDaemonCommand(
   command: HostDaemonRpcCommand,
 ): command is HostDaemonCommand {
-  return isHostDaemonDurableCommandType(command.type);
+  return isHostDaemonSettledCommandType(command.type);
 }
 
 export function shouldFlushEventsBeforeReportingCommandResult(
@@ -763,7 +767,6 @@ export function shouldFlushEventsBeforeReportingCommandResult(
       return command.initiator !== null;
     case "environment.provision.cancel":
       return true;
-    case "environment.cleanup_preflight":
     case "environment.destroy":
     case "host.write_file_relative":
     case "host.delete_file_relative":
@@ -923,7 +926,6 @@ export const hostDaemonCommandResultSchemaByType = {
   "environment.provision.cancel": z.object({
     aborted: z.boolean(),
   }),
-  "environment.cleanup_preflight": environmentCleanupPreflightResultSchema,
   "environment.destroy": z.object({}),
   "workspace.commit": z.object({
     commitSha: z.string().min(1),
@@ -934,7 +936,7 @@ export const hostDaemonCommandResultSchemaByType = {
     commitSha: z.string().min(1),
     commitSubject: z.string().min(1),
   }),
-} as const satisfies Record<HostDaemonDurableCommandType, z.ZodTypeAny>;
+} as const satisfies Record<HostDaemonSettledCommandType, z.ZodTypeAny>;
 
 export type HostDaemonCommandResultByType = {
   [K in keyof typeof hostDaemonCommandResultSchemaByType]: z.infer<
@@ -943,7 +945,7 @@ export type HostDaemonCommandResultByType = {
 };
 
 export type HostDaemonCommandResult<
-  TType extends HostDaemonDurableCommandType = HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType = HostDaemonSettledCommandType,
 > = HostDaemonCommandResultByType[TType];
 
 const emptyReplayResultSchema = z.object({}).strict();
@@ -988,6 +990,7 @@ export const hostDaemonOnlineRpcResultSchemaByType = {
   "host.read_file_relative": fileReadResultSchema,
   "provider.list": providerListResultSchema,
   "provider.list_models": providerListModelsResultSchema,
+  "environment.cleanup_preflight": environmentCleanupPreflightResultSchema,
   "workspace.status": workspaceStatusResultSchema,
   "workspace.diff": workspaceDiffResultSchema,
 } as const satisfies Record<HostDaemonOnlineRpcCommandType, z.ZodTypeAny>;
@@ -1087,16 +1090,16 @@ type HostDaemonCommandResultReportBase = z.infer<
   typeof hostDaemonCommandResultReportBaseSchema
 >;
 type HostDaemonCommandSuccessResultReportByType = {
-  [TType in HostDaemonDurableCommandType]: HostDaemonCommandResultReportBase & {
+  [TType in HostDaemonSettledCommandType]: HostDaemonCommandResultReportBase & {
     type: TType;
     ok: true;
     result: HostDaemonCommandResult<TType>;
   };
 };
 type HostDaemonCommandSuccessResultReport =
-  HostDaemonCommandSuccessResultReportByType[HostDaemonDurableCommandType];
+  HostDaemonCommandSuccessResultReportByType[HostDaemonSettledCommandType];
 type HostDaemonKnownCommandErrorResultReportByType = {
-  [TType in HostDaemonDurableCommandType]: HostDaemonCommandResultReportBase & {
+  [TType in HostDaemonSettledCommandType]: HostDaemonCommandResultReportBase & {
     type: TType;
     ok: false;
     errorCode: string;
@@ -1111,10 +1114,10 @@ type HostDaemonUnknownCommandErrorResultReport =
     errorMessage: string;
   };
 type HostDaemonCommandErrorResultReport =
-  | HostDaemonKnownCommandErrorResultReportByType[HostDaemonDurableCommandType]
+  | HostDaemonKnownCommandErrorResultReportByType[HostDaemonSettledCommandType]
   | HostDaemonUnknownCommandErrorResultReport;
 type HostDaemonKnownCommandErrorResultReportWithoutSessionByType = {
-  [TType in HostDaemonDurableCommandType]: Omit<
+  [TType in HostDaemonSettledCommandType]: Omit<
     HostDaemonKnownCommandErrorResultReportByType[TType],
     "sessionId"
   >;
@@ -1124,16 +1127,16 @@ type HostDaemonUnknownCommandErrorResultReportWithoutSession = Omit<
   "sessionId"
 >;
 type HostDaemonCommandErrorResultReportWithoutSession =
-  | HostDaemonKnownCommandErrorResultReportWithoutSessionByType[HostDaemonDurableCommandType]
+  | HostDaemonKnownCommandErrorResultReportWithoutSessionByType[HostDaemonSettledCommandType]
   | HostDaemonUnknownCommandErrorResultReportWithoutSession;
 type HostDaemonCommandSuccessResultReportWithoutSessionByType = {
-  [TType in HostDaemonDurableCommandType]: Omit<
+  [TType in HostDaemonSettledCommandType]: Omit<
     HostDaemonCommandSuccessResultReportByType[TType],
     "sessionId"
   >;
 };
 type HostDaemonCommandSuccessResultReportWithoutSession =
-  HostDaemonCommandSuccessResultReportWithoutSessionByType[HostDaemonDurableCommandType];
+  HostDaemonCommandSuccessResultReportWithoutSessionByType[HostDaemonSettledCommandType];
 export type HostDaemonCommandResultReport =
   | HostDaemonCommandSuccessResultReport
   | HostDaemonCommandErrorResultReport;
@@ -1142,7 +1145,7 @@ export type HostDaemonCommandResultReportWithoutSession =
   | HostDaemonCommandErrorResultReportWithoutSession;
 
 function createHostDaemonCommandResultReportSchemasForType<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 >(
   type: TType,
   resultSchema: (typeof hostDaemonCommandResultSchemaByType)[TType],
@@ -1163,7 +1166,7 @@ function createHostDaemonCommandResultReportSchemasForType<
 }
 
 function createHostDaemonCommandResultReportWithoutSessionSchemasForType<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 >(
   type: TType,
   resultSchema: (typeof hostDaemonCommandResultSchemaByType)[TType],
@@ -1184,7 +1187,7 @@ function createHostDaemonCommandResultReportWithoutSessionSchemasForType<
 }
 
 function createKnownHostDaemonCommandResultReportSchemaForType<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 >(type: TType) {
   return z.discriminatedUnion(
     "ok",
@@ -1196,7 +1199,7 @@ function createKnownHostDaemonCommandResultReportSchemaForType<
 }
 
 function createKnownHostDaemonCommandResultReportWithoutSessionSchemaForType<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 >(type: TType) {
   return z.discriminatedUnion(
     "ok",
@@ -1233,13 +1236,13 @@ const hostDaemonCommandResultReportWithoutSessionEnvelopeSchema =
     ok: z.boolean(),
   });
 const knownHostDaemonCommandResultReportSchemasByType = new Map(
-  HOST_DAEMON_DURABLE_COMMAND_TYPES.map((type) => [
+  HOST_DAEMON_SETTLED_COMMAND_TYPES.map((type) => [
     type,
     createKnownHostDaemonCommandResultReportSchemaForType(type),
   ]),
 );
 const knownHostDaemonCommandResultReportWithoutSessionSchemasByType = new Map(
-  HOST_DAEMON_DURABLE_COMMAND_TYPES.map((type) => [
+  HOST_DAEMON_SETTLED_COMMAND_TYPES.map((type) => [
     type,
     createKnownHostDaemonCommandResultReportWithoutSessionSchemaForType(type),
   ]),
@@ -1259,7 +1262,7 @@ export const hostDaemonCommandResultReportSchema =
     if (!envelope.success) {
       return false;
     }
-    if (!isHostDaemonDurableCommandType(envelope.data.type)) {
+    if (!isHostDaemonSettledCommandType(envelope.data.type)) {
       return unknownCommandErrorSchema.safeParse(value).success;
     }
     const schema = knownHostDaemonCommandResultReportSchemasByType.get(
@@ -1278,7 +1281,7 @@ export const hostDaemonCommandResultReportWithoutSessionSchema =
     if (!envelope.success) {
       return false;
     }
-    if (!isHostDaemonDurableCommandType(envelope.data.type)) {
+    if (!isHostDaemonSettledCommandType(envelope.data.type)) {
       return unknownCommandErrorWithoutSessionSchema.safeParse(value).success;
     }
     const schema =

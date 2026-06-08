@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   type HostDaemonCommand,
   type HostDaemonCommandResult,
-  type HostDaemonDurableCommandType,
+  type HostDaemonSettledCommandType,
 } from "@bb/host-daemon-contract";
 import { ApiError } from "../../errors.js";
 import {
@@ -21,7 +21,7 @@ import { callHostOnlineRpc } from "./online-rpc.js";
 export const LIVE_DAEMON_COMMAND_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
 export interface RunLiveHostCommandArgs<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 > {
   command: Extract<HostDaemonCommand, { type: TType }>;
   execution?: HostDaemonCommandExecutionRecord;
@@ -30,19 +30,19 @@ export interface RunLiveHostCommandArgs<
 }
 
 export interface StartLiveHostCommandArgs<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 > extends RunLiveHostCommandArgs<TType> {
   onError?: (error: Error) => void;
 }
 
 type LiveHostCommandResultReportForType<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 > =
   | LiveHostCommandSuccessResultReportForType<TType>
   | LiveHostCommandFailureResultReportForType<TType>;
 
 interface ApplyLiveHostCommandReportArgs<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 > {
   command: HostDaemonCommandForType<TType>;
   execution: HostDaemonCommandExecutionRecord;
@@ -50,7 +50,7 @@ interface ApplyLiveHostCommandReportArgs<
 }
 
 interface BuildLiveHostCommandSuccessReportArgs<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 > {
   command: HostDaemonCommandForType<TType>;
   completedAt: number;
@@ -59,7 +59,7 @@ interface BuildLiveHostCommandSuccessReportArgs<
 }
 
 interface BuildLiveHostCommandFailureReportArgs<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 > {
   command: HostDaemonCommandForType<TType>;
   completedAt: number;
@@ -75,7 +75,7 @@ function commandFailureCode(error: Error): string {
 }
 
 function buildLiveHostCommandFailureReport<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 >(
   args: BuildLiveHostCommandFailureReportArgs<TType>,
 ): LiveHostCommandFailureResultReportForType<TType> {
@@ -90,7 +90,7 @@ function buildLiveHostCommandFailureReport<
 }
 
 function buildLiveHostCommandSuccessReport<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 >(
   args: BuildLiveHostCommandSuccessReportArgs<TType>,
 ): LiveHostCommandSuccessResultReportForType<TType> {
@@ -113,7 +113,7 @@ async function runPostCommitActions(
 }
 
 async function applyLiveHostCommandReport<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 >(
   deps: CommandResultSideEffectsDeps,
   args: ApplyLiveHostCommandReportArgs<TType>,
@@ -146,7 +146,7 @@ export function createLiveHostCommandExecution(
 }
 
 export async function runLiveHostCommand<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 >(
   deps: CommandResultSideEffectsDeps,
   args: RunLiveHostCommandArgs<TType>,
@@ -200,7 +200,7 @@ export async function runLiveHostCommand<
 }
 
 export function startLiveHostCommand<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 >(
   deps: CommandResultSideEffectsDeps,
   args: StartLiveHostCommandArgs<TType>,

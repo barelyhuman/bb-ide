@@ -265,6 +265,9 @@ const ONLINE_RPC_RESPONSE_RESULT_FIXTURES: OnlineRpcResponseResultFixtures = {
     ],
     selectedOnlyModels: [],
   },
+  "environment.cleanup_preflight": {
+    outcome: "safe_to_destroy",
+  },
   "workspace.status": WORKSPACE_UNAVAILABLE_RESULT,
   "workspace.diff": WORKSPACE_UNAVAILABLE_RESULT,
 };
@@ -576,21 +579,6 @@ describe("host-daemon command schemas", () => {
     ).toMatchObject({
       type: "workspace.commit",
       message: "Checkpoint work",
-    });
-
-    expect(
-      hostDaemonCommandSchema.parse({
-        type: "environment.cleanup_preflight",
-        environmentId: "env_123",
-        workspaceContext: {
-          workspacePath: "/tmp/workspace",
-          workspaceProvisionType: "managed-worktree",
-        },
-        mergeBaseBranch: "main",
-      }),
-    ).toMatchObject({
-      type: "environment.cleanup_preflight",
-      mergeBaseBranch: "main",
     });
 
     expect(
@@ -923,7 +911,7 @@ describe("host-daemon command schemas", () => {
     ).toThrow();
   });
 
-  it("rejects online-RPC-only read commands from the durable command schema", () => {
+  it("rejects online-RPC-only read commands from the settled command schema", () => {
     const onlineReadCommands = [
       { type: "host.list_files", path: "/tmp/workspace", limit: 100 },
       {
@@ -956,6 +944,15 @@ describe("host-daemon command schemas", () => {
       },
       { type: "provider.list" },
       { type: "provider.list_models", providerId: "codex" },
+      {
+        type: "environment.cleanup_preflight",
+        environmentId: "env_123",
+        workspaceContext: {
+          workspacePath: "/tmp/workspace",
+          workspaceProvisionType: "managed-worktree",
+        },
+        mergeBaseBranch: "main",
+      },
       {
         type: "workspace.status",
         environmentId: "env_123",
@@ -1748,7 +1745,7 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
-      hostDaemonCommandResultSchemaByType[
+      hostDaemonOnlineRpcResultSchemaByType[
         "environment.cleanup_preflight"
       ].parse({
         outcome: "safe_to_destroy",
@@ -1758,7 +1755,7 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
-      hostDaemonCommandResultSchemaByType[
+      hostDaemonOnlineRpcResultSchemaByType[
         "environment.cleanup_preflight"
       ].parse({
         outcome: "already_missing",

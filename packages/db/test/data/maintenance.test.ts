@@ -10,10 +10,12 @@ import { noopNotifier } from "../../src/notifier.js";
 import {
   compactDatabase,
   DATABASE_INCREMENTAL_VACUUM_MIN_FREELIST_PAGES,
+  dropDeferredLegacyTables,
   getDatabaseAutoVacuumMode,
   getDatabaseFreelistStats,
   getDatabaseMaintenanceActivity,
   isDatabaseMaintenanceIdle,
+  listDeferredLegacyTables,
   runIncrementalVacuum,
   shouldCompactDatabase,
   shouldRunIncrementalVacuum,
@@ -32,6 +34,19 @@ interface TempDatabasePath {
 interface PreservedValueRow {
   value: string;
 }
+
+interface ProjectNameRow {
+  name: string;
+}
+
+const TEST_DEFERRED_LEGACY_TABLE_NAMES = [
+  "client_turn_requests",
+  "environment_operations",
+  "host_daemon_command_attempts",
+  "host_daemon_commands",
+  "project_operations",
+  "thread_operations",
+];
 
 function setup() {
   const db = createConnection(":memory:");
@@ -72,12 +87,35 @@ function createLegacyDatabaseWithPreservedData(dbPath: string): void {
   }
 }
 
+function quoteSqlIdentifier(identifier: string): string {
+  return `"${identifier.replaceAll('"', '""')}"`;
+}
+
+function createDeferredLegacyTables(db: DbConnection): void {
+  for (const tableName of TEST_DEFERRED_LEGACY_TABLE_NAMES) {
+    db.$client
+      .prepare(
+        `CREATE TABLE ${quoteSqlIdentifier(tableName)} (id TEXT PRIMARY KEY)`,
+      )
+      .run();
+  }
+}
+
 function readPreservedValue(db: DbConnection): string | undefined {
   return db.$client
     .prepare<[], PreservedValueRow>(
       "SELECT value FROM preserved_rows WHERE id = 1",
     )
     .get()?.value;
+}
+
+function readProjectName(
+  db: DbConnection,
+  projectId: string,
+): string | undefined {
+  return db.$client
+    .prepare<[string], ProjectNameRow>("SELECT name FROM projects WHERE id = ?")
+    .get(projectId)?.name;
 }
 
 describe("database maintenance", () => {
@@ -105,6 +143,22 @@ describe("database maintenance", () => {
   it("creates databases in incremental auto-vacuum mode", () => {
     const { db } = setup();
     expect(getDatabaseAutoVacuumMode(db)).toBe("incremental");
+  });
+
+  it("drops deferred legacy queue tables without touching current data", () => {
+    const { db, project } = setup();
+    createDeferredLegacyTables(db);
+    expect(listDeferredLegacyTables(db)).toEqual(
+      [...TEST_DEFERRED_LEGACY_TABLE_NAMES].sort(),
+    );
+
+    const result = dropDeferredLegacyTables(db);
+
+    expect(result.droppedTables).toEqual(
+      [...TEST_DEFERRED_LEGACY_TABLE_NAMES].sort(),
+    );
+    expect(listDeferredLegacyTables(db)).toEqual([]);
+    expect(readProjectName(db, project.id)).toBe("maintenance-project");
   });
 
   it("keeps fresh file-backed databases in incremental auto-vacuum mode after reopen", () => {

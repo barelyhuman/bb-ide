@@ -19,12 +19,12 @@ import { z } from "zod";
 import type { Endpoint } from "./common.js";
 import type {
   HostDaemonOnlineRpcCommandType,
-  HostDaemonRpcCommandType,
+  HostDaemonSettledCommandType,
 } from "./commands.js";
 import {
   hostDaemonOnlineRpcResultSchemaByType,
   hostDaemonCommandResultSchemaByType,
-  hostDaemonDurableCommandTypeSchema,
+  hostDaemonSettledCommandTypeSchema,
   hostDaemonRpcCommandSchema,
   hostDaemonRpcCommandTypeSchema,
   workspaceContextSchema,
@@ -326,9 +326,7 @@ const hostDaemonOnlineRpcResponseSuccessBaseSchema = z
 
 function onlineRpcResponseSuccessSchemaFor<
   TType extends HostDaemonOnlineRpcCommandType,
->(
-  commandType: TType,
-) {
+>(commandType: TType) {
   return hostDaemonOnlineRpcResponseSuccessBaseSchema.extend({
     commandType: z.literal(commandType),
     result: hostDaemonOnlineRpcResultSchemaByType[commandType],
@@ -336,13 +334,14 @@ function onlineRpcResponseSuccessSchemaFor<
 }
 
 function commandRpcResponseSuccessSchemaFor<
-  TType extends HostDaemonRpcCommandType,
+  TType extends HostDaemonSettledCommandType,
 >(commandType: TType) {
   return hostDaemonOnlineRpcResponseSuccessBaseSchema.extend({
     commandType: z.literal(commandType),
-    result: hostDaemonCommandResultSchemaByType[
-      hostDaemonDurableCommandTypeSchema.parse(commandType)
-    ],
+    result:
+      hostDaemonCommandResultSchemaByType[
+        hostDaemonSettledCommandTypeSchema.parse(commandType)
+      ],
   });
 }
 
@@ -358,6 +357,7 @@ const hostDaemonOnlineRpcResponseSuccessSchema = z.discriminatedUnion(
     onlineRpcResponseSuccessSchemaFor("host.read_file_relative"),
     onlineRpcResponseSuccessSchemaFor("provider.list"),
     onlineRpcResponseSuccessSchemaFor("provider.list_models"),
+    onlineRpcResponseSuccessSchemaFor("environment.cleanup_preflight"),
     onlineRpcResponseSuccessSchemaFor("workspace.status"),
     onlineRpcResponseSuccessSchemaFor("workspace.diff"),
     commandRpcResponseSuccessSchemaFor("thread.start"),
@@ -375,7 +375,6 @@ const hostDaemonOnlineRpcResponseSuccessSchema = z.discriminatedUnion(
     commandRpcResponseSuccessSchemaFor("host.delete_path_relative"),
     commandRpcResponseSuccessSchemaFor("environment.provision"),
     commandRpcResponseSuccessSchemaFor("environment.provision.cancel"),
-    commandRpcResponseSuccessSchemaFor("environment.cleanup_preflight"),
     commandRpcResponseSuccessSchemaFor("environment.destroy"),
     commandRpcResponseSuccessSchemaFor("workspace.commit"),
     commandRpcResponseSuccessSchemaFor("workspace.squash_merge"),

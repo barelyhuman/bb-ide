@@ -1,7 +1,7 @@
 import type {
   HostDaemonCommand,
   HostDaemonCommandResult,
-  HostDaemonDurableCommandType,
+  HostDaemonSettledCommandType,
   HostDaemonOnlineRpcCommand,
   HostDaemonOnlineRpcCommandType,
   HostDaemonOnlineRpcResult,
@@ -139,7 +139,7 @@ function recordReplayTurnRequest(
 }
 
 type CommandHandlerMap = {
-  [TType in HostDaemonDurableCommandType]: (
+  [TType in HostDaemonSettledCommandType]: (
     command: Extract<HostDaemonCommand, { type: TType }>,
     options: CommandDispatchOptions,
   ) => Promise<HostDaemonCommandResult<TType>>;
@@ -161,7 +161,7 @@ function throwExpectedWorkspacePathNotFoundOrRethrow(error: unknown): never {
 
 function cleanupPreflightFailureResult(
   failure: WorkspaceResolutionFailure,
-): HostDaemonCommandResult<"environment.cleanup_preflight"> {
+): HostDaemonOnlineRpcResult<"environment.cleanup_preflight"> {
   if (failure.code === "path_not_found") {
     return { outcome: "already_missing", failure };
   }
@@ -174,7 +174,7 @@ function cleanupPreflightFailureResult(
 async function environmentCleanupPreflight(
   command: CommandOf<"environment.cleanup_preflight">,
   options: CommandDispatchOptions,
-): Promise<HostDaemonCommandResult<"environment.cleanup_preflight">> {
+): Promise<HostDaemonOnlineRpcResult<"environment.cleanup_preflight">> {
   const resolution = await resolveWorkspaceForCommand({
     dataDir: options.dataDir,
     environmentId: command.environmentId,
@@ -323,7 +323,6 @@ const commandHandlers: CommandHandlerMap = {
   "host.delete_path_relative": deleteHostRelativePath,
   "environment.provision": provisionEnvironment,
   "environment.provision.cancel": cancelEnvironmentProvision,
-  "environment.cleanup_preflight": environmentCleanupPreflight,
   "environment.destroy": async (command, options) => {
     const resolution = await resolveWorkspaceForCommand({
       dataDir: options.dataDir,
@@ -380,6 +379,7 @@ const onlineRpcHandlers: OnlineRpcHandlerMap = {
     (options.listModels ?? defaultListModels)({
       providerId: command.providerId,
     }),
+  "environment.cleanup_preflight": environmentCleanupPreflight,
   "workspace.status": async (command, options) => {
     const resolution = await resolveWorkspaceForCommand({
       dataDir: options.dataDir,
@@ -443,7 +443,7 @@ const onlineRpcHandlers: OnlineRpcHandlerMap = {
 };
 
 export async function dispatchCommand<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 >(
   command: Extract<HostDaemonCommand, { type: TType }>,
   options: CommandDispatchOptions,

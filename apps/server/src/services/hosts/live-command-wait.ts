@@ -2,7 +2,7 @@ import { performance } from "node:perf_hooks";
 import {
   type HostDaemonCommand,
   type HostDaemonCommandResult,
-  type HostDaemonDurableCommandType,
+  type HostDaemonSettledCommandType,
 } from "@bb/host-daemon-contract";
 import type { LoggedWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
@@ -10,7 +10,7 @@ import { roundDurationMs } from "../lib/duration.js";
 import { callHostOnlineRpc } from "./online-rpc.js";
 
 export interface RunLiveCommandAndWaitArgs<
-  TType extends HostDaemonDurableCommandType,
+  TType extends HostDaemonSettledCommandType,
 > {
   command: Extract<HostDaemonCommand, { type: TType }>;
   hostId: string;
@@ -26,7 +26,7 @@ type SlowCommandWaitOutcome =
   | "unknown_error";
 
 interface LogSlowCommandWaitArgs {
-  commandType: HostDaemonDurableCommandType;
+  commandType: HostDaemonSettledCommandType;
   completed: boolean;
   durationMs: number;
   errorCode?: string;
@@ -112,13 +112,13 @@ function classifySlowCommandWaitFailure(
   };
 }
 
-export function runLiveCommandAndWait<TType extends HostDaemonDurableCommandType>(
+export function runLiveCommandAndWait<TType extends HostDaemonSettledCommandType>(
   deps: LoggedWorkSessionDeps,
   args: RunLiveCommandAndWaitArgs<TType>,
 ): Promise<HostDaemonCommandResult<TType>>;
 export async function runLiveCommandAndWait(
   deps: LoggedWorkSessionDeps,
-  args: RunLiveCommandAndWaitArgs<HostDaemonDurableCommandType>,
+  args: RunLiveCommandAndWaitArgs<HostDaemonSettledCommandType>,
 ): Promise<HostDaemonCommandResult> {
   const startedAt = performance.now();
   let logOutcome: SlowCommandWaitOutcome = "success";

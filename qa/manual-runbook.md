@@ -696,7 +696,7 @@ bb thread output "$SMOKE_THREAD_ID"
 Expected result:
 
 - Sending while the host is offline fails fast.
-- No new durable command/request row is inserted. Upgraded large databases may
+- No new host command/request queue row is inserted. Upgraded large databases may
   retain retired queue tables as inert migration debris, but the live-RPC path
   must not write to them.
 - Retrying after the daemon reconnects works as a fresh live RPC request.

@@ -4,8 +4,11 @@ import {
   WorkspaceError,
   type HostWorkspace,
 } from "@bb/host-workspace";
-import type { HostDaemonCommand } from "@bb/host-daemon-contract";
-import { dispatchCommand } from "../../src/command-dispatch.js";
+import type { HostDaemonOnlineRpcCommand } from "@bb/host-daemon-contract";
+import {
+  dispatchCommand,
+  dispatchOnlineRpcCommand,
+} from "../../src/command-dispatch.js";
 import type { EventSinkInput } from "../../src/event-sink.js";
 import {
   cleanupTempDirs,
@@ -652,7 +655,7 @@ describe("environment command dispatch", () => {
       isWorktree: true,
     });
 
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "environment.cleanup_preflight",
         environmentId: "env-cleanup-clean",
@@ -686,7 +689,7 @@ describe("environment command dispatch", () => {
       },
     });
 
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "environment.cleanup_preflight",
         environmentId: "env-cleanup-dirty",
@@ -717,7 +720,7 @@ describe("environment command dispatch", () => {
       createRuntime: () => runtime,
     });
 
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "environment.cleanup_preflight",
         environmentId: "env-cleanup-missing",
@@ -748,7 +751,7 @@ describe("environment command dispatch", () => {
     });
 
     const command: Extract<
-      HostDaemonCommand,
+      HostDaemonOnlineRpcCommand,
       { type: "environment.cleanup_preflight" }
     > = {
       type: "environment.cleanup_preflight",
@@ -760,7 +763,10 @@ describe("environment command dispatch", () => {
       mergeBaseBranch: "main",
     };
 
-    const result = await dispatchCommand(command, harness.dispatchOptions());
+    const result = await dispatchOnlineRpcCommand(
+      command,
+      harness.dispatchOptions(),
+    );
 
     expect(result).toEqual({
       outcome: "probe_failed",
@@ -775,7 +781,7 @@ describe("environment command dispatch", () => {
     expect(harness.workspaceState.destroyed).toBe(false);
 
     await expect(
-      dispatchCommand(command, harness.dispatchOptions()),
+      dispatchOnlineRpcCommand(command, harness.dispatchOptions()),
     ).resolves.toMatchObject({
       outcome: "probe_failed",
       failure: {

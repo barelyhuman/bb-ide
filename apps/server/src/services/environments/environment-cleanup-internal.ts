@@ -21,7 +21,7 @@ import {
   setEnvironmentRecordDestroyed,
   setEnvironmentStatus,
 } from "@bb/db/internal-environment-lifecycle";
-import { type HostDaemonCommandResult } from "@bb/host-daemon-contract";
+import { type HostDaemonOnlineRpcResult } from "@bb/host-daemon-contract";
 import {
   emptyCommandResultSideEffects,
   type CommandResultReportForType,
@@ -31,7 +31,7 @@ import {
   type HostDaemonCommandForType,
 } from "../../internal/command-result-side-effects.js";
 import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
-import { runLiveCommandAndWait } from "../hosts/live-command-wait.js";
+import { callHostRetryableOnlineRpc } from "../hosts/online-rpc.js";
 import {
   createLiveHostCommandExecution,
   LIVE_DAEMON_COMMAND_TIMEOUT_MS,
@@ -116,7 +116,7 @@ interface EnvironmentCleanupSettlementDeps extends EnvironmentCleanupWriteDeps {
 
 type EnvironmentCleanupDecisionDeps = Pick<AppDeps, "db">;
 type EnvironmentCleanupPreflightResult =
-  HostDaemonCommandResult<"environment.cleanup_preflight">;
+  HostDaemonOnlineRpcResult<"environment.cleanup_preflight">;
 
 function hasConnectedHostSession(
   deps: Pick<AppDeps, "db">,
@@ -167,7 +167,7 @@ async function workspaceCanBeSafelyCleaned(
     return false;
   }
 
-  const result = await runLiveCommandAndWait(deps, {
+  const result = await callHostRetryableOnlineRpc(deps, {
     hostId: environment.hostId,
     timeoutMs: 30_000,
     command: {

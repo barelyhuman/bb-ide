@@ -9,11 +9,13 @@ import {
   DATABASE_INCREMENTAL_VACUUM_MIN_FREELIST_PAGES,
   DEFAULT_CLOSED_SESSION_PRUNE_BATCH_SIZE,
   DEFAULT_COMPLETED_EVENT_OUTPUT_TRUNCATION_BATCH_SIZE,
+  dropDeferredLegacyTables,
   getDatabaseAutoVacuumMode,
   getDatabaseCompactionStats,
   getDatabaseFreelistStats,
   getDatabaseMaintenanceActivity,
   isDatabaseMaintenanceIdle,
+  listDeferredLegacyTables,
   listStopRequestedThreads,
   environments,
   pruneClosedSessions,
@@ -218,6 +220,35 @@ export function runDatabaseMaintenanceSweep(
 
   lastDatabaseMaintenanceCheckAt = now;
 
+  const deferredLegacyTables = listDeferredLegacyTables(deps.db);
+  if (deferredLegacyTables.length > 0) {
+    const activity = getDatabaseMaintenanceActivity(deps.db);
+    if (!isDatabaseMaintenanceIdle(activity)) {
+      deps.logger.debug(
+        { activity, deferredLegacyTables },
+        "Deferred legacy database table cleanup skipped while app work is active",
+      );
+      return;
+    }
+
+    databaseMaintenanceRunning = true;
+    try {
+      const result = dropDeferredLegacyTables(deps.db);
+      deps.logger.info(
+        { result },
+        "Deferred legacy database table cleanup completed",
+      );
+    } catch (error) {
+      deps.logger.warn(
+        { err: error },
+        "Deferred legacy database table cleanup failed",
+      );
+    } finally {
+      databaseMaintenanceRunning = false;
+    }
+    return;
+  }
+
   const autoVacuumMode = getDatabaseAutoVacuumMode(deps.db);
 
   if (autoVacuumMode === "incremental") {
@@ -328,7 +359,7 @@ export async function runProjectDeletionSweep(
   }
 }
 
-// Provisioning has no durable host-command lifecycle to resume here. This
+// Provisioning has no host-command queue to resume here. This
 // sweep only re-enters server-owned provisioning state so orphaned in-process
 // advances can either continue from persisted resource state or fail cleanly.
 export async function runEnvironmentProvisioningSweep(

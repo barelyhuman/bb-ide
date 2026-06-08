@@ -16,6 +16,7 @@ import {
   getDatabaseFreelistStats,
   getDatabaseMaintenanceActivity,
   isDatabaseMaintenanceIdle,
+  listDeferredLegacyTables,
   migrate,
   noopNotifier,
   upsertHost,
@@ -28,6 +29,14 @@ const ONE_HOUR_MS = 60 * 60_000;
 const SWEEP_TIME_START_MS = 1_000_000_000_000;
 const FREELIST_ROW_COUNT = 1_200;
 const SQLITE_BUSY_HEADROOM_MS = 1_000;
+const TEST_DEFERRED_LEGACY_TABLE_NAMES = [
+  "client_turn_requests",
+  "environment_operations",
+  "host_daemon_command_attempts",
+  "host_daemon_commands",
+  "project_operations",
+  "thread_operations",
+];
 
 let sweepTimeMs = SWEEP_TIME_START_MS;
 
@@ -92,6 +101,20 @@ function createLegacyDatabaseFile(dbPath: string): void {
   }
 }
 
+function quoteSqlIdentifier(identifier: string): string {
+  return `"${identifier.replaceAll('"', '""')}"`;
+}
+
+function createDeferredLegacyTables(db: DbConnection): void {
+  for (const tableName of TEST_DEFERRED_LEGACY_TABLE_NAMES) {
+    db.$client
+      .prepare(
+        `CREATE TABLE ${quoteSqlIdentifier(tableName)} (id TEXT PRIMARY KEY)`,
+      )
+      .run();
+  }
+}
+
 function markDatabaseBusy(db: DbConnection): void {
   const host = upsertHost(db, noopNotifier, {
     name: "maintenance-host",
@@ -145,6 +168,30 @@ function setupBusyFileDatabaseWithFreelist(tempDatabase: TempDatabasePath) {
 }
 
 describe("runDatabaseMaintenanceSweep", () => {
+  it("drops deferred legacy tables on an idle maintenance pass", () => {
+    const db = createConnection(":memory:");
+    migrate(db);
+    createDeferredLegacyTables(db);
+    expect(listDeferredLegacyTables(db)).toEqual(
+      [...TEST_DEFERRED_LEGACY_TABLE_NAMES].sort(),
+    );
+
+    runDatabaseMaintenanceSweep({ db, logger: testLogger }, nextSweepTime());
+
+    expect(listDeferredLegacyTables(db)).toEqual([]);
+  });
+
+  it("skips deferred legacy table cleanup while app work is active", () => {
+    const { db } = setupBusyDatabaseWithFreelist();
+    createDeferredLegacyTables(db);
+
+    runDatabaseMaintenanceSweep({ db, logger: testLogger }, nextSweepTime());
+
+    expect(listDeferredLegacyTables(db)).toEqual(
+      [...TEST_DEFERRED_LEGACY_TABLE_NAMES].sort(),
+    );
+  });
+
   it("reclaims freed pages incrementally even when the instance is not idle", () => {
     const { db } = setupBusyDatabaseWithFreelist();
 

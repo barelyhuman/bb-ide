@@ -1,6 +1,6 @@
 import type {
   HostDaemonCommand,
-  HostDaemonDurableCommandType,
+  HostDaemonSettledCommandType,
 } from "@bb/host-daemon-contract";
 import {
   emptyCommandResultSideEffects,
@@ -21,7 +21,7 @@ import {
 } from "../services/threads/thread-lifecycle.js";
 import { notifyWorkspaceMutationResult } from "./environment-changes.js";
 
-type ParsedCommandType = HostDaemonDurableCommandType;
+type ParsedCommandType = HostDaemonSettledCommandType;
 type ParsedCommandForType<TType extends ParsedCommandType> = Extract<
   HostDaemonCommand,
   { type: TType }

@@ -423,6 +423,7 @@ export type {
 
 export {
   compactDatabase,
+  dropDeferredLegacyTables,
   runIncrementalVacuum,
   getDatabaseAutoVacuumMode,
   DATABASE_COMPACTION_MIN_RECLAIMABLE_BYTES,
@@ -434,6 +435,7 @@ export {
   getDatabaseFreelistStats,
   getDatabaseMaintenanceActivity,
   isDatabaseMaintenanceIdle,
+  listDeferredLegacyTables,
   shouldCompactDatabase,
   shouldRunIncrementalVacuum,
 } from "./maintenance.js";
@@ -445,5 +447,6 @@ export type {
   DatabaseFreelistStats,
   DatabaseIncrementalVacuumDecisionArgs,
   DatabaseMaintenanceActivity,
+  DropDeferredLegacyTablesResult,
   RunIncrementalVacuumArgs,
 } from "./maintenance.js";

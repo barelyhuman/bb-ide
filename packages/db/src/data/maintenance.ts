@@ -51,6 +51,14 @@ interface DbstatUnusedRow {
   unusedBytes: number;
 }
 
+interface ForeignKeysRow {
+  foreign_keys: number;
+}
+
+interface SqliteTableNameRow {
+  name: string;
+}
+
 export interface DatabaseMaintenanceActivity {
   activeCommandCount: number;
   activeEnvironmentProvisioningCount: number;
@@ -98,9 +106,36 @@ export interface RunIncrementalVacuumArgs {
   maxPages: number;
 }
 
+export interface DropDeferredLegacyTablesResult {
+  droppedTables: string[];
+}
+
 interface RunWithMaintenanceBusyTimeoutArgs<TValue> {
   db: DbConnection;
   work: () => TValue;
+}
+
+const DEFERRED_LEGACY_TABLE_NAMES = [
+  "client_turn_requests",
+  "environment_operations",
+  "host_daemon_command_attempts",
+  "host_daemon_commands",
+  "project_operations",
+  "thread_operations",
+] as const;
+const DEFERRED_LEGACY_TABLE_NAME_SET = new Set<string>(
+  DEFERRED_LEGACY_TABLE_NAMES,
+);
+const DEFERRED_LEGACY_TABLE_NAME_LIST_SQL = DEFERRED_LEGACY_TABLE_NAMES.map(
+  quoteSqlString,
+).join(", ");
+
+function quoteSqlString(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+function quoteSqlIdentifier(identifier: string): string {
+  return `"${identifier.replaceAll('"', '""')}"`;
 }
 
 function countValue(row: CountRow | undefined): number {
@@ -133,6 +168,13 @@ function readBusyTimeoutMs(db: DbConnection): number {
   return (
     db.$client.prepare<[], BusyTimeoutRow>("PRAGMA busy_timeout").get()
       ?.timeout ?? 0
+  );
+}
+
+function readForeignKeysEnabled(db: DbConnection): boolean {
+  return (
+    db.$client.prepare<[], ForeignKeysRow>("PRAGMA foreign_keys").get()
+      ?.foreign_keys === 1
   );
 }
 
@@ -234,6 +276,52 @@ export function isDatabaseMaintenanceIdle(
     activity.activeThreadCount === 0 &&
     activity.activeThreadProvisioningCount === 0
   );
+}
+
+export function listDeferredLegacyTables(db: DbConnection): string[] {
+  return db.$client
+    .prepare<[], SqliteTableNameRow>(
+      `
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name IN (${DEFERRED_LEGACY_TABLE_NAME_LIST_SQL})
+        ORDER BY name
+      `,
+    )
+    .all()
+    .map((row) => row.name)
+    .filter((name) => DEFERRED_LEGACY_TABLE_NAME_SET.has(name));
+}
+
+export function dropDeferredLegacyTables(
+  db: DbConnection,
+): DropDeferredLegacyTablesResult {
+  return runWithMaintenanceBusyTimeout({
+    db,
+    work: () => {
+      const droppedTables = listDeferredLegacyTables(db);
+      if (droppedTables.length === 0) {
+        return { droppedTables };
+      }
+
+      const foreignKeysEnabled = readForeignKeysEnabled(db);
+      db.$client.pragma("foreign_keys = OFF");
+      try {
+        for (const tableName of droppedTables) {
+          db.$client.prepare(
+            `DROP TABLE IF EXISTS ${quoteSqlIdentifier(tableName)}`,
+          ).run();
+        }
+      } finally {
+        db.$client.pragma(
+          `foreign_keys = ${foreignKeysEnabled ? "ON" : "OFF"}`,
+        );
+      }
+
+      return { droppedTables };
+    },
+  });
 }
 
 export function getDatabaseFreelistStats(
