@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, useRef } from "react";
 import type { TimelineUserConversationRow } from "@bb/server-contract";
 import type { PromptTextMention } from "@bb/domain";
 import type { TimelineTitle, TimelineTitleSegment } from "@bb/thread-view";
@@ -12,6 +12,7 @@ import {
   renderMentionTextSegments,
   shiftMentionsToTextRange,
 } from "./ConversationMessageMentions.js";
+import { useLineOverflowMeasurement } from "./conversation-message-overflow.js";
 import { ExpandableTimelineRow } from "./ExpandableTimelineRow.js";
 import { NESTED_TIMELINE_GROUP_LINE_CLASS_NAME } from "./timeline-nested-group-line.js";
 import type { TimelineTitleLinkResolver } from "./TimelineTitleView.js";
@@ -57,6 +58,8 @@ interface GeneratedConversationTitleArgs {
   sourceName: string;
   sourceThreadId: string | null;
 }
+
+const GENERATED_CONVERSATION_TRUSTED_FIT_PREVIEW_LENGTH = 80;
 
 export function generatedConversationBodySlice({
   initiator,
@@ -195,6 +198,7 @@ export const GeneratedConversationMessage = memo(
         }),
       [mentions, messageText.length, trimStartLength],
     );
+    const previewMeasurementRef = useRef<HTMLParagraphElement>(null);
     const requestLabel = turnRequestLabel(turnRequest);
     const isPendingSteer =
       turnRequest.kind === "steer" && turnRequest.status === "pending";
@@ -208,6 +212,44 @@ export const GeneratedConversationMessage = memo(
       [sourceKind, sourceName, sourceThreadId],
     );
     const leadingIcon = generatedConversationIconName(sourceKind);
+    const hasExpandedOnlyContent =
+      attachmentItems.filePaths.length > 0 ||
+      attachmentItems.imageItems.length > 0 ||
+      requestLabel !== null;
+    const previewOverflowMeasurement = useLineOverflowMeasurement({
+      elementRef: previewMeasurementRef,
+      enabled: messageText.length > 0,
+      measurementKey: messageText,
+      visibleLineCount: 1,
+    });
+    const previewIsShortEnoughToTrustFit =
+      messageText.length <=
+        GENERATED_CONVERSATION_TRUSTED_FIT_PREVIEW_LENGTH;
+    const expandable =
+      hasExpandedOnlyContent ||
+      (messageText.length > 0 &&
+        (!previewIsShortEnoughToTrustFit ||
+          previewOverflowMeasurement !== "fits"));
+    const collapsedPreview = messageText ? (
+      <div className={NESTED_TIMELINE_GROUP_LINE_CLASS_NAME}>
+        <p
+          ref={previewMeasurementRef}
+          aria-hidden
+          className="invisible h-0 overflow-hidden break-words pl-2 text-sm leading-relaxed text-foreground"
+        >
+          {renderMentionTextSegments({
+            mentions: messageMentions,
+            text: messageText,
+          })}
+        </p>
+        <p className="line-clamp-1 break-words pl-2 text-sm leading-relaxed text-foreground">
+          {renderMentionTextSegments({
+            mentions: messageMentions,
+            text: messageText,
+          })}
+        </p>
+      </div>
+    ) : null;
     const renderBody = useCallback(
       () => (
         <div className={NESTED_TIMELINE_GROUP_LINE_CLASS_NAME}>
@@ -266,6 +308,8 @@ export const GeneratedConversationMessage = memo(
     return (
       <ExpandableTimelineRow
         title={title}
+        collapsedPreview={collapsedPreview}
+        expandable={expandable}
         leadingIcon={leadingIcon}
         resolveSegmentLinkHref={resolveSegmentLinkHref}
         renderBody={renderBody}

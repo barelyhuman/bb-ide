@@ -5,11 +5,17 @@ import {
 } from "react";
 import { cn } from "@/lib/utils";
 
-interface UseIsOverflowingArgs {
+interface UseOverflowMeasurementArgs {
   elementRef: RefObject<HTMLElement | null>;
   enabled: boolean;
   measurementKey: string;
 }
+
+interface UseLineOverflowMeasurementArgs extends UseOverflowMeasurementArgs {
+  visibleLineCount: number;
+}
+
+type OverflowMeasurement = "unmeasured" | "fits" | "overflowing";
 
 interface ConversationMessageOverflowToggleLabels {
   collapsed: string;
@@ -29,29 +35,35 @@ interface ConversationMessageInlineOverflowToggleProps {
   onToggle: () => void;
 }
 
-export function useIsOverflowing({
+export function useOverflowMeasurement({
   elementRef,
   enabled,
   measurementKey,
-}: UseIsOverflowingArgs): boolean {
-  const [isOverflowing, setIsOverflowing] = useState(false);
+}: UseOverflowMeasurementArgs): OverflowMeasurement {
+  const [measurement, setMeasurement] =
+    useState<OverflowMeasurement>("unmeasured");
 
   // useLayoutEffect (not useEffect) so the first measurement runs before
   // paint. Otherwise the first paint renders without the overflow toggle,
   // and the button appears on the next frame after the effect runs.
   useLayoutEffect(() => {
     if (!enabled) {
-      setIsOverflowing(false);
+      setMeasurement("fits");
       return;
     }
 
     const element = elementRef.current;
     if (!element) {
+      setMeasurement("unmeasured");
       return;
     }
 
     const measure = () => {
-      setIsOverflowing(element.scrollHeight > element.clientHeight + 1);
+      setMeasurement(
+        element.scrollHeight > element.clientHeight + 1
+          ? "overflowing"
+          : "fits",
+      );
     };
     measure();
 
@@ -64,7 +76,61 @@ export function useIsOverflowing({
     return () => resizeObserver.disconnect();
   }, [elementRef, enabled, measurementKey]);
 
-  return isOverflowing;
+  return measurement;
+}
+
+function elementLineHeight(element: HTMLElement): number {
+  const computedLineHeight = window.getComputedStyle(element).lineHeight;
+  const lineHeight = Number.parseFloat(computedLineHeight);
+  if (Number.isFinite(lineHeight)) {
+    return lineHeight;
+  }
+  return element.clientHeight;
+}
+
+export function useLineOverflowMeasurement({
+  elementRef,
+  enabled,
+  measurementKey,
+  visibleLineCount,
+}: UseLineOverflowMeasurementArgs): OverflowMeasurement {
+  const [measurement, setMeasurement] =
+    useState<OverflowMeasurement>("unmeasured");
+
+  useLayoutEffect(() => {
+    if (!enabled) {
+      setMeasurement("fits");
+      return;
+    }
+
+    const element = elementRef.current;
+    if (!element) {
+      setMeasurement("unmeasured");
+      return;
+    }
+
+    const measure = () => {
+      const visibleHeight = elementLineHeight(element) * visibleLineCount;
+      setMeasurement(
+        element.scrollHeight > visibleHeight + 1 ? "overflowing" : "fits",
+      );
+    };
+    measure();
+
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(measure);
+    resizeObserver.observe(element);
+    return () => resizeObserver.disconnect();
+  }, [elementRef, enabled, measurementKey, visibleLineCount]);
+
+  return measurement;
+}
+
+export function useIsOverflowing(args: UseOverflowMeasurementArgs): boolean {
+  return useOverflowMeasurement(args) === "overflowing";
 }
 
 export function ConversationMessageOverflowToggle({

@@ -1,6 +1,15 @@
-import { memo, useCallback, useEffect, useState, type ReactNode } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import type { TimelineTitle } from "@bb/thread-view";
 import {
+  COLLAPSIBLE_HEADER_STATIC_TONE_CLASS,
   ExpandablePanel,
   getCollapsibleHeaderToneClass,
 } from "../../ui/disclosure.js";
@@ -29,6 +38,8 @@ export interface ExpandableTimelineRowProps {
   renderBody: () => ReactNode;
   title: TimelineTitle;
   className?: string;
+  collapsedPreview?: ReactNode;
+  expandable?: boolean;
   horizontalPadding?: TimelineRowHorizontalPadding;
   leadingIcon?: IconName;
   onTitleAction?: TimelineTitleActionResolver;
@@ -36,6 +47,13 @@ export interface ExpandableTimelineRowProps {
 }
 
 type ManualExpansionOverride = boolean | null;
+type CollapsedPreviewClickEvent = MouseEvent<HTMLDivElement>;
+type CollapsedPreviewKeyboardEvent = KeyboardEvent<HTMLDivElement>;
+
+interface InteractivePreviewTargetArgs {
+  currentTarget: HTMLDivElement;
+  target: EventTarget | null;
+}
 
 function headerToneClass(title: TimelineTitle, isExpanded: boolean): string {
   if (title.tone === "summary") {
@@ -44,9 +62,21 @@ function headerToneClass(title: TimelineTitle, isExpanded: boolean): string {
   return getCollapsibleHeaderToneClass(isExpanded);
 }
 
+function isInteractivePreviewTarget({
+  currentTarget,
+  target,
+}: InteractivePreviewTargetArgs): boolean {
+  if (!(target instanceof Element) || target === currentTarget) {
+    return false;
+  }
+  return target.closest("a,button,input,select,textarea") !== null;
+}
+
 function ExpandableTimelineRowComponent({
   autoExpanded = false,
   className,
+  collapsedPreview,
+  expandable = true,
   horizontalPadding = "default",
   leadingIcon,
   onBeforeExpand,
@@ -66,8 +96,9 @@ function ExpandableTimelineRowComponent({
     }
   }, [terminalAutoExpanded]);
   const isExpanded =
-    manualExpansionOverride ??
-    (autoExpanded || terminalAutoExpanded || terminalAutoExpandedLatch);
+    expandable &&
+    (manualExpansionOverride ??
+      (autoExpanded || terminalAutoExpanded || terminalAutoExpandedLatch));
   const horizontalPaddingClass =
     timelineRowHorizontalPaddingClassName(horizontalPadding);
   const handleToggle = useCallback((): void => {
@@ -76,12 +107,63 @@ function ExpandableTimelineRowComponent({
     }
     setManualExpansionOverride(!isExpanded);
   }, [isExpanded, onBeforeExpand]);
+  const handleCollapsedPreviewClick = useCallback(
+    (event: CollapsedPreviewClickEvent): void => {
+      if (
+        isInteractivePreviewTarget({
+          currentTarget: event.currentTarget,
+          target: event.target,
+        })
+      ) {
+        return;
+      }
+      handleToggle();
+    },
+    [handleToggle],
+  );
+  const handleCollapsedPreviewKeyDown = useCallback(
+    (event: CollapsedPreviewKeyboardEvent): void => {
+      if (event.target !== event.currentTarget) {
+        return;
+      }
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+      event.preventDefault();
+      handleToggle();
+    },
+    [handleToggle],
+  );
 
   return (
     <ExpandablePanel
       isExpanded={isExpanded}
-      onToggle={handleToggle}
-      headerToneClass={headerToneClass(title, isExpanded)}
+      onToggle={expandable ? handleToggle : undefined}
+      headerToneClass={
+        expandable
+          ? headerToneClass(title, isExpanded)
+          : COLLAPSIBLE_HEADER_STATIC_TONE_CLASS
+      }
+      collapsedContent={
+        collapsedPreview ? (
+          <div
+            className={cn(
+              horizontalPaddingClass,
+              "pb-1 pt-0.5",
+              expandable ? "cursor-pointer focus-visible:outline-none" : null,
+            )}
+            role={expandable ? "button" : undefined}
+            tabIndex={expandable ? 0 : undefined}
+            aria-expanded={expandable ? isExpanded : undefined}
+            onClick={expandable ? handleCollapsedPreviewClick : undefined}
+            onKeyDown={
+              expandable ? handleCollapsedPreviewKeyDown : undefined
+            }
+          >
+            {collapsedPreview}
+          </div>
+        ) : null
+      }
       summaryContent={
         <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
           {leadingIcon ? (

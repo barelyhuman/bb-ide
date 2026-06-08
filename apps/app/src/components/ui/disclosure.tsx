@@ -95,7 +95,7 @@ export function CollapsibleHeader({
           "pointer-events-none size-4 shrink-0 origin-center transition-[opacity,rotate] duration-200 ease-out",
           isExpanded
             ? "rotate-90"
-            : "opacity-0 group-hover/toggle:opacity-100 group-focus-visible/toggle:opacity-100 max-md:pointer-coarse:opacity-100",
+            : "opacity-0 group-hover/timeline-row:opacity-100 group-focus-within/timeline-row:opacity-100 group-hover/toggle:opacity-100 group-focus-visible/toggle:opacity-100 max-md:pointer-coarse:opacity-100",
         )}
       />
     </button>
@@ -106,7 +106,8 @@ export interface ExpandablePanelProps {
   isExpanded: boolean;
   summaryContent: ReactNode;
   headerToneClass: string;
-  onToggle: () => void;
+  onToggle?: () => void;
+  collapsedContent?: ReactNode;
   headerButtonClassName?: string;
   summaryContentClassName?: string;
   children?: ReactNode;
@@ -122,6 +123,7 @@ export function ExpandablePanel({
   summaryContent,
   headerToneClass,
   onToggle,
+  collapsedContent,
   headerButtonClassName,
   summaryContentClassName,
   children,
@@ -131,6 +133,8 @@ export function ExpandablePanel({
   bodyClassName,
   contentClassName,
 }: ExpandablePanelProps) {
+  const hasCollapsedContent =
+    collapsedContent !== undefined && collapsedContent !== null;
   const headerRootClassName = cn(
     "px-2 py-1",
     headerClassName,
@@ -185,6 +189,11 @@ export function ExpandablePanel({
     if (isExpanded) {
       return;
     }
+    if (hasCollapsedContent) {
+      renderedBodyRef.current = null;
+      setIsClosing(false);
+      return;
+    }
     if (renderedBodyRef.current === null) {
       return;
     }
@@ -197,7 +206,7 @@ export function ExpandablePanel({
       EXPANDABLE_PANEL_TRANSITION_MS,
     );
     return () => clearTimeout(timeout);
-  }, [isExpanded]);
+  }, [hasCollapsedContent, isExpanded]);
   const renderedBody = isExpanded
     ? expandedBody
     : isClosing
@@ -205,7 +214,12 @@ export function ExpandablePanel({
       : null;
 
   return (
-    <div className={cn("rounded-md text-muted-foreground", className)}>
+    <div
+      className={cn(
+        "group/timeline-row rounded-md text-muted-foreground",
+        className,
+      )}
+    >
       <CollapsibleHeader
         isExpanded={isExpanded}
         onToggle={onToggle}
@@ -216,10 +230,14 @@ export function ExpandablePanel({
         }
         summaryContent={summaryContent}
       />
+      {!isExpanded && collapsedContent ? collapsedContent : null}
       <div
         aria-hidden={!isExpanded}
         className={cn(
-          "grid transition-[grid-template-rows,opacity] duration-200 ease-out",
+          "grid",
+          hasCollapsedContent
+            ? null
+            : "transition-[grid-template-rows,opacity] duration-200 ease-out",
           isExpanded
             ? "pointer-events-auto grid-rows-[1fr] opacity-100"
             : "pointer-events-none grid-rows-[0fr] opacity-0",
@@ -229,8 +247,11 @@ export function ExpandablePanel({
         <div className="overflow-hidden">
           <div
             className={cn(
-              "px-2 pb-1 pt-0 transition-[transform,opacity] duration-200 ease-out will-change-transform",
-              isExpanded
+              "px-2 pb-1 pt-0",
+              hasCollapsedContent
+                ? null
+                : "transition-[transform,opacity] duration-200 ease-out will-change-transform",
+              isExpanded || hasCollapsedContent
                 ? "translate-y-0 opacity-100"
                 : "-translate-y-1 opacity-0",
               contentClassName,
