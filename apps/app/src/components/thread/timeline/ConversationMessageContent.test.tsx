@@ -2,9 +2,25 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { ConversationMessageContent } from "./ConversationMessageContent";
 import { USER_MESSAGE_CHAR_CAP } from "./conversation-message-limits";
+import { AppRouteNavigationProvider } from "@/components/ui/app-route-anchor";
+
+interface LocationProbeProps {
+  label: string;
+}
+
+function LocationProbe({ label }: LocationProbeProps) {
+  const location = useLocation();
+  return (
+    <span data-testid={label}>
+      {location.pathname}
+      {location.search}
+      {location.hash}
+    </span>
+  );
+}
 
 afterEach(() => {
   cleanup();
@@ -173,25 +189,28 @@ describe("ConversationMessageContent", () => {
 
   it("renders agent-originated message rows with sender links and hides bb reply guidance", () => {
     render(
-      <MemoryRouter>
-        <ConversationMessageContent
-          role="user"
-          initiator="agent"
-          resolveSegmentLinkHref={(link) => {
-            switch (link.kind) {
-              case "thread":
-                return `/projects/proj_123/threads/${link.threadId}`;
+      <MemoryRouter initialEntries={["/"]}>
+        <AppRouteNavigationProvider>
+          <ConversationMessageContent
+            role="user"
+            initiator="agent"
+            resolveSegmentLinkHref={(link) => {
+              switch (link.kind) {
+                case "thread":
+                  return `/projects/proj_123/threads/${link.threadId}`;
+              }
+            }}
+            senderThreadId="thr_sender123"
+            senderThreadTitle="Frontend manager"
+            attachments={null}
+            mentions={[]}
+            text={
+              '[bb message from thread:thr_sender123; reply with `bb thread tell thr_sender123 "<your response>"`]\n\nLine 1\nLine 2\nLine 3\nLine 4'
             }
-          }}
-          senderThreadId="thr_sender123"
-          senderThreadTitle="Frontend manager"
-          attachments={null}
-          mentions={[]}
-          text={
-            '[bb message from thread:thr_sender123; reply with `bb thread tell thr_sender123 "<your response>"`]\n\nLine 1\nLine 2\nLine 3\nLine 4'
-          }
-          turnRequest={{ kind: "message", status: "accepted" }}
-        />
+            turnRequest={{ kind: "message", status: "accepted" }}
+          />
+          <LocationProbe label="location" />
+        </AppRouteNavigationProvider>
       </MemoryRouter>,
     );
 
@@ -200,6 +219,10 @@ describe("ConversationMessageContent", () => {
       name: "Frontend manager",
     });
     expect(senderLink.getAttribute("href")).toBe(
+      "/projects/proj_123/threads/thr_sender123",
+    );
+    expect(fireEvent.click(senderLink)).toBe(false);
+    expect(screen.getByTestId("location").textContent).toBe(
       "/projects/proj_123/threads/thr_sender123",
     );
 

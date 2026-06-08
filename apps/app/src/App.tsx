@@ -5,6 +5,7 @@ import { AuthCallbackView } from "./views/AuthCallbackView";
 import { RootComposeRoute } from "./views/RootComposeView";
 import { QuickCreateProjectProvider } from "./hooks/useQuickCreateProject";
 import { ProviderCliHealthToasts } from "./components/provider-cli/ProviderCliHealthToasts";
+import { AppRouteNavigationProvider } from "./components/ui/app-route-anchor";
 import { useDesktopThemeSync } from "./hooks/useDesktopThemeSync";
 import {
   useDesktopUpdateAvailableToast,
@@ -120,11 +121,16 @@ export function App() {
 
   return (
     <QuickCreateProjectProvider>
-      <ProviderCliHealthToasts />
-      <Routes>
-        <Route path={AUTH_CALLBACK_ROUTE_PATH} element={<AuthCallbackView />} />
-        <Route path="*" element={<AppRoutes />} />
-      </Routes>
+      <AppRouteNavigationProvider>
+        <ProviderCliHealthToasts />
+        <Routes>
+          <Route
+            path={AUTH_CALLBACK_ROUTE_PATH}
+            element={<AuthCallbackView />}
+          />
+          <Route path="*" element={<AppRoutes />} />
+        </Routes>
+      </AppRouteNavigationProvider>
     </QuickCreateProjectProvider>
   );
 }

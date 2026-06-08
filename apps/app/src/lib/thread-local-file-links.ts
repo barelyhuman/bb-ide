@@ -1,10 +1,9 @@
 import type { ThreadTimelineLocalFileLink } from "@/components/thread/timeline";
-import { matchPath } from "react-router-dom";
 import {
   isAbsoluteFilePathWithinRoot,
   normalizeAbsoluteFilePath,
 } from "./absolute-file-path";
-import { APP_ROUTE_PATTERNS } from "./app-route-paths";
+import { isAppRoutePath } from "./app-route-paths";
 
 const THREAD_LOCAL_FILE_LINK_UNAVAILABLE_DESCRIPTION =
   "Thread file links are only available when the thread has an environment.";
@@ -79,12 +78,6 @@ export type ThreadLocalFileLinkResolution =
   | ThreadHostFileLinkOpenResolution
   | ThreadStorageFileLinkOpenResolution;
 
-function isAppRoutePath(path: string): boolean {
-  return APP_ROUTE_PATTERNS.some(
-    (pattern) => matchPath(pattern, path) !== null,
-  );
-}
-
 function normalizeLocalFilePathWithinRoot(
   args: NormalizeLocalFilePathWithinRootArgs,
 ): NormalizedLocalFilePathWithinRoot | null {
@@ -123,7 +116,7 @@ function normalizeLocalFilePathWithinRoot(
 export function resolveThreadLocalFileLink(
   args: ResolveThreadLocalFileLinkArgs,
 ): ThreadLocalFileLinkResolution {
-  if (isAppRoutePath(args.link.path)) {
+  if (isAppRoutePath({ path: args.link.path })) {
     return {
       kind: "app-route",
     };

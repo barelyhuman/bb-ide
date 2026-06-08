@@ -3,6 +3,8 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { UrlTransform } from "react-markdown";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter, useLocation } from "react-router-dom";
+import { AppRouteNavigationProvider } from "@/components/ui/app-route-anchor";
 import type { MarkdownLinkRouting } from "@/components/ui/markdown-link-routing";
 import type { MarkdownPreviewLinkHandler } from "@/components/ui/markdown-link";
 import type {
@@ -24,6 +26,10 @@ interface BuildMarkdownLinkRoutingArgs {
   onOpenLink?: MarkdownPreviewLinkHandler;
   onOpenLocalFileLink?: MarkdownPreviewLocalFileLinkHandler;
   relativeLinks?: MarkdownRelativeLocalFileLinkRouting;
+}
+
+interface LocationProbeProps {
+  label: string;
 }
 
 function buildMarkdownLinkRouting({
@@ -55,6 +61,17 @@ function buildMarkdownLinkRouting({
     }
   }
   return routing;
+}
+
+function LocationProbe({ label }: LocationProbeProps) {
+  const location = useLocation();
+  return (
+    <span data-testid={label}>
+      {location.pathname}
+      {location.search}
+      {location.hash}
+    </span>
+  );
 }
 
 function installClipboardWriteTextMock() {
@@ -541,6 +558,32 @@ describe("MarkdownPreview", () => {
     expect(link.getAttribute("href")).toBe("https://example.com/docs");
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
+  it("routes app links through client-side navigation", () => {
+    const onOpenLink = vi.fn(() => true);
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppRouteNavigationProvider>
+          <MarkdownPreview
+            content="[Thread](/projects/proj_1/threads/thr_1?panel=files#row)"
+            linkRouting={buildMarkdownLinkRouting({ onOpenLink })}
+          />
+          <LocationProbe label="location" />
+        </AppRouteNavigationProvider>
+      </MemoryRouter>,
+    );
+
+    const link = screen.getByRole("link", { name: "Thread" });
+    const notDefaultPrevented = fireEvent.click(link);
+
+    expect(link.getAttribute("target")).toBeNull();
+    expect(link.getAttribute("rel")).toBeNull();
+    expect(onOpenLink).not.toHaveBeenCalled();
+    expect(notDefaultPrevented).toBe(false);
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/projects/proj_1/threads/thr_1?panel=files#row",
+    );
   });
 
   it("routes web link clicks through onOpenLink and prevents default when handled", () => {
