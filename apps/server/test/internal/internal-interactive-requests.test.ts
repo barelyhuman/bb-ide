@@ -470,15 +470,31 @@ describe("internal interactive request lifecycle", () => {
           `Expected parent turn command, got ${parentTurnCommand.command.type}`,
         );
       }
+      const threadMention = `@thread:${childThread.id}`;
+      const expectedText = renderTemplate(
+        "systemMessageChildThreadNeedsAttention",
+        {
+          threadMention,
+        },
+      );
+      const mentionStart = expectedText.indexOf(threadMention);
       expect(parentTurnCommand.command.input).toEqual(
         expect.arrayContaining([
           {
             type: "text",
-            text: renderTemplate("systemMessageChildThreadNeedsAttention", {
-              threadId: childThread.id,
-              titleSuffix: " (Backend port validation cleanup)",
-            }),
-            mentions: [],
+            text: expectedText,
+            mentions: [
+              {
+                start: mentionStart,
+                end: mentionStart + threadMention.length,
+                resource: {
+                  kind: "thread",
+                  label: "Backend port validation cleanup",
+                  projectId: project.id,
+                  threadId: childThread.id,
+                },
+              },
+            ],
           },
         ]),
       );

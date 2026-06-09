@@ -39,9 +39,8 @@ function requestChildThreadNeedsAttentionNotification(
     name: "Child thread needs-attention notification",
     work: () =>
       queueChildThreadNeedsAttentionNotificationBestEffort(deps, {
-        childThreadId: childThread.id,
+        childThread,
         parentThreadId,
-        title: childThread.title,
       }),
   });
 }

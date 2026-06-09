@@ -107,8 +107,8 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("The cron month field must stay `*`.");
   });
 
-  it("renders standardAgentInstructions without user-question guidance", () => {
-    const rendered = renderTemplate("standardAgentInstructions", {});
+  it("renders standardAgentAppendInstructions without user-question guidance", () => {
+    const rendered = renderTemplate("standardAgentAppendInstructions", {});
 
     expect(rendered).toContain("You are a coding agent");
     expect(rendered).not.toContain(

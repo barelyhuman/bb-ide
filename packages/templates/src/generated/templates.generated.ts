@@ -123,61 +123,19 @@ export const templateDefinitions = [
     }
   },
   {
-    "id": "standardAgentInstructions",
-    "body": "You are a coding agent working on a project thread inside bb, an agent orchestration tool. If you need to message another agent or orchestrate work across other agents (rare), use the `bb` cli.",
-    "fileName": "standard-agent-instructions.md",
+    "id": "standardAgentAppendInstructions",
+    "body": "You are a coding agent working on a project thread inside bb, an agent orchestration tool.\n\nIf you need to inspect bb context, message another thread, spawn or coordinate work, or manage scheduled follow-ups, use the `bb` CLI.",
+    "fileName": "standard-agent-append-instructions.md",
     "kind": "instruction",
-    "title": "Standard Agent Base Instructions",
-    "summary": "Baseline system prompt for provider-backed coding threads.",
-    "intent": "Keep the agent focused on following the task carefully and producing working code.",
-    "editingNotes": "Preserve the concise coding-agent framing.",
+    "title": "Standard Agent Append Instructions",
+    "summary": "bb instructions appended to provider-backed coding-thread system prompts.",
+    "intent": "Keep the agent oriented inside bb without replacing provider-owned base instructions.",
+    "editingNotes": "Preserve concise coding-agent framing and keep this compatible with instructionMode append.",
     "variables": {}
   },
   {
-    "id": "systemMessageChildThreadComplete",
-    "body": "[bb system]\n\nChild thread complete: {{threadId}}{{titleSuffix}}\nReview that thread's result and decide whether to update the user or delegate a follow-up.\nFresh child work usually lives in that thread's own worktree unless the parent explicitly reused an environment; do not reapply its edits into the parent checkout unless the user explicitly asked for that.",
-    "fileName": "system-message-child-thread-complete.md",
-    "kind": "prompt",
-    "title": "Child Thread Complete",
-    "summary": "Notifies a parent thread that one of its child threads has finished.",
-    "intent": "Prompt the parent thread to review the result and decide on next steps.",
-    "editingNotes": "The second and third lines are behavioral guidance for the parent thread. Keep worktree caveat to avoid accidental edit duplication.",
-    "variables": {
-      "threadId": "The completed child thread's ID.",
-      "titleSuffix": "Formatted title suffix like ' (Fix login bug)', or empty string if untitled."
-    }
-  },
-  {
-    "id": "systemMessageChildThreadFailed",
-    "body": "[bb system]\n\nChild thread failed: {{threadId}}{{titleSuffix}}\nReview that thread's error and decide whether to retry, clarify the task, or update the user.\nInspect the child thread directly before taking action; do not reapply its edits into the parent checkout unless the user explicitly asked for that.",
-    "fileName": "system-message-child-thread-failed.md",
-    "kind": "prompt",
-    "title": "Child Thread Failed",
-    "summary": "Notifies a parent thread that one of its child threads failed.",
-    "intent": "Prompt the parent thread to inspect the failure and decide on the next step.",
-    "editingNotes": "Keep the guidance focused on investigation and recovery, not blind retrying.",
-    "variables": {
-      "threadId": "The failed child thread's ID.",
-      "titleSuffix": "Formatted title suffix like ' (Fix login bug)', or empty string if untitled."
-    }
-  },
-  {
-    "id": "systemMessageChildThreadInterrupted",
-    "body": "[bb system]\n\nChild thread interrupted: {{threadId}}{{titleSuffix}}\nInspect the child thread directly before taking action. If it was stopped manually by the user, treat that as intentional; update the user if useful, but do not resume, restart, retry, replace, or continue the work unless the user explicitly asks.\nOtherwise decide whether to resume it, redirect it, or update the user.\nDo not reapply its edits into the parent checkout unless the user explicitly asked for that.",
-    "fileName": "system-message-child-thread-interrupted.md",
-    "kind": "prompt",
-    "title": "Child Thread Interrupted",
-    "summary": "Notifies a parent thread that one of its child threads was interrupted.",
-    "intent": "Prompt the parent thread to inspect the thread and decide whether to resume or redirect the work.",
-    "editingNotes": "Preserve the \"inspect first\" guidance so parent threads do not guess why the thread stopped.",
-    "variables": {
-      "threadId": "The interrupted child thread's ID.",
-      "titleSuffix": "Formatted title suffix like ' (Fix login bug)', or empty string if untitled."
-    }
-  },
-  {
     "id": "systemMessageChildThreadNeedsAttention",
-    "body": "[bb system]\n\nChild thread needs attention: {{threadId}}{{titleSuffix}}\nThe thread is blocked on a pending interaction. Inspect it and decide whether to ask the user, redirect the child thread, or take another coordination action.",
+    "body": "[bb system]\n\n{{threadMention}} needs attention.\nThe thread is blocked on a pending interaction. Inspect it and decide whether to ask the user, redirect the child thread, or take another coordination action.",
     "fileName": "system-message-child-thread-needs-attention.md",
     "kind": "prompt",
     "title": "Child Thread Needs Attention",
@@ -185,34 +143,46 @@ export const templateDefinitions = [
     "intent": "Prompt the parent thread to inspect the blocker and decide whether to involve the user or redirect the work.",
     "editingNotes": "Keep this focused on parent-thread triage; do not imply the parent can approve or reject on the user's behalf.",
     "variables": {
-      "threadId": "The child thread's ID.",
-      "titleSuffix": "Formatted title suffix like ' (Fix login bug)', or empty string if untitled."
+      "threadMention": "Serialized thread mention token, e.g. '@thread:thr_abc123'."
+    }
+  },
+  {
+    "id": "systemMessageChildThreadOutcomeBatch",
+    "body": "[bb system]\n\n{{updates}}",
+    "fileName": "system-message-child-thread-outcome-batch.md",
+    "kind": "prompt",
+    "title": "Child Thread Outcome Batch",
+    "summary": "Notifies a parent thread about one or more child thread outcomes.",
+    "intent": "Give the parent thread batched outcome context without forcing immediate action for every child thread.",
+    "editingNotes": "Keep this concise. The updates variable is a server-formatted singular or plural outcome body with rich thread mention ranges attached by the server.",
+    "variables": {
+      "updates": "Rendered child thread outcome message body."
     }
   },
   {
     "id": "systemMessageThreadOwnershipAssigned",
-    "body": "[bb system]\n\nThe following thread is now assigned to you as a child thread:\n{{threadLabel}}\nInspect it and decide whether to monitor it, message the user, or send a follow-up.",
+    "body": "[bb system]\n\n{{threadMention}} is now assigned to you as a child thread.\nInspect it and decide whether to monitor it, message the user, or send a follow-up.",
     "fileName": "system-message-thread-ownership-assigned.md",
     "kind": "prompt",
     "title": "Thread Ownership Assigned",
     "summary": "Notifies a parent thread that a child thread is now assigned to it.",
     "intent": "Let the new parent know it owns a thread so it can begin coordinating it.",
-    "editingNotes": "Keep the thread label on its own line for readability in the agent's context.",
+    "editingNotes": "Keep the thread mention first in the visible body so collapsed previews show the affected thread.",
     "variables": {
-      "threadLabel": "Serialized thread mention token and title suffix, e.g. '@thread:thr_abc123 (Fix login bug)'."
+      "threadMention": "Serialized thread mention token, e.g. '@thread:thr_abc123'."
     }
   },
   {
     "id": "systemMessageThreadOwnershipRemoved",
-    "body": "[bb system]\n\nThe following thread is no longer assigned to you:\n{{threadLabel}}\nStop treating it as one of your active child threads unless it is assigned back later.",
+    "body": "[bb system]\n\n{{threadMention}} is no longer assigned to you.\nStop treating it as one of your active child threads unless it is assigned back later.",
     "fileName": "system-message-thread-ownership-removed.md",
     "kind": "prompt",
     "title": "Thread Ownership Removed",
     "summary": "Notifies a parent thread that a child thread is no longer assigned to it.",
     "intent": "Let the previous parent know a thread moved away so it can update its internal tracking.",
-    "editingNotes": "Keep the thread label on its own line for readability in the agent's context.",
+    "editingNotes": "Keep the thread mention first in the visible body so collapsed previews show the affected thread.",
     "variables": {
-      "threadLabel": "Serialized thread mention token and title suffix, e.g. '@thread:thr_abc123 (Fix login bug)'."
+      "threadMention": "Serialized thread mention token, e.g. '@thread:thr_abc123'."
     }
   },
   {
@@ -280,28 +250,18 @@ export interface TemplateVariables {
   generateThreadMetadata: {
     cleanedPrompt: string;
   };
-  standardAgentInstructions: Record<string, never>;
-  systemMessageChildThreadComplete: {
-    threadId: string;
-    titleSuffix?: string;
-  };
-  systemMessageChildThreadFailed: {
-    threadId: string;
-    titleSuffix?: string;
-  };
-  systemMessageChildThreadInterrupted: {
-    threadId: string;
-    titleSuffix?: string;
-  };
+  standardAgentAppendInstructions: Record<string, never>;
   systemMessageChildThreadNeedsAttention: {
-    threadId: string;
-    titleSuffix?: string;
+    threadMention: string;
+  };
+  systemMessageChildThreadOutcomeBatch: {
+    updates: string;
   };
   systemMessageThreadOwnershipAssigned: {
-    threadLabel: string;
+    threadMention: string;
   };
   systemMessageThreadOwnershipRemoved: {
-    threadLabel: string;
+    threadMention: string;
   };
   threadOperationCommitFailureFollowUp: {
     errorMessage?: string;

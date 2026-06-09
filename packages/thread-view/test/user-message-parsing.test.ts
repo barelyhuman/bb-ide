@@ -214,9 +214,8 @@ describe("user message parsing", () => {
   it("preserves mentions for visible system-initiated messages", () => {
     const factory = createTimelineEventFactory({ threadId: "thread-1" });
     const mentionText = "@thread:thr_child";
-    const text = `[bb system]\n\nChild thread needs attention: ${mentionText} (Backend cleanup)`;
-    const mentionStart =
-      "[bb system]\n\nChild thread needs attention: ".length;
+    const text = `[bb system]\n\n${mentionText} needs attention.\nThe thread is blocked on a pending interaction.`;
+    const mentionStart = "[bb system]\n\n".length;
     const mention: PromptTextMention = {
       start: mentionStart,
       end: mentionStart + mentionText.length,

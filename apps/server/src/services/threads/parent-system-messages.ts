@@ -5,6 +5,8 @@ import {
 } from "@bb/db";
 import type {
   PromptInput,
+  PromptMentionResource,
+  PromptTextMention,
   ResolvedThreadExecutionOptions,
   Thread,
 } from "@bb/domain";
@@ -43,8 +45,52 @@ import {
 const PARENT_SYSTEM_MESSAGE_SOURCE = "tell";
 
 interface QueueParentSystemMessageArgs {
+  input: PromptInput[];
   parentThreadId: string;
-  messageText: string;
+}
+
+export interface ParentSystemRenderedMention {
+  resource: PromptMentionResource;
+  serializedText: string;
+}
+
+export interface ParentSystemThreadMentionSource {
+  id: string;
+  projectId: string;
+  title: string | null;
+}
+
+interface ParentSystemTextSegment {
+  kind: "text";
+  text: string;
+}
+
+interface ParentSystemMentionSegment {
+  kind: "mention";
+  mention: ParentSystemRenderedMention;
+}
+
+export type ParentSystemInputSegment =
+  | ParentSystemTextSegment
+  | ParentSystemMentionSegment;
+
+interface BuildParentSystemInputFromSegmentsArgs {
+  segments: readonly ParentSystemInputSegment[];
+}
+
+interface BuildParentSystemInputFromTemplateSlotArgs {
+  renderedText: string;
+  segments: readonly ParentSystemInputSegment[];
+  slot: string;
+}
+
+interface BuildParentSystemThreadMentionArgs {
+  thread: ParentSystemThreadMentionSource;
+}
+
+interface RenderedParentSystemSlotParts {
+  prefix: string;
+  suffix: string;
 }
 
 interface QueueReadyParentSystemMessageArgs {
@@ -65,10 +111,77 @@ interface QueueActiveParentSystemMessageResult {
   queued: boolean;
 }
 
-function buildSystemInput(
-  messageText: string,
+function splitRenderedParentSystemSlot(
+  args: BuildParentSystemInputFromTemplateSlotArgs,
+): RenderedParentSystemSlotParts {
+  const start = args.renderedText.indexOf(args.slot);
+  if (start === -1) {
+    throw new Error("Parent system template slot was not found in message");
+  }
+  const next = args.renderedText.indexOf(args.slot, start + args.slot.length);
+  if (next !== -1) {
+    throw new Error("Parent system template slot must be unique in message");
+  }
+
+  return {
+    prefix: args.renderedText.slice(0, start),
+    suffix: args.renderedText.slice(start + args.slot.length),
+  };
+}
+
+export function buildParentSystemInputFromSegments(
+  args: BuildParentSystemInputFromSegmentsArgs,
 ): PromptInput[] {
-  return [{ type: "text", text: messageText, mentions: [] }];
+  let text = "";
+  const mentions: PromptTextMention[] = [];
+
+  for (const segment of args.segments) {
+    if (segment.kind === "text") {
+      text += segment.text;
+      continue;
+    }
+
+    if (segment.mention.serializedText.length === 0) {
+      throw new Error("Parent system mention text must not be empty");
+    }
+    const start = text.length;
+    text += segment.mention.serializedText;
+    mentions.push({
+      start,
+      end: text.length,
+      resource: segment.mention.resource,
+    });
+  }
+
+  return [{ type: "text", text, mentions }];
+}
+
+export function buildParentSystemInputFromTemplateSlot(
+  args: BuildParentSystemInputFromTemplateSlotArgs,
+): PromptInput[] {
+  const parts = splitRenderedParentSystemSlot(args);
+  return buildParentSystemInputFromSegments({
+    segments: [
+      { kind: "text", text: parts.prefix },
+      ...args.segments,
+      { kind: "text", text: parts.suffix },
+    ],
+  });
+}
+
+export function buildParentSystemThreadMention(
+  args: BuildParentSystemThreadMentionArgs,
+): ParentSystemRenderedMention {
+  const label = args.thread.title?.trim() || args.thread.id;
+  return {
+    serializedText: `@thread:${args.thread.id}`,
+    resource: {
+      kind: "thread",
+      label,
+      projectId: args.thread.projectId,
+      threadId: args.thread.id,
+    },
+  };
 }
 
 function queueActiveParentSystemMessageInTransaction(
@@ -284,7 +397,6 @@ export async function queueParentSystemMessage(
     deps.db,
     args.parentThreadId,
   );
-  const input = buildSystemInput(args.messageText);
   const execution = await buildExecutionOptions(
     deps,
     {},
@@ -299,7 +411,7 @@ export async function queueParentSystemMessage(
       environment,
       execution,
       initiator: "system",
-      input,
+      input: args.input,
       senderThreadId: null,
       thread: parentThread,
     })
@@ -310,7 +422,7 @@ export async function queueParentSystemMessage(
   const readyEnvironment = requireReadyThreadEnvironment(environment);
   return await queueReadyParentSystemMessage(deps, {
     thread: parentThread,
-    input,
+    input: args.input,
     execution,
     environment: readyEnvironment,
   });

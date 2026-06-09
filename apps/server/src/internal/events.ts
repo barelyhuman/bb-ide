@@ -143,6 +143,7 @@ interface ArchiveCompletedAutomationThreadIfNeededArgs {
 interface ParentTurnNotificationFollowUp {
   kind: "parent-turn-notification";
   childThreadId: string;
+  projectId: string;
   parentThreadId: string;
   title: string | null;
   turnStatus: ThreadEventTurnStatus;
@@ -353,6 +354,7 @@ async function applyEventEffects(
             followUps.push({
               kind: "parent-turn-notification",
               childThreadId: turnCompleted.thread.id,
+              projectId: turnCompleted.thread.projectId,
               parentThreadId: turnCompleted.thread.parentThreadId,
               title: turnCompleted.thread.title,
               turnStatus: event.status,
@@ -424,9 +426,12 @@ async function executeEventFollowUpBestEffort(
     switch (followUp.kind) {
       case "parent-turn-notification":
         await queueChildThreadTurnNotificationBestEffort(deps, {
-          childThreadId: followUp.childThreadId,
+          childThread: {
+            id: followUp.childThreadId,
+            projectId: followUp.projectId,
+            title: followUp.title,
+          },
           parentThreadId: followUp.parentThreadId,
-          title: followUp.title,
           turnStatus: followUp.turnStatus,
         });
         return;

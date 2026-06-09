@@ -26,7 +26,7 @@ import { resolveInjectedSkillSources } from "../skills/injected-skills.js";
 export { getSupportedReasoningLevelsForProvider } from "./thread-reasoning-policy.js";
 
 const STANDARD_AGENT_INSTRUCTIONS = renderTemplate(
-  "standardAgentInstructions",
+  "standardAgentAppendInstructions",
   {},
 );
 export interface ThreadRuntimeCommandEnvironment {

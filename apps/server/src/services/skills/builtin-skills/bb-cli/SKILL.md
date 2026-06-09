@@ -1,34 +1,67 @@
 ---
 name: bb-cli
-description: Use the bb CLI to inspect, create, coordinate, schedule, and follow up on bb threads from inside a running thread.
+description: Use this when controlling bb. The bb CLI lets you inspect, create, and orchestrate bb threads, automations, and more.
 ---
 
 # bb CLI
 
-Use the `bb` CLI when you need to inspect bb state or coordinate work across threads.
+Use `bb` when controlling bb itself: inspect current context, coordinate threads,
+message agents, schedule automations, or inspect projects, providers, and
+environments.
 
-## Thread Coordination
+## Start With Context
+
+- Use `bb status` to identify the current project, thread, and environment.
+- Prefer `--json` when command output will drive follow-up work.
+- Run `bb guide` for the system overview and `bb guide <chapter>` for full
+  command reference.
+
+## Spawning Threads
 
 - Use `bb thread spawn --prompt "..."` to create another thread.
-- Use `bb thread spawn --parent-thread <thread-id> --prompt "..."` to create a child thread owned by a parent thread.
-- When running inside a thread, `bb thread spawn --prompt "..."` defaults the parent to `BB_THREAD_ID`. Add `--no-context-parent-thread` when you need an unrelated root thread.
-- Use `bb thread list` to find threads and `bb thread show <thread-id>` to inspect status, parent, environment, and result fields.
-- Use `bb thread tell <thread-id> "..."` to send a follow-up to an existing thread.
-- Use `bb thread wait <thread-id>` to wait for a thread to finish.
-- Use `bb thread log <thread-id>` to inspect the conversation log.
-- Use `bb thread output <thread-id>` to print the latest thread output.
+- Inside a thread, spawn defaults the parent to `BB_THREAD_ID`.
+- Use `--no-context-parent-thread` when you need an unrelated root thread.
+- Use `--parent-thread <thread-id>` to choose a specific parent.
+- If provider or model choice matters, inspect options with `bb provider list`
+  and `bb provider models <provider-id>`.
 
-## Scheduling
+Give spawned threads clear prompts: objective, constraints, expected deliverable,
+validation to perform, and what to report back. Ask for outcome, changed files
+or artifacts, validation performed, and blockers.
 
-- Use `bb thread schedule create <thread-id> --name <name> --cron <cron> --timezone <tz> --prompt "..."` to schedule recurring work for a thread.
-- Use `bb thread schedule list <thread-id>` to inspect schedules.
-- Use `bb thread schedule update <thread-id> <schedule-id>` to change schedule configuration.
-- Use `bb thread schedule enable <thread-id> <schedule-id>` and `bb thread schedule disable <thread-id> <schedule-id>` to control whether a schedule runs.
-- Use `bb thread schedule delete <thread-id> <schedule-id>` to remove a schedule.
+## Coordinating Work
 
-## Context
+- Use one clear owner per task.
+- Spawn independent tasks separately when parallel work is useful.
+- Let threads work after spawning. Do not poll with shell sleeps, repeated log
+  reads, or repeated status reads.
+- Use `bb thread wait <thread-id>` when you explicitly need to block until a
+  thread reaches a status.
+- Use `bb thread tell <thread-id> "..."` when requirements change, a blocker
+  needs clarification, or follow-up work is needed.
 
-- Use `bb status` for the current project, thread, and environment context.
-- Use `bb project list` and `bb project show <project-id>` to inspect projects.
-- Use `bb environment show <environment-id>` when a thread's workspace or branch state matters.
-- Prefer generic `bb thread` commands for parent/child work. Manager commands may exist for compatibility, but they are not required to coordinate child threads.
+## Inspecting Results
+
+- Use `bb thread show <thread-id>` for status, parent, environment, and result.
+- Use `bb thread show <thread-id> --git-diff` to review file changes.
+- Use `bb thread log <thread-id>` to inspect the conversation.
+- Use `bb thread output <thread-id>` to read the latest final output.
+
+For review or fix pipelines, get the environment ID from
+`bb thread show <thread-id> --json`, then spawn the follow-up with
+`--environment <environment-id>` so it sees the same files.
+
+## Failures And Interruptions
+
+- For failed threads, inspect `bb thread show <id> --json` and
+  `bb thread log <id>` before deciding whether to retry, clarify, or update the
+  user.
+- For interrupted or stopped threads, inspect first. If the user stopped the
+  thread, treat that as intentional unless they ask you to continue.
+- Use `bb thread stop <id>` when a thread is stuck or no longer needed.
+
+## Automations
+
+- Use `bb thread schedule create <thread-id> --name <name> --cron <cron> --timezone <tz> --prompt "..."` for reminders, recurring check-ins, and scheduled follow-up work.
+- Use `bb thread schedule list`, `update`, `enable`, `disable`, and `delete` to
+  manage schedules.

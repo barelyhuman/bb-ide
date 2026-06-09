@@ -1,14 +1,19 @@
 import {
   archiveThread,
   listUnarchivedAssignedChildThreads,
+  type DbNotifier,
+  type DbTransaction,
   updateThread,
 } from "@bb/db";
-import type { Thread } from "@bb/domain";
+import type { PromptInput, Thread } from "@bb/domain";
 import { renderTemplate } from "@bb/templates";
 import type { LoggedPendingInteractionWorkSessionDeps } from "../../types.js";
-import type { DbNotifier, DbTransaction } from "@bb/db";
 import { NotificationBuffer } from "../lib/notification-buffer.js";
-import { queueParentSystemMessage } from "./parent-system-messages.js";
+import {
+  buildParentSystemInputFromTemplateSlot,
+  buildParentSystemThreadMention,
+  queueParentSystemMessage,
+} from "./parent-system-messages.js";
 import {
   appendThreadOwnershipChangeEvent,
   appendThreadOwnershipChangeEventInTransaction,
@@ -16,13 +21,18 @@ import {
 
 interface ThreadLabelSource {
   id: string;
+  projectId: string;
   title: string | null;
 }
 
+type ThreadOwnershipTemplateId =
+  | "systemMessageThreadOwnershipAssigned"
+  | "systemMessageThreadOwnershipRemoved";
+
 interface QueueParentSystemMessageBestEffortArgs {
   childThreadId: string;
+  input: PromptInput[];
   parentThreadId: string;
-  messageText: string;
   reason: "assigned" | "removed";
 }
 
@@ -45,9 +55,7 @@ interface ThreadOwnershipTransactionDeps {
   hub: DbNotifier;
 }
 
-function formatThreadLabelForParent(thread: ThreadLabelSource): string {
-  return thread.title ? `${thread.id}: ${thread.title}` : thread.id;
-}
+const THREAD_OWNERSHIP_MENTION_SLOT = "__BB_THREAD_OWNERSHIP_MENTION__";
 
 async function queueParentSystemMessageBestEffort(
   deps: LoggedPendingInteractionWorkSessionDeps,
@@ -55,8 +63,8 @@ async function queueParentSystemMessageBestEffort(
 ): Promise<void> {
   try {
     await queueParentSystemMessage(deps, {
+      input: args.input,
       parentThreadId: args.parentThreadId,
-      messageText: args.messageText,
     });
   } catch (error) {
     deps.logger.error(
@@ -69,6 +77,21 @@ async function queueParentSystemMessageBestEffort(
       "Failed to queue parent ownership system message",
     );
   }
+}
+
+function buildThreadOwnershipSystemInput(
+  templateId: ThreadOwnershipTemplateId,
+  thread: ThreadLabelSource,
+): PromptInput[] {
+  const mention = buildParentSystemThreadMention({ thread });
+  const renderedText = renderTemplate(templateId, {
+    threadMention: THREAD_OWNERSHIP_MENTION_SLOT,
+  });
+  return buildParentSystemInputFromTemplateSlot({
+    renderedText,
+    slot: THREAD_OWNERSHIP_MENTION_SLOT,
+    segments: [{ kind: "mention", mention }],
+  });
 }
 
 export async function handleThreadOwnershipChange(
@@ -92,14 +115,14 @@ export async function handleThreadOwnershipChange(
     return;
   }
 
-  const threadLabel = formatThreadLabelForParent(args.updatedThread);
   if (args.updatedThread.parentThreadId) {
     await queueParentSystemMessageBestEffort(deps, {
       childThreadId: args.updatedThread.id,
       parentThreadId: args.updatedThread.parentThreadId,
-      messageText: renderTemplate("systemMessageThreadOwnershipAssigned", {
-        threadLabel,
-      }),
+      input: buildThreadOwnershipSystemInput(
+        "systemMessageThreadOwnershipAssigned",
+        args.updatedThread,
+      ),
       reason: "assigned",
     });
   }
@@ -107,9 +130,10 @@ export async function handleThreadOwnershipChange(
     await queueParentSystemMessageBestEffort(deps, {
       childThreadId: args.updatedThread.id,
       parentThreadId: args.previousThread.parentThreadId,
-      messageText: renderTemplate("systemMessageThreadOwnershipRemoved", {
-        threadLabel,
-      }),
+      input: buildThreadOwnershipSystemInput(
+        "systemMessageThreadOwnershipRemoved",
+        args.updatedThread,
+      ),
       reason: "removed",
     });
   }
