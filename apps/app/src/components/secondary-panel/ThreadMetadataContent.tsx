@@ -7,6 +7,7 @@ import type {
   GitBranchRefClassification,
   Thread,
   ThreadListEntry,
+  WorkspaceCommitSummary,
   WorkspaceStatus,
 } from "@bb/domain";
 import type { ThreadSchedule } from "@bb/server-contract";
@@ -38,6 +39,7 @@ import { ThreadUnarchiveButton } from "@/components/thread/ThreadUnarchiveButton
 import { TruncatedList } from "@/components/ui/truncated-list.js";
 import { ChangedFilesDetailRow } from "@/components/workspace/ChangedFilesDetailRow";
 import {
+  selectWorkspaceAheadCommits,
   selectWorkspaceChangedFilesSections,
   type WorkspaceChangedFileSelection,
 } from "@/components/workspace/workspace-change-summary";
@@ -523,6 +525,63 @@ export function ThreadSchedulesRow({ schedules }: ThreadSchedulesRowProps) {
   );
 }
 
+export interface ThreadCommitsRowProps {
+  workspaceStatus: WorkspaceStatus | undefined;
+  /** When provided, each commit becomes a button that opens its diff. */
+  onCommitClick?: (sha: string) => void;
+}
+
+interface ThreadCommitListItemProps {
+  commit: WorkspaceCommitSummary;
+  onCommitClick?: (sha: string) => void;
+}
+
+function ThreadCommitListItem({
+  commit,
+  onCommitClick,
+}: ThreadCommitListItemProps) {
+  const detail = (
+    <div className="flex min-w-0 items-baseline justify-between gap-2">
+      <span className="min-w-0 truncate text-foreground underline-offset-2 group-hover:underline">
+        {commit.subject}
+      </span>
+      <span className="shrink-0 text-muted-foreground">{commit.shortSha}</span>
+    </div>
+  );
+  if (!onCommitClick) {
+    return detail;
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onCommitClick(commit.sha)}
+      title={commit.subject}
+      className="group block w-full text-left"
+    >
+      {detail}
+    </button>
+  );
+}
+
+export function ThreadCommitsRow({
+  workspaceStatus,
+  onCommitClick,
+}: ThreadCommitsRowProps) {
+  const commits = selectWorkspaceAheadCommits(workspaceStatus);
+  if (commits.length === 0) return null;
+  return (
+    <DetailRow label="Commits" orientation="vertical" valueClassName="min-w-0">
+      <TruncatedList
+        items={commits}
+        getKey={(commit) => commit.sha}
+        renderItem={(commit) => (
+          <ThreadCommitListItem commit={commit} onCommitClick={onCommitClick} />
+        )}
+      />
+    </DetailRow>
+  );
+}
+
 export interface ChangedFilesRowProps {
   thread: Thread;
   workspaceStatus: WorkspaceStatus | undefined;
@@ -625,6 +684,7 @@ export interface ThreadMetadataContentProps {
   onMergeBasePickerOpenChange?: (open: boolean) => void;
   onMergeBaseBranchSearchQueryChange?: (query: string) => void;
   onChangedFileClick?: (selection: WorkspaceChangedFileSelection) => void;
+  onCommitClick?: (sha: string) => void;
 }
 
 /**
@@ -726,6 +786,7 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
     onMergeBasePickerOpenChange,
     onMergeBaseBranchSearchQueryChange,
     onChangedFileClick,
+    onCommitClick,
   } = props;
 
   return (
@@ -766,6 +827,10 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
       />
       <ArchivedRow thread={thread} />
       <ThreadSchedulesRow schedules={threadSchedules} />
+      <ThreadCommitsRow
+        workspaceStatus={workspaceStatus}
+        onCommitClick={onCommitClick}
+      />
       <ChangedFilesRow
         thread={thread}
         workspaceStatus={workspaceStatus}

@@ -20,6 +20,7 @@ import type { RequestDiffFileContents } from "../../git-diff/GitDiffCard";
 import {
   gitDiffCollapsedFileKeysAtom,
   gitDiffLoadingFileKeysAtom,
+  pendingGitDiffCommitShaAtom,
   pendingGitDiffScrollPathAtom,
   selectedMergeBaseBranchAtom,
 } from "../threadSecondaryPanelAtoms";
@@ -115,6 +116,8 @@ export function useGitDiffPanelState({
   const selectedMergeBaseBranch = useAtomValue(selectedMergeBaseBranchAtom);
   const pendingGitDiffScrollPath = useAtomValue(pendingGitDiffScrollPathAtom);
   const setPendingGitDiffScrollPath = useSetAtom(pendingGitDiffScrollPathAtom);
+  const pendingGitDiffCommitSha = useAtomValue(pendingGitDiffCommitShaAtom);
+  const setPendingGitDiffCommitSha = useSetAtom(pendingGitDiffCommitShaAtom);
   const collapsedGitDiffFileKeys = useAtomValue(gitDiffCollapsedFileKeysAtom);
   const loadingGitDiffFileKeys = useAtomValue(gitDiffLoadingFileKeysAtom);
   const lastFocusedScrollPathRef = useRef<string | null>(null);
@@ -387,6 +390,10 @@ export function useGitDiffPanelState({
     setPendingGitDiffScrollPath(null);
   }, [environmentId, setPendingGitDiffScrollPath]);
 
+  useEffect(() => {
+    setPendingGitDiffCommitSha(null);
+  }, [environmentId, setPendingGitDiffCommitSha]);
+
   // --- Reset selected commit when pendingGitDiffScrollPath arrives (from openDiffFile) ---
 
   useEffect(() => {
@@ -394,6 +401,15 @@ export function useGitDiffPanelState({
       setSelectedGitDiffCommitSha(null);
     }
   }, [pendingGitDiffScrollPath]);
+
+  // --- Apply the commit selection requested from the info tab (openCommitDiff) ---
+
+  useEffect(() => {
+    if (pendingGitDiffCommitSha) {
+      setSelectedGitDiffCommitSha(pendingGitDiffCommitSha);
+      setPendingGitDiffCommitSha(null);
+    }
+  }, [pendingGitDiffCommitSha, setPendingGitDiffCommitSha]);
 
   const hasUncommittedChanges =
     (workspaceStatus?.workingTree.files.length ?? 0) > 0;

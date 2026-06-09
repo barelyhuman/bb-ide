@@ -568,6 +568,7 @@ export function ThreadDetailView() {
     mergeBaseBranchOptions,
     mergeBaseBranchOptionsTruncated,
     mergeBaseRemoteBranchOptions,
+    openCommitDiff: openPersistedCommitDiff,
     openDiffFile: openPersistedDiffFile,
     openThreadDiffPanel: openPersistedDiffPanel,
     openThreadSecondaryPanel: openPersistedSecondaryPanel,
@@ -588,6 +589,7 @@ export function ThreadDetailView() {
   const {
     closePanel: closeSecondaryPanel,
     isOpen: isSecondaryPanelOpen,
+    openCommitDiff: openSecondaryPanelCommitDiff,
     openDiffFile: openSecondaryPanelDiffFile,
     openDiffPanel: openSecondaryPanelDiffPanel,
     openPanel: openSecondaryPanel,
@@ -596,6 +598,7 @@ export function ThreadDetailView() {
     closePersistedPanel: closeThreadSecondaryPanel,
     isPersistedOpen: isPersistedSecondaryPanelOpen,
     isCompactViewport: renderSecondaryPanelAsDrawer,
+    openPersistedCommitDiff,
     openPersistedDiffFile,
     openPersistedDiffPanel,
     openPersistedPanel: openPersistedSecondaryPanel,
@@ -690,6 +693,12 @@ export function ThreadDetailView() {
       openSecondaryPanelDiffFile(selection.file.path);
     },
     [openSecondaryPanelDiffFile, openWorkspaceFile],
+  );
+  const handleCommitClick = useCallback(
+    (sha: string) => {
+      openSecondaryPanelCommitDiff(sha);
+    },
+    [openSecondaryPanelCommitDiff],
   );
   const appsById = useMemo(() => {
     const entries = new Map(
@@ -1397,6 +1406,7 @@ export function ThreadDetailView() {
           onMergeBasePickerOpenChange: handleMergeBasePickerOpenChange,
           onMergeBaseBranchSearchQueryChange: setMergeBaseBranchSearchQuery,
           onChangedFileClick: canUseGitUi ? handleChangedFileClick : undefined,
+          onCommitClick: canUseGitUi ? handleCommitClick : undefined,
         }}
         secondaryPanel={{
           activePanel: selectedSecondaryPanel,

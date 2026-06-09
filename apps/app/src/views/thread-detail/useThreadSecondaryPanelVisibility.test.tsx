@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ThreadSecondaryPanel } from "@/lib/thread-secondary-panel";
 import {
   useThreadSecondaryPanelVisibility,
+  type ThreadSecondaryPanelCommitDiffOpenHandler,
   type ThreadSecondaryPanelDiffFileOpenHandler,
   type ThreadSecondaryPanelOpenHandler,
 } from "./useThreadSecondaryPanelVisibility";
@@ -50,6 +51,12 @@ function useVisibilityHarness({
       setIsPersistedOpen(true);
     }),
   );
+  const [openPersistedCommitDiff] = useState(() =>
+    vi.fn<ThreadSecondaryPanelCommitDiffOpenHandler>(() => {
+      setActivePanel("git-diff");
+      setIsPersistedOpen(true);
+    }),
+  );
   const [togglePersistedPanel] = useState(() =>
     vi.fn(() => {
       setIsPersistedOpen((current) => !current);
@@ -61,6 +68,7 @@ function useVisibilityHarness({
     closePersistedPanel,
     isPersistedOpen,
     isCompactViewport,
+    openPersistedCommitDiff,
     openPersistedDiffFile,
     openPersistedDiffPanel,
     openPersistedPanel,
@@ -72,6 +80,7 @@ function useVisibilityHarness({
     activePanel,
     closePersistedPanel,
     isPersistedOpen,
+    openPersistedCommitDiff,
     openPersistedDiffFile,
     openPersistedDiffPanel,
     openPersistedPanel,
@@ -177,6 +186,25 @@ describe("useThreadSecondaryPanelVisibility", () => {
     expect(result.current.isPersistedOpen).toBe(true);
     expect(result.current.openPersistedDiffFile).toHaveBeenCalledWith(
       "src/app.ts",
+    );
+  });
+
+  it("persists compact commit diff opens and reveals the drawer", () => {
+    const props: VisibilityHarnessProps = {
+      isCompactViewport: true,
+      threadId: "thr-one",
+    };
+    const { result } = renderHook(() => useVisibilityHarness(props));
+
+    act(() => {
+      result.current.visibility.openCommitDiff("abc123");
+    });
+
+    expect(result.current.visibility.isOpen).toBe(true);
+    expect(result.current.activePanel).toBe("git-diff");
+    expect(result.current.isPersistedOpen).toBe(true);
+    expect(result.current.openPersistedCommitDiff).toHaveBeenCalledWith(
+      "abc123",
     );
   });
 

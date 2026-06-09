@@ -8,6 +8,7 @@ import {
   GitStatusRow,
   ArchivedRow,
   ThreadSchedulesRow,
+  ThreadCommitsRow,
   ChangedFilesRow,
   ThreadMetadataCard,
 } from "./ThreadMetadataContent";
@@ -520,6 +521,57 @@ export function ThreadSchedules() {
                 prompt: "Close stale follow-ups and archive merged threads.",
               }),
             ]}
+          />
+        </RowStage>
+      </StoryRow>
+    </StoryCard>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Commits ahead of the merge base. Hidden entirely when nothing is ahead;
+// truncates with "Show N more" like the schedules row.
+// ---------------------------------------------------------------------------
+
+const aheadCommits = Array.from({ length: 7 }, (_, index) => ({
+  sha: `${index}`.padEnd(40, "0"),
+  shortSha: `a1b2c3${index}`,
+  subject:
+    index === 0
+      ? "Render system thread references as rich mentions in the composer and timeline"
+      : `Commit subject number ${index}`,
+  authorName: "Ada Lovelace",
+  authoredAt: 1_700_000_000_000,
+}));
+
+export function Commits() {
+  return (
+    <StoryCard>
+      <StoryRow label="ahead of merge base (clickable, truncates at 5)">
+        <RowStage>
+          <ThreadCommitsRow
+            workspaceStatus={makeWorkspaceStatus({
+              mergeBase: {
+                mergeBaseBranch: "main",
+                baseRef: "main",
+                aheadCount: aheadCommits.length,
+                behindCount: 0,
+                hasCommittedUnmergedChanges: true,
+                commits: aheadCommits,
+                insertions: 0,
+                deletions: 0,
+                files: [],
+              },
+            })}
+            onCommitClick={noop}
+          />
+        </RowStage>
+      </StoryRow>
+      <StoryRow label="nothing ahead (hidden)">
+        <RowStage>
+          <ThreadCommitsRow
+            workspaceStatus={makeWorkspaceStatus()}
+            onCommitClick={noop}
           />
         </RowStage>
       </StoryRow>

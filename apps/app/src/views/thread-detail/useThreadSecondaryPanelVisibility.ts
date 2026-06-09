@@ -7,11 +7,13 @@ export type ThreadSecondaryPanelOpenHandler = (
   panel: ThreadSecondaryPanel,
 ) => void;
 export type ThreadSecondaryPanelDiffFileOpenHandler = (path: string) => void;
+export type ThreadSecondaryPanelCommitDiffOpenHandler = (sha: string) => void;
 
 export interface UseThreadSecondaryPanelVisibilityArgs {
   closePersistedPanel: () => void;
   isCompactViewport: boolean;
   isPersistedOpen: boolean;
+  openPersistedCommitDiff: ThreadSecondaryPanelCommitDiffOpenHandler;
   openPersistedDiffFile: ThreadSecondaryPanelDiffFileOpenHandler;
   openPersistedDiffPanel: () => void;
   openPersistedPanel: ThreadSecondaryPanelOpenHandler;
@@ -22,6 +24,7 @@ export interface UseThreadSecondaryPanelVisibilityArgs {
 export interface ThreadSecondaryPanelVisibility {
   closePanel: () => void;
   isOpen: boolean;
+  openCommitDiff: ThreadSecondaryPanelCommitDiffOpenHandler;
   openDiffFile: ThreadSecondaryPanelDiffFileOpenHandler;
   openDiffPanel: () => void;
   openPanel: ThreadSecondaryPanelOpenHandler;
@@ -36,6 +39,7 @@ export function useThreadSecondaryPanelVisibility({
   closePersistedPanel,
   isCompactViewport,
   isPersistedOpen,
+  openPersistedCommitDiff,
   openPersistedDiffFile,
   openPersistedDiffPanel,
   openPersistedPanel,
@@ -100,6 +104,16 @@ export function useThreadSecondaryPanelVisibility({
     [isCompactViewport, openDrawerForCurrentThread, openPersistedDiffFile],
   );
 
+  const openCommitDiff = useCallback<ThreadSecondaryPanelCommitDiffOpenHandler>(
+    (sha) => {
+      openPersistedCommitDiff(sha);
+      if (isCompactViewport) {
+        openDrawerForCurrentThread();
+      }
+    },
+    [isCompactViewport, openDrawerForCurrentThread, openPersistedCommitDiff],
+  );
+
   const closePanel = useCallback(() => {
     if (isCompactViewport) {
       closeDrawerForCurrentThread();
@@ -130,6 +144,7 @@ export function useThreadSecondaryPanelVisibility({
     () => ({
       closePanel,
       isOpen,
+      openCommitDiff,
       openDiffFile,
       openDiffPanel,
       openPanel,
@@ -138,6 +153,7 @@ export function useThreadSecondaryPanelVisibility({
     [
       closePanel,
       isOpen,
+      openCommitDiff,
       openDiffFile,
       openDiffPanel,
       openPanel,
