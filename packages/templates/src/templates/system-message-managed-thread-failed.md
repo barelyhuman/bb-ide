@@ -5,7 +5,7 @@ summary: Notifies a manager that one of its worker threads failed.
 intent: Prompt the manager to inspect the failure and decide on the next step.
 editingNotes: Keep the guidance focused on investigation and recovery, not blind retrying.
 variables:
-  threadId: The failed worker thread's ID.
+  threadId: "Serialized worker thread mention token, e.g. '@thread:thr_abc123'."
   titleSuffix?: "Formatted title suffix like ' (Fix login bug)', or empty string if untitled."
 ---
 [bb system]

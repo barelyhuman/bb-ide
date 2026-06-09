@@ -69,6 +69,20 @@ function normalizeMentions(
 export function promptEditorContentFromValue(
   value: PromptEditorContentValue,
 ): JSONContent {
+  return {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: promptEditorInlineContentFromValue(value),
+      },
+    ],
+  };
+}
+
+export function promptEditorInlineContentFromValue(
+  value: PromptEditorContentValue,
+): JSONContent[] {
   const content: JSONContent[] = [];
   let cursor = 0;
 
@@ -89,15 +103,7 @@ export function promptEditorContentFromValue(
 
   content.push(...splitTextContent(value.text.slice(cursor)));
 
-  return {
-    type: "doc",
-    content: [
-      {
-        type: "paragraph",
-        content,
-      },
-    ],
-  };
+  return content;
 }
 
 function mentionAttrsFromNode(

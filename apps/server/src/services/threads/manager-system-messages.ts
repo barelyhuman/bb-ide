@@ -5,6 +5,8 @@ import {
 } from "@bb/db";
 import type {
   PromptInput,
+  PromptMentionResource,
+  PromptTextMention,
   ResolvedThreadExecutionOptions,
   Thread,
 } from "@bb/domain";
@@ -50,8 +52,50 @@ import {
 const MANAGER_SYSTEM_MESSAGE_SOURCE = "tell";
 
 interface QueueManagerSystemMessageArgs {
+  input: PromptInput[];
   managerThreadId: string;
-  messageText: string;
+}
+
+export interface ManagerSystemRenderedMention {
+  resource: PromptMentionResource;
+  serializedText: string;
+}
+
+interface BuildManagerSystemInputArgs {
+  mentions: readonly ManagerSystemRenderedMention[];
+  text: string;
+}
+
+interface ManagerSystemTextSegment {
+  kind: "text";
+  text: string;
+}
+
+interface ManagerSystemMentionSegment {
+  kind: "mention";
+  mention: ManagerSystemRenderedMention;
+}
+
+export type ManagerSystemInputSegment =
+  | ManagerSystemTextSegment
+  | ManagerSystemMentionSegment;
+
+interface BuildManagerSystemInputFromSegmentsArgs {
+  segments: readonly ManagerSystemInputSegment[];
+}
+
+interface BuildManagerSystemInputFromTemplateSlotArgs {
+  renderedText: string;
+  segments: readonly ManagerSystemInputSegment[];
+  slot: string;
+}
+
+interface BuildPlainManagerSystemInputArgs {
+  text: string;
+}
+
+interface BuildManagerSystemThreadMentionArgs {
+  thread: Thread;
 }
 
 interface QueueReadyManagerSystemMessageArgs {
@@ -73,8 +117,114 @@ interface QueueActiveManagerSystemMessageResult {
   queued: boolean;
 }
 
-function buildSystemInput(messageText: string): PromptInput[] {
-  return [{ type: "text", text: messageText, mentions: [] }];
+interface RenderedManagerSystemSlotParts {
+  prefix: string;
+  suffix: string;
+}
+
+function splitRenderedManagerSystemSlot(
+  args: BuildManagerSystemInputFromTemplateSlotArgs,
+): RenderedManagerSystemSlotParts {
+  const start = args.renderedText.indexOf(args.slot);
+  if (start === -1) {
+    throw new Error("Manager system template slot was not found in message");
+  }
+  const next = args.renderedText.indexOf(args.slot, start + args.slot.length);
+  if (next !== -1) {
+    throw new Error("Manager system template slot must be unique in message");
+  }
+
+  return {
+    prefix: args.renderedText.slice(0, start),
+    suffix: args.renderedText.slice(start + args.slot.length),
+  };
+}
+
+export function buildPlainManagerSystemInput(
+  args: BuildPlainManagerSystemInputArgs,
+): PromptInput[] {
+  return [{ type: "text", text: args.text, mentions: [] }];
+}
+
+export function buildManagerSystemInput(
+  args: BuildManagerSystemInputArgs,
+): PromptInput[] {
+  let searchStart = 0;
+  const promptMentions: PromptTextMention[] = [];
+  for (const mention of args.mentions) {
+    if (mention.serializedText.length === 0) {
+      throw new Error("Manager system mention text must not be empty");
+    }
+    const start = args.text.indexOf(mention.serializedText, searchStart);
+    if (start === -1) {
+      throw new Error("Manager system mention text was not found in message");
+    }
+    const end = start + mention.serializedText.length;
+    promptMentions.push({
+      start,
+      end,
+      resource: mention.resource,
+    });
+    searchStart = end;
+  }
+
+  return [{ type: "text", text: args.text, mentions: promptMentions }];
+}
+
+export function buildManagerSystemInputFromSegments(
+  args: BuildManagerSystemInputFromSegmentsArgs,
+): PromptInput[] {
+  let text = "";
+  const promptMentions: PromptTextMention[] = [];
+
+  for (const segment of args.segments) {
+    if (segment.kind === "text") {
+      text += segment.text;
+      continue;
+    }
+
+    if (segment.mention.serializedText.length === 0) {
+      throw new Error("Manager system mention text must not be empty");
+    }
+    const start = text.length;
+    text += segment.mention.serializedText;
+    promptMentions.push({
+      start,
+      end: text.length,
+      resource: segment.mention.resource,
+    });
+  }
+
+  return [{ type: "text", text, mentions: promptMentions }];
+}
+
+export function buildManagerSystemInputFromTemplateSlot(
+  args: BuildManagerSystemInputFromTemplateSlotArgs,
+): PromptInput[] {
+  const parts = splitRenderedManagerSystemSlot(args);
+  return buildManagerSystemInputFromSegments({
+    segments: [
+      { kind: "text", text: parts.prefix },
+      ...args.segments,
+      { kind: "text", text: parts.suffix },
+    ],
+  });
+}
+
+export function buildManagerSystemThreadMention(
+  args: BuildManagerSystemThreadMentionArgs,
+): ManagerSystemRenderedMention {
+  const label = args.thread.title?.trim() || args.thread.id;
+  return {
+    serializedText: `@thread:${args.thread.id}`,
+    resource: {
+      kind: "thread",
+      label,
+      projectId: args.thread.projectId,
+      threadId: args.thread.id,
+      threadType: args.thread.type,
+    },
+  };
 }
 
 function queueActiveManagerSystemMessageInTransaction(
@@ -294,7 +444,6 @@ export async function queueManagerSystemMessage(
     deps.db,
     args.managerThreadId,
   );
-  const input = buildSystemInput(args.messageText);
   const execution = await buildExecutionOptions(
     deps,
     {},
@@ -309,7 +458,7 @@ export async function queueManagerSystemMessage(
       const preparedInput =
         await prependManagerPreferencesSystemMessageIfChanged(deps, {
           hostId: environment.hostId,
-          input,
+          input: args.input,
           thread: managerThread,
         });
 

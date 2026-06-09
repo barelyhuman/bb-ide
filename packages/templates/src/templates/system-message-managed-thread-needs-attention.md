@@ -5,7 +5,7 @@ summary: Notifies a manager that one of its worker threads is blocked on a pendi
 intent: Prompt the manager to inspect the blocker and decide whether to involve the user or redirect the work.
 editingNotes: Keep this focused on manager triage; do not imply the manager can approve or reject on the user's behalf.
 variables:
-  threadId: The worker thread's ID.
+  threadId: "Serialized worker thread mention token, e.g. '@thread:thr_abc123'."
   titleSuffix?: "Formatted title suffix like ' (Fix login bug)', or empty string if untitled."
 ---
 [bb system]

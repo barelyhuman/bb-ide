@@ -39,9 +39,8 @@ function requestManagedThreadNeedsAttentionNotification(
     name: "Managed thread needs-attention notification",
     work: () =>
       queueManagedThreadNeedsAttentionNotificationBestEffort(deps, {
-        managedThreadId: managedThread.id,
+        managedThread,
         managerThreadId,
-        title: managedThread.title,
       }),
   });
 }

@@ -173,7 +173,7 @@ export const templateDefinitions = [
     "intent": "Prompt the manager to review the result and decide on next steps.",
     "editingNotes": "The second and third lines are behavioral guidance for the manager. Keep worktree caveat to avoid accidental edit duplication.",
     "variables": {
-      "threadId": "The completed worker thread's ID.",
+      "threadId": "Serialized worker thread mention token, e.g. '@thread:thr_abc123'.",
       "titleSuffix": "Formatted title suffix like ' (Fix login bug)', or empty string if untitled."
     }
   },
@@ -187,7 +187,7 @@ export const templateDefinitions = [
     "intent": "Prompt the manager to inspect the failure and decide on the next step.",
     "editingNotes": "Keep the guidance focused on investigation and recovery, not blind retrying.",
     "variables": {
-      "threadId": "The failed worker thread's ID.",
+      "threadId": "Serialized worker thread mention token, e.g. '@thread:thr_abc123'.",
       "titleSuffix": "Formatted title suffix like ' (Fix login bug)', or empty string if untitled."
     }
   },
@@ -201,7 +201,7 @@ export const templateDefinitions = [
     "intent": "Prompt the manager to inspect the thread and decide whether to resume or redirect the work.",
     "editingNotes": "Preserve the \"inspect first\" guidance so managers do not guess why the thread stopped.",
     "variables": {
-      "threadId": "The interrupted worker thread's ID.",
+      "threadId": "Serialized worker thread mention token, e.g. '@thread:thr_abc123'.",
       "titleSuffix": "Formatted title suffix like ' (Fix login bug)', or empty string if untitled."
     }
   },
@@ -215,7 +215,7 @@ export const templateDefinitions = [
     "intent": "Prompt the manager to inspect the blocker and decide whether to involve the user or redirect the work.",
     "editingNotes": "Keep this focused on manager triage; do not imply the manager can approve or reject on the user's behalf.",
     "variables": {
-      "threadId": "The worker thread's ID.",
+      "threadId": "Serialized worker thread mention token, e.g. '@thread:thr_abc123'.",
       "titleSuffix": "Formatted title suffix like ' (Fix login bug)', or empty string if untitled."
     }
   },
@@ -322,7 +322,7 @@ export const templateDefinitions = [
     "intent": "Let the new manager know it owns a thread so it can begin managing it.",
     "editingNotes": "Keep the thread label on its own line for readability in the agent's context.",
     "variables": {
-      "threadLabel": "Thread identifier and title, e.g. 'thr_abc123: Fix login bug'."
+      "threadLabel": "Serialized thread mention token and title suffix, e.g. '@thread:thr_abc123 (Fix login bug)'."
     }
   },
   {
@@ -335,7 +335,7 @@ export const templateDefinitions = [
     "intent": "Let the previous manager know a thread moved away so it can update its internal tracking.",
     "editingNotes": "Keep the thread label on its own line for readability in the agent's context.",
     "variables": {
-      "threadLabel": "Thread identifier and title, e.g. 'thr_abc123: Fix login bug'."
+      "threadLabel": "Serialized thread mention token and title suffix, e.g. '@thread:thr_abc123 (Fix login bug)'."
     }
   },
   {

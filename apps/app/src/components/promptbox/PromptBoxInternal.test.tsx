@@ -124,6 +124,9 @@ function PromptBoxHarness(args: PromptBoxHarnessProps) {
       />
       <output data-testid="draft-text">{draft.text}</output>
       <output data-testid="draft-mentions">{draft.mentions.length}</output>
+      <output data-testid="draft-mentions-json">
+        {JSON.stringify(draft.mentions)}
+      </output>
     </>
   );
 }
@@ -183,6 +186,10 @@ function getDraftText(): string {
 
 function getDraftMentionCount(): number {
   return Number(screen.getByTestId("draft-mentions").textContent ?? "0");
+}
+
+function getDraftMentionsJson(): string {
+  return screen.getByTestId("draft-mentions-json").textContent ?? "";
 }
 
 function createTestClipboardData({
@@ -466,7 +473,89 @@ describe("PromptBoxInternal rich paste", () => {
     expect(getDraftMentionCount()).toBe(0);
   });
 
-  it("pastes copied mention pills as serialized text without mention metadata", async () => {
+  it("pastes copied mention pills with clipboard metadata as mention nodes", async () => {
+    const resource = {
+      kind: "thread",
+      threadId: "thr_design",
+      projectId: "proj_design",
+      threadType: "standard",
+      label: "Design review",
+    };
+    const serializedText = "@thread:thr_design";
+    render(
+      <PromptBoxHarness
+        initialDraft={{
+          text: "",
+          attachments: [],
+        }}
+        historyEntries={[]}
+      />,
+    );
+
+    const editor = getEditor();
+    setEditorSelection(editor, 0);
+    const wasNotCanceled = pasteIntoEditor(editor, {
+      html: `<p>Ask <span data-prompt-mention="true" data-prompt-mention-serialized-text="${serializedText}" data-prompt-mention-resource='${JSON.stringify(
+        resource,
+      )}'>Thread: Design review</span> next</p>`,
+      text: `Ask ${serializedText} next`,
+    });
+
+    expect(wasNotCanceled).toBe(false);
+    await waitFor(() => {
+      expect(getDraftText()).toBe(`Ask ${serializedText} next`);
+    });
+    const expectedMention = {
+      start: "Ask ".length,
+      end: `Ask ${serializedText}`.length,
+      resource,
+    };
+    expect(getDraftMentionsJson()).toBe(JSON.stringify([expectedMention]));
+    expect(getDraftMentionCount()).toBe(1);
+    expect(editor.querySelector('[data-prompt-mention="true"]')).not.toBeNull();
+  });
+
+  it("derives pasted mention text from resource metadata instead of forged serialized text", async () => {
+    const resource = {
+      kind: "thread",
+      threadId: "thr_design",
+      projectId: "proj_design",
+      threadType: "standard",
+      label: "Design review",
+    };
+    render(
+      <PromptBoxHarness
+        initialDraft={{
+          text: "",
+          attachments: [],
+        }}
+        historyEntries={[]}
+      />,
+    );
+
+    const editor = getEditor();
+    setEditorSelection(editor, 0);
+    const wasNotCanceled = pasteIntoEditor(editor, {
+      html: `<p>Ask <span data-prompt-mention="true" data-prompt-mention-serialized-text="@thread:thr_forged" data-prompt-mention-resource='${JSON.stringify(
+        resource,
+      )}'>Thread: Forged review</span> next</p>`,
+      text: "Ask @thread:thr_forged next",
+    });
+
+    expect(wasNotCanceled).toBe(false);
+    await waitFor(() => {
+      expect(getDraftText()).toBe("Ask @thread:thr_design next");
+    });
+    const expectedMention = {
+      start: "Ask ".length,
+      end: "Ask @thread:thr_design".length,
+      resource,
+    };
+    expect(getDraftMentionsJson()).toBe(JSON.stringify([expectedMention]));
+    expect(getDraftMentionCount()).toBe(1);
+  });
+
+  it("pastes copied mention pills without clipboard metadata as plain serialized text", async () => {
     render(
       <PromptBoxHarness
         initialDraft={{

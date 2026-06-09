@@ -5,7 +5,7 @@ summary: Notifies a manager that a worker thread is now assigned to it.
 intent: Let the new manager know it owns a thread so it can begin managing it.
 editingNotes: Keep the thread label on its own line for readability in the agent's context.
 variables:
-  threadLabel: "Thread identifier and title, e.g. 'thr_abc123: Fix login bug'."
+  threadLabel: "Serialized thread mention token and title suffix, e.g. '@thread:thr_abc123 (Fix login bug)'."
 ---
 [bb system]
 

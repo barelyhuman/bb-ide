@@ -9,9 +9,11 @@ import {
   promptMentionIconName,
   promptMentionTooltipLabel,
 } from "@/components/promptbox/mentions/prompt-mention-display";
+import { promptMentionClipboardDataAttributes } from "@/components/promptbox/mentions/prompt-mention-clipboard";
 
 interface PromptMentionPillProps {
   resource: PromptMentionResource;
+  serializedText: string;
 }
 
 interface NormalizeMentionsArgs {
@@ -106,8 +108,15 @@ function mentionPillClassName(interactive: boolean): string {
   );
 }
 
-function PromptMentionPill({ resource }: PromptMentionPillProps) {
+function PromptMentionPill({
+  resource,
+  serializedText,
+}: PromptMentionPillProps) {
   const title = promptMentionTooltipLabel(resource);
+  const clipboardAttributes = promptMentionClipboardDataAttributes({
+    resource,
+    serializedText,
+  });
   const labelNode = (
     <>
       <Icon
@@ -123,7 +132,7 @@ function PromptMentionPill({ resource }: PromptMentionPillProps) {
     return (
       <Link
         className={mentionPillClassName(true)}
-        data-prompt-mention="true"
+        {...clipboardAttributes}
         to={getThreadRoutePath({
           projectId: resource.projectId,
           threadId: resource.threadId,
@@ -143,7 +152,7 @@ function PromptMentionPill({ resource }: PromptMentionPillProps) {
   return (
     <span
       className={mentionPillClassName(false)}
-      data-prompt-mention="true"
+      {...clipboardAttributes}
       title={title}
     >
       {labelNode}
@@ -176,6 +185,7 @@ export function renderMentionTextSegments({
       <PromptMentionPill
         key={`${mention.start}:${mention.end}:${mention.resource.kind}`}
         resource={mention.resource}
+        serializedText={text.slice(mention.start, mention.end)}
       />,
     );
     cursor = mention.end;

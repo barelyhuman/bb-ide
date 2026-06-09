@@ -470,6 +470,8 @@ describe("useThreadUnreadDividerState", () => {
   });
 
   it("places the divider above an agent-initiated user row", async () => {
+    const agentHandoffText =
+      "Agent handoff with enough additional detail to render the generated message row as an expandable button in jsdom.";
     const unreadThread: UnreadDividerThreadState = {
       id: "thread-1",
       lastReadAt: 1_500,
@@ -486,7 +488,7 @@ describe("useThreadUnreadDividerState", () => {
         initiator: "agent",
         role: "user",
         sourceSeqStart: 2_000,
-        text: "Agent handoff",
+        text: agentHandoffText,
         turnRequest: { kind: "message", status: "accepted" },
       }),
     ];

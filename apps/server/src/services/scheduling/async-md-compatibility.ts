@@ -10,7 +10,10 @@ import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
 import type { LoggedPendingInteractionWorkSessionDeps } from "../../types.js";
 import { callHostRetryableOnlineRpc } from "../hosts/online-rpc.js";
-import { queueManagerSystemMessage } from "../threads/manager-system-messages.js";
+import {
+  buildPlainManagerSystemInput,
+  queueManagerSystemMessage,
+} from "../threads/manager-system-messages.js";
 import { requireThreadStoragePath } from "../threads/thread-storage.js";
 
 const ASYNC_FILE_NAME = "ASYNC.md";
@@ -95,11 +98,13 @@ export async function queueAsyncMdMigrationReminderIfPresent(
   }
 
   const queued = await queueManagerSystemMessage(deps, {
+    input: buildPlainManagerSystemInput({
+      text: renderTemplate(
+        "systemMessageManagerAsyncMdMigrationReminder",
+        {},
+      ),
+    }),
     managerThreadId: thread.id,
-    messageText: renderTemplate(
-      "systemMessageManagerAsyncMdMigrationReminder",
-      {},
-    ),
   });
   if (!queued) {
     return false;

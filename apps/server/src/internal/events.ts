@@ -26,6 +26,7 @@ import {
 } from "@bb/host-daemon-contract";
 import {
   requireThreadEventScopeTurnId,
+  type Thread,
   type ThreadEventType,
   type ThreadEventTurnStatus,
 } from "@bb/domain";
@@ -148,9 +149,8 @@ interface AsyncMdMigrationReminderFollowUp {
 
 interface ManagerTurnNotificationFollowUp {
   kind: "manager-turn-notification";
-  managedThreadId: string;
+  managedThread: Thread;
   managerThreadId: string;
-  title: string | null;
   turnStatus: ThreadEventTurnStatus;
 }
 
@@ -359,10 +359,9 @@ async function applyEventEffects(
           if (!alreadyHandledByCommandFailure) {
             followUps.push({
               kind: "manager-turn-notification",
-              managedThreadId: turnCompleted.thread.id,
+              managedThread: turnCompleted.thread,
               managerThreadId: turnCompleted.thread.parentThreadId,
               turnStatus: event.status,
-              title: turnCompleted.thread.title,
             });
           }
         }
@@ -442,10 +441,9 @@ async function executeEventFollowUpBestEffort(
         return;
       case "manager-turn-notification":
         await queueManagedThreadTurnNotificationBestEffort(deps, {
-          managedThreadId: followUp.managedThreadId,
+          managedThread: followUp.managedThread,
           managerThreadId: followUp.managerThreadId,
           turnStatus: followUp.turnStatus,
-          title: followUp.title,
         });
         return;
       case "queued-message-auto-send":

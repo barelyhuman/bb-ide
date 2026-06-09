@@ -6,7 +6,6 @@ import {
   EditorContent,
   useEditor,
   type Editor,
-  type JSONContent,
 } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import {
@@ -51,10 +50,13 @@ import {
 import { PromptMentionExtension } from "./editor/prompt-mention-extension";
 import {
   promptEditorContentFromValue,
+  promptEditorInlineContentFromValue,
   promptEditorValueFromDoc,
   promptMentionResourceFromSuggestion,
+  type PromptEditorValue,
 } from "./editor/prompt-editor-serialization";
 import { MentionMenu } from "./mentions/MentionMenu";
+import { parsePromptMentionClipboardElement } from "./mentions/prompt-mention-clipboard";
 
 const PROMPTBOX_MIN_HEIGHT = 68;
 const PROMPTBOX_SELECTION_REVEAL_MARGIN = 12;
@@ -252,6 +254,11 @@ interface PromptEditorSelectionRevealArgs {
   scrollContainer: HTMLElement;
 }
 
+interface ParsedRichClipboardValue {
+  hasMentions: boolean;
+  value: PromptEditorValue;
+}
+
 type ZenModeUpdate =
   | boolean
   | typeof RESET
@@ -295,27 +302,17 @@ function normalizePastedPlainText(text: string): string {
   return text.replace(/\r\n?/gu, "\n");
 }
 
-function promptEditorPasteContentFromText(text: string): JSONContent[] {
-  if (text.length === 0) {
-    return [];
-  }
-
-  const content: JSONContent[] = [];
-  const parts = text.split("\n");
-  for (const [index, part] of parts.entries()) {
-    if (index > 0) {
-      content.push({ type: "hardBreak" });
-    }
-    if (part.length > 0) {
-      content.push({ type: "text", text: part });
-    }
-  }
-  return content;
+function promptEditorValueFromPlainText(text: string): PromptEditorValue {
+  return { text: normalizePastedPlainText(text), mentions: [] };
 }
 
-function plainTextFromRichHtml(html: string): string {
+function promptEditorValueFromRichHtml(
+  html: string,
+): ParsedRichClipboardValue {
   const document = new DOMParser().parseFromString(html, "text/html");
   let text = "";
+  let hasMentions = false;
+  const mentions: PromptTextMention[] = [];
 
   const appendNewline = () => {
     text = text.replace(/[ \t]+$/u, "");
@@ -333,6 +330,23 @@ function plainTextFromRichHtml(html: string): string {
       return;
     }
     text += collapsedText;
+  };
+
+  const appendClipboardMention = (element: Element): boolean => {
+    const payload = parsePromptMentionClipboardElement({ element });
+    if (!payload) {
+      return false;
+    }
+
+    const start = text.length;
+    text += payload.serializedText;
+    mentions.push({
+      start,
+      end: text.length,
+      resource: payload.resource,
+    });
+    hasMentions = true;
+    return true;
   };
 
   const visitChildren = (node: Node, preserveWhitespace: boolean) => {
@@ -359,6 +373,9 @@ function plainTextFromRichHtml(html: string): string {
 
     const tagName = node.tagName.toUpperCase();
     if (RICH_PASTE_IGNORED_TAGS.has(tagName)) {
+      return;
+    }
+    if (appendClipboardMention(node)) {
       return;
     }
     if (tagName === "BR") {
@@ -390,27 +407,57 @@ function plainTextFromRichHtml(html: string): string {
 
   visitChildren(document.body, false);
 
-  return text
-    .replace(/[ \t]+\n/gu, "\n")
-    .replace(/\n{3,}/gu, "\n\n")
-    .replace(/^\n+/u, "")
-    .replace(/\n+$/u, "");
-}
-
-function plainTextFromClipboardPaste(
-  clipboardData: DataTransfer | null,
-): string | null {
-  const plainText = clipboardData?.getData("text/plain") ?? "";
-  if (plainText.length > 0) {
-    return normalizePastedPlainText(plainText);
+  if (hasMentions) {
+    const trimmedText = text.replace(/\n+$/u, "");
+    return {
+      hasMentions,
+      value: {
+        text: trimmedText,
+        mentions: mentions.filter(
+          (mention) =>
+            mention.start >= 0 &&
+            mention.end > mention.start &&
+            mention.end <= trimmedText.length,
+        ),
+      },
+    };
   }
 
+  return {
+    hasMentions,
+    value: {
+      text: text
+        .replace(/[ \t]+\n/gu, "\n")
+        .replace(/\n{3,}/gu, "\n\n")
+        .replace(/^\n+/u, "")
+        .replace(/\n+$/u, ""),
+      mentions: [],
+    },
+  };
+}
+
+function promptEditorValueFromClipboardPaste(
+  clipboardData: DataTransfer | null,
+): PromptEditorValue | null {
   const html = clipboardData?.getData("text/html") ?? "";
-  if (html.trim().length === 0) {
+  const hasHtml = html.trim().length > 0;
+  if (hasHtml) {
+    const richValue = promptEditorValueFromRichHtml(html);
+    if (richValue.hasMentions) {
+      return richValue.value;
+    }
+  }
+
+  const plainText = clipboardData?.getData("text/plain") ?? "";
+  if (plainText.length > 0) {
+    return promptEditorValueFromPlainText(plainText);
+  }
+
+  if (!hasHtml) {
     return null;
   }
 
-  return plainTextFromRichHtml(html);
+  return promptEditorValueFromRichHtml(html).value;
 }
 
 function findActiveEditorMention(editor: Editor): ActiveEditorMention | null {
@@ -747,18 +794,18 @@ export function PromptBoxInternal({
           return true;
         }
 
-        const pastedText = plainTextFromClipboardPaste(
+        const pastedValue = promptEditorValueFromClipboardPaste(
           event.clipboardData ?? null,
         );
-        if (pastedText === null) return false;
+        if (pastedValue === null) return false;
 
         event.preventDefault();
-        if (pastedText.length === 0) return true;
+        if (pastedValue.text.length === 0) return true;
 
         editorRef.current
           ?.chain()
           .focus()
-          .insertContent(promptEditorPasteContentFromText(pastedText))
+          .insertContent(promptEditorInlineContentFromValue(pastedValue))
           .run();
         return true;
       },

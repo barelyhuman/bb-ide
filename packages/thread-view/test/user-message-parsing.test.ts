@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { turnScope } from "@bb/domain";
+import { turnScope, type PromptTextMention } from "@bb/domain";
 import {
   createTimelineEventFactory,
   type TimelineEventFactory,
@@ -210,6 +210,48 @@ describe("user message parsing", () => {
       senderThreadId: null,
       turnRequest: { kind: "message", status: "pending" },
     });
+  });
+
+  it("preserves mentions for visible system-initiated messages", () => {
+    const factory = createTimelineEventFactory({ threadId: "thread-1" });
+    const mentionText = "@thread:thr_child";
+    const text = `[bb system]\n\nManaged thread needs attention: ${mentionText} (Backend cleanup)`;
+    const mentionStart =
+      "[bb system]\n\nManaged thread needs attention: ".length;
+    const mention: PromptTextMention = {
+      start: mentionStart,
+      end: mentionStart + mentionText.length,
+      resource: {
+        kind: "thread",
+        label: "Backend cleanup",
+        projectId: "proj_alpha",
+        threadId: "thr_child",
+        threadType: "standard",
+      },
+    };
+    const row = factory.clientTurnRequested({
+      initiator: "system",
+      senderThreadId: null,
+      target: { kind: "new-turn" },
+      text,
+      input: [{ type: "text", text, mentions: [mention] }],
+    });
+    const { event, meta } = decodeThreadEventRow(row);
+
+    const message = parseUserFromClientRequest({
+      decoded: event,
+      meta,
+      options: managerVisibilityOptions,
+    });
+
+    expect(message).toMatchObject({
+      kind: "user",
+      initiator: "system",
+      senderThreadId: null,
+      text,
+      turnRequest: { kind: "message", status: "pending" },
+    });
+    expect(message?.mentions).toEqual([mention]);
   });
 
   it("treats steers as steer requests regardless of initiator", () => {

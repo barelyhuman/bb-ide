@@ -666,9 +666,8 @@ function settleThreadCommandFailure(
       },
       run: (deps) =>
         queueManagedThreadTurnNotificationBestEffort(deps, {
-          managedThreadId: thread.id,
+          managedThread: thread,
           managerThreadId,
-          title: thread.title,
           turnStatus: "failed",
         }),
     });

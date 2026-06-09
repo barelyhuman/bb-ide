@@ -5,7 +5,7 @@ summary: Notifies a manager that one of its worker threads was interrupted.
 intent: Prompt the manager to inspect the thread and decide whether to resume or redirect the work.
 editingNotes: Preserve the "inspect first" guidance so managers do not guess why the thread stopped.
 variables:
-  threadId: The interrupted worker thread's ID.
+  threadId: "Serialized worker thread mention token, e.g. '@thread:thr_abc123'."
   titleSuffix?: "Formatted title suffix like ' (Fix login bug)', or empty string if untitled."
 ---
 [bb system]

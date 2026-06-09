@@ -1,11 +1,16 @@
-import type { ThreadEventTurnStatus } from "@bb/domain";
+import type { PromptInput, Thread, ThreadEventTurnStatus } from "@bb/domain";
 import { renderTemplate } from "@bb/templates";
 import type { LoggedPendingInteractionWorkSessionDeps } from "../../types.js";
-import { queueManagerSystemMessage } from "./manager-system-messages.js";
+import {
+  buildManagerSystemInputFromTemplateSlot,
+  buildManagerSystemThreadMention,
+  queueManagerSystemMessage,
+  type ManagerSystemInputSegment,
+  type ManagerSystemRenderedMention,
+} from "./manager-system-messages.js";
 
 export interface ManagedThreadTurnNotificationBatchItem {
-  managedThreadId: string;
-  title: string | null;
+  managedThread: Thread;
   turnStatus: ThreadEventTurnStatus;
 }
 
@@ -18,25 +23,44 @@ interface RenderManagedThreadTurnStatusBatchMessageArgs {
   items: ManagedThreadTurnNotificationBatchItem[];
 }
 
-interface RenderManagedThreadNeedsAttentionMessageArgs {
-  managedThreadId: string;
-  title: string | null;
+interface ManagedThreadTurnStatusBatchLine {
+  item: ManagedThreadTurnNotificationBatchItem;
+  mention: ManagerSystemRenderedMention;
+}
+
+interface RenderManagedThreadTurnStatusBatchTextArgs {
+  lines: ManagedThreadTurnStatusBatchLine[];
+}
+
+interface FormatManagedThreadTurnStatusLineArgs {
+  line: ManagedThreadTurnStatusBatchLine;
+}
+
+interface BuildManagedThreadTurnStatusBatchInputArgs {
+  items: ManagedThreadTurnNotificationBatchItem[];
+}
+
+interface BuildManagedThreadNeedsAttentionInputArgs {
+  managedThread: Thread;
 }
 
 interface QueueManagedThreadTurnNotificationArgs {
-  managedThreadId: string;
+  managedThread: Thread;
   managerThreadId: string;
-  title: string | null;
   turnStatus: ThreadEventTurnStatus;
 }
 
 interface QueueManagedThreadNeedsAttentionNotificationArgs {
-  managedThreadId: string;
+  managedThread: Thread;
   managerThreadId: string;
-  title: string | null;
 }
 
 const MANAGED_THREAD_TURN_NOTIFICATION_BATCH_DELAY_MS = 2_000;
+const MANAGED_THREAD_OUTCOME_BATCH_UPDATES_SLOT =
+  "__BB_MANAGED_THREAD_OUTCOME_BATCH_UPDATES__";
+const MANAGED_THREAD_ID_SLOT = "__BB_MANAGED_THREAD_ID__";
+const MANAGED_THREAD_INTERRUPTED_GUIDANCE =
+  ". Inspect this thread directly before taking action. If it was stopped manually by the user, treat that as intentional; do not resume, restart, retry, replace, or continue the work unless the user explicitly asks.";
 const managedThreadTurnNotificationBatches = new Map<
   string,
   ManagedThreadTurnNotificationBatch
@@ -63,20 +87,98 @@ function formatManagedThreadTurnStatusLabel(
   }
 }
 
+function buildManagedThreadTurnStatusBatchLines(
+  args: RenderManagedThreadTurnStatusBatchMessageArgs,
+): ManagedThreadTurnStatusBatchLine[] {
+  return args.items.map((item) => ({
+    item,
+    mention: buildManagerSystemThreadMention({
+      thread: item.managedThread,
+    }),
+  }));
+}
+
 function formatManagedThreadTurnStatusLine(
-  item: ManagedThreadTurnNotificationBatchItem,
+  args: FormatManagedThreadTurnStatusLineArgs,
 ): string {
-  if (item.turnStatus === "interrupted") {
-    return `- interrupted: ${item.managedThreadId}${formatManagedThreadTitleSuffix(item.title)}. Inspect this thread directly before taking action. If it was stopped manually by the user, treat that as intentional; do not resume, restart, retry, replace, or continue the work unless the user explicitly asks.`;
+  const titleSuffix = formatManagedThreadTitleSuffix(
+    args.line.item.managedThread.title,
+  );
+  if (args.line.item.turnStatus === "interrupted") {
+    return `- interrupted: ${args.line.mention.serializedText}${titleSuffix}${MANAGED_THREAD_INTERRUPTED_GUIDANCE}`;
   }
-  return `- ${formatManagedThreadTurnStatusLabel(item.turnStatus)}: ${item.managedThreadId}${formatManagedThreadTitleSuffix(item.title)}`;
+  return `- ${formatManagedThreadTurnStatusLabel(args.line.item.turnStatus)}: ${args.line.mention.serializedText}${titleSuffix}`;
+}
+
+function renderManagedThreadTurnStatusBatchText(
+  args: RenderManagedThreadTurnStatusBatchTextArgs,
+): string {
+  return renderTemplate("systemMessageManagedThreadOutcomeBatch", {
+    updates: args.lines
+      .map((line) => formatManagedThreadTurnStatusLine({ line }))
+      .join("\n"),
+  });
+}
+
+function buildManagedThreadTurnStatusLineSegments(
+  args: FormatManagedThreadTurnStatusLineArgs,
+): ManagerSystemInputSegment[] {
+  const titleSuffix = formatManagedThreadTitleSuffix(
+    args.line.item.managedThread.title,
+  );
+  if (args.line.item.turnStatus === "interrupted") {
+    return [
+      { kind: "text", text: "- interrupted: " },
+      { kind: "mention", mention: args.line.mention },
+      {
+        kind: "text",
+        text: `${titleSuffix}${MANAGED_THREAD_INTERRUPTED_GUIDANCE}`,
+      },
+    ];
+  }
+
+  return [
+    {
+      kind: "text",
+      text: `- ${formatManagedThreadTurnStatusLabel(args.line.item.turnStatus)}: `,
+    },
+    { kind: "mention", mention: args.line.mention },
+    { kind: "text", text: titleSuffix },
+  ];
+}
+
+function buildManagedThreadTurnStatusBatchSegments(
+  args: RenderManagedThreadTurnStatusBatchTextArgs,
+): ManagerSystemInputSegment[] {
+  const segments: ManagerSystemInputSegment[] = [];
+  for (const [index, line] of args.lines.entries()) {
+    if (index > 0) {
+      segments.push({ kind: "text", text: "\n" });
+    }
+    segments.push(...buildManagedThreadTurnStatusLineSegments({ line }));
+  }
+  return segments;
 }
 
 export function renderManagedThreadTurnStatusBatchMessage(
   args: RenderManagedThreadTurnStatusBatchMessageArgs,
 ): string {
-  return renderTemplate("systemMessageManagedThreadOutcomeBatch", {
-    updates: args.items.map(formatManagedThreadTurnStatusLine).join("\n"),
+  return renderManagedThreadTurnStatusBatchText({
+    lines: buildManagedThreadTurnStatusBatchLines(args),
+  });
+}
+
+export function buildManagedThreadTurnStatusBatchInput(
+  args: BuildManagedThreadTurnStatusBatchInputArgs,
+): PromptInput[] {
+  const lines = buildManagedThreadTurnStatusBatchLines(args);
+  const renderedText = renderTemplate("systemMessageManagedThreadOutcomeBatch", {
+    updates: MANAGED_THREAD_OUTCOME_BATCH_UPDATES_SLOT,
+  });
+  return buildManagerSystemInputFromTemplateSlot({
+    renderedText,
+    slot: MANAGED_THREAD_OUTCOME_BATCH_UPDATES_SLOT,
+    segments: buildManagedThreadTurnStatusBatchSegments({ lines }),
   });
 }
 
@@ -109,10 +211,10 @@ async function flushManagedThreadTurnNotificationBatch(
 
   try {
     await queueManagerSystemMessage(deps, {
-      managerThreadId,
-      messageText: renderManagedThreadTurnStatusBatchMessage({
+      input: buildManagedThreadTurnStatusBatchInput({
         items: batch.items,
       }),
+      managerThreadId,
     });
   } catch (error) {
     deps.logger.error(
@@ -120,7 +222,7 @@ async function flushManagedThreadTurnNotificationBatch(
         err: error,
         managerThreadId,
         managedThreads: batch.items.map((item) => ({
-          managedThreadId: item.managedThreadId,
+          managedThreadId: item.managedThread.id,
           turnStatus: item.turnStatus,
         })),
       },
@@ -147,8 +249,7 @@ function queueManagedThreadTurnNotificationBatchItem(
   );
   if (existingBatch) {
     existingBatch.items.push({
-      managedThreadId: args.managedThreadId,
-      title: args.title,
+      managedThread: args.managedThread,
       turnStatus: args.turnStatus,
     });
     clearTimeout(existingBatch.timer);
@@ -162,8 +263,7 @@ function queueManagedThreadTurnNotificationBatchItem(
   managedThreadTurnNotificationBatches.set(args.managerThreadId, {
     items: [
       {
-        managedThreadId: args.managedThreadId,
-        title: args.title,
+        managedThread: args.managedThread,
         turnStatus: args.turnStatus,
       },
     ],
@@ -174,12 +274,23 @@ function queueManagedThreadTurnNotificationBatchItem(
   });
 }
 
-function renderManagedThreadNeedsAttentionMessage(
-  args: RenderManagedThreadNeedsAttentionMessageArgs,
-): string {
-  return renderTemplate("systemMessageManagedThreadNeedsAttention", {
-    threadId: args.managedThreadId,
-    titleSuffix: formatManagedThreadTitleSuffix(args.title),
+function buildManagedThreadNeedsAttentionInput(
+  args: BuildManagedThreadNeedsAttentionInputArgs,
+): PromptInput[] {
+  const mention = buildManagerSystemThreadMention({
+    thread: args.managedThread,
+  });
+  const renderedText = renderTemplate(
+    "systemMessageManagedThreadNeedsAttention",
+    {
+      threadId: MANAGED_THREAD_ID_SLOT,
+      titleSuffix: formatManagedThreadTitleSuffix(args.managedThread.title),
+    },
+  );
+  return buildManagerSystemInputFromTemplateSlot({
+    renderedText,
+    slot: MANAGED_THREAD_ID_SLOT,
+    segments: [{ kind: "mention", mention }],
   });
 }
 
@@ -198,7 +309,7 @@ export async function queueManagedThreadTurnNotificationBestEffort(
   } catch (error) {
     deps.logger.error(
       {
-        managedThreadId: args.managedThreadId,
+        managedThreadId: args.managedThread.id,
         managerThreadId: args.managerThreadId,
         turnStatus: args.turnStatus,
         err: error,
@@ -214,13 +325,13 @@ export async function queueManagedThreadNeedsAttentionNotificationBestEffort(
 ): Promise<void> {
   try {
     await queueManagerSystemMessage(deps, {
+      input: buildManagedThreadNeedsAttentionInput(args),
       managerThreadId: args.managerThreadId,
-      messageText: renderManagedThreadNeedsAttentionMessage(args),
     });
   } catch (error) {
     deps.logger.error(
       {
-        managedThreadId: args.managedThreadId,
+        managedThreadId: args.managedThread.id,
         managerThreadId: args.managerThreadId,
         err: error,
       },

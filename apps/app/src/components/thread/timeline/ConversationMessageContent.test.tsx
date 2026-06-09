@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, useLocation } from "react-router-dom";
+import type { PromptMentionResource } from "@bb/domain";
 import { ConversationMessageContent } from "./ConversationMessageContent";
 import { USER_MESSAGE_CHAR_CAP } from "./conversation-message-limits";
 import { AppRouteNavigationProvider } from "@/components/ui/app-route-anchor";
@@ -72,6 +73,14 @@ describe("ConversationMessageContent", () => {
   });
 
   it("renders user message thread mentions as router links", () => {
+    const token = "@thread:thr_manager";
+    const resource: PromptMentionResource = {
+      kind: "thread",
+      threadId: "thr_manager",
+      projectId: "proj_target",
+      threadType: "manager",
+      label: "Prompt UX manager",
+    };
     render(
       <MemoryRouter>
         <ConversationMessageContent
@@ -83,18 +92,12 @@ describe("ConversationMessageContent", () => {
           mentions={[
             {
               start: 4,
-              end: 22,
-              resource: {
-                kind: "thread",
-                threadId: "thr_manager",
-                projectId: "proj_target",
-                threadType: "manager",
-                label: "Prompt UX manager",
-              },
+              end: `Ask ${token}`.length,
+              resource,
             },
           ]}
           projectId="proj_current"
-          text="Ask @thread:thr_manager to review this."
+          text={`Ask ${token} to review this.`}
           turnRequest={{ kind: "message", status: "accepted" }}
         />
       </MemoryRouter>,
@@ -109,6 +112,13 @@ describe("ConversationMessageContent", () => {
     expect(mention.getAttribute("title")).toBe("Manager: Prompt UX manager");
     expect(mention.getAttribute("href")).toBe(
       "/projects/proj_target/threads/thr_manager",
+    );
+    expect(mention.getAttribute("data-prompt-mention")).toBe("true");
+    expect(
+      mention.getAttribute("data-prompt-mention-serialized-text"),
+    ).toBe(token);
+    expect(mention.getAttribute("data-prompt-mention-resource")).toBe(
+      JSON.stringify(resource),
     );
   });
 
@@ -187,7 +197,9 @@ describe("ConversationMessageContent", () => {
     expect(screen.queryByRole("link", { name: "Boundary thread" })).toBeNull();
   });
 
-  it("renders agent-originated message rows with sender links and hides bb reply guidance", () => {
+  it("renders agent-originated messages as expandable rows with sender links and hides bb reply guidance", () => {
+    const bodyText =
+      "Line 1\nLine 2\nLine 3\nLine 4 with enough additional detail to force an expandable generated message preview in jsdom";
     render(
       <MemoryRouter initialEntries={["/"]}>
         <AppRouteNavigationProvider>
@@ -204,9 +216,7 @@ describe("ConversationMessageContent", () => {
             senderThreadTitle="Frontend manager"
             attachments={null}
             mentions={[]}
-            text={
-              '[bb message from thread:thr_sender123; reply with `bb thread tell thr_sender123 "<your response>"`]\n\nLine 1\nLine 2\nLine 3\nLine 4'
-            }
+            text={`[bb message from thread:thr_sender123; reply with \`bb thread tell thr_sender123 "<your response>"\`]\n\n${bodyText}`}
             turnRequest={{ kind: "message", status: "accepted" }}
           />
           <LocationProbe label="location" />
@@ -218,6 +228,9 @@ describe("ConversationMessageContent", () => {
     const senderLink = screen.getByRole("link", {
       name: "Frontend manager",
     });
+    const toggle = screen.getByRole("button", {
+      name: /Message from Frontend manager/u,
+    });
     expect(senderLink.getAttribute("href")).toBe(
       "/projects/proj_123/threads/thr_sender123",
     );
@@ -225,10 +238,15 @@ describe("ConversationMessageContent", () => {
     expect(screen.getByTestId("location").textContent).toBe(
       "/projects/proj_123/threads/thr_sender123",
     );
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(toggle);
 
     expect(screen.queryByText("thr_sender123")).toBeNull();
     expect(screen.queryByText(/\[bb message from thread/u)).toBeNull();
     expect(screen.queryByText(/bb thread tell/u)).toBeNull();
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getAllByText(/Line 4/u).length).toBeGreaterThan(0);
   });
 
   it("renders generated agent steer status inside the expanded body", () => {
@@ -262,7 +280,7 @@ describe("ConversationMessageContent", () => {
 
   it("renders mention pills in agent-originated rows with shifted offsets", () => {
     const token = "@thread:thr_target";
-    const text = `[bb message from thread:thr_sender123; reply with \`bb thread tell thr_sender123 "<your response>"\`]\n\nAsk ${token} to review.`;
+    const text = `[bb message from thread:thr_sender123; reply with \`bb thread tell thr_sender123 "<your response>"\`]\n\nAsk ${token} to review the generated prompt mention copy and paste behavior in enough detail to expand.`;
     const start = text.indexOf(token);
 
     render(

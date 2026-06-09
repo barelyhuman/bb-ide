@@ -491,15 +491,36 @@ describe("internal interactive request lifecycle", () => {
           `Expected manager turn command, got ${managerTurnCommand.command.type}`,
         );
       }
+      const mentionText = `@thread:${childThread.id}`;
+      const notificationText = renderTemplate(
+        "systemMessageManagedThreadNeedsAttention",
+        {
+          threadId: mentionText,
+          titleSuffix: " (Backend port validation cleanup)",
+        },
+      );
+      const mentionStart = notificationText.indexOf(mentionText);
+      if (mentionStart === -1) {
+        throw new Error("Expected notification text to contain thread mention");
+      }
       expect(managerTurnCommand.command.input).toEqual(
         expect.arrayContaining([
           {
             type: "text",
-            text: renderTemplate("systemMessageManagedThreadNeedsAttention", {
-              threadId: childThread.id,
-              titleSuffix: " (Backend port validation cleanup)",
-            }),
-            mentions: [],
+            text: notificationText,
+            mentions: [
+              {
+                start: mentionStart,
+                end: mentionStart + mentionText.length,
+                resource: {
+                  kind: "thread",
+                  label: "Backend port validation cleanup",
+                  projectId: project.id,
+                  threadId: childThread.id,
+                  threadType: "standard",
+                },
+              },
+            ],
           },
         ]),
       );
