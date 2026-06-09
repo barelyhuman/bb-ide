@@ -106,17 +106,15 @@ interface ThreadRowContainerArgs {
   style: CSSProperties;
 }
 
+// Toggles a parent thread's children. Mirrors the "Projects" section-label
+// chevron (trailing the title, ChevronRight that rotates 90° when expanded) but
+// stays visible at rest: unlike a labeled section, a thread row gives no other
+// cue that it has children to collapse.
 function ThreadParentChevron({
   isCollapsed,
   onToggle,
   threadTitle,
 }: ThreadParentChevronProps) {
-  const chevronClassName = cn(
-    "inline-flex items-center justify-center transition-all duration-150",
-    COARSE_POINTER_ICON_SIZE_CLASS,
-    !isCollapsed && "rotate-90",
-  );
-
   return (
     <button
       type="button"
@@ -132,26 +130,16 @@ function ThreadParentChevron({
         event.stopPropagation();
         onToggle();
       }}
-      className={cn(
-        "relative z-10 rounded-md outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2",
-        SIDEBAR_ROW_GLYPH_SLOT_CLASS,
-        COARSE_POINTER_GLYPH_BOX_CLASS,
-      )}
+      className="relative z-10 inline-flex size-5 shrink-0 items-center justify-center rounded-md text-subtle-foreground outline-none ring-sidebar-ring transition-colors hover:bg-state-hover hover:text-foreground focus-visible:ring-2"
     >
-      <span
+      <Icon
+        name="ChevronRight"
         className={cn(
-          "relative inline-flex items-center justify-center",
-          COARSE_POINTER_ICON_SIZE_CLASS,
+          "size-3 transition-transform duration-150",
+          !isCollapsed && "rotate-90",
         )}
-      >
-        <span className={chevronClassName} aria-hidden="true">
-          <Icon
-            name="ChevronRight"
-            className={COARSE_POINTER_ICON_SIZE_CLASS}
-            aria-hidden="true"
-          />
-        </span>
-      </span>
+        aria-hidden="true"
+      />
     </button>
   );
 }
@@ -426,17 +414,17 @@ function ThreadRowComponent({
         title={linkTitle}
         className="absolute inset-0 rounded-md outline-none ring-sidebar-ring focus-visible:ring-2"
       />
-      {parentOptions && hasChildren ? (
-        <ThreadParentChevron
-          isCollapsed={isParentCollapsed}
-          onToggle={() => {
-            parentOptions.onToggleCollapsed(thread.id);
-          }}
-          threadTitle={threadTitle}
-        />
-      ) : null}
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="min-w-0 truncate">{threadTitle}</span>
+        {parentOptions && hasChildren ? (
+          <ThreadParentChevron
+            isCollapsed={isParentCollapsed}
+            onToggle={() => {
+              parentOptions.onToggleCollapsed(thread.id);
+            }}
+            threadTitle={threadTitle}
+          />
+        ) : null}
         {hasComposerDraft ? <ThreadDraftIndicator /> : null}
       </span>
       <span
@@ -477,7 +465,7 @@ function ThreadRowComponent({
               thread={thread}
               showArchiveAll={hasChildren}
               triggerClassName={cn(
-                "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                "text-muted-foreground",
                 COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
               )}
               onOpenChange={setIsDropdownActionsOpen}

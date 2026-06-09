@@ -548,7 +548,7 @@ function EnvironmentThreadGroupHeaderActions({
             aria-label="Worktree actions"
             title="Worktree actions"
             className={cn(
-              "rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground",
+              "rounded-md p-0 text-muted-foreground",
               COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
             )}
           >
@@ -1275,7 +1275,7 @@ function ProjectRowComponent({
                 project={project}
                 onOpenChange={setIsDropdownActionsOpen}
                 triggerClassName={cn(
-                  "relative z-10 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground",
+                  "relative z-10 text-muted-foreground",
                   COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
                 )}
               />
@@ -1291,7 +1291,7 @@ function ProjectRowComponent({
                   handleCreateThread();
                 }}
                 className={cn(
-                  "rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                  "rounded-md p-0 text-muted-foreground",
                   COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
                 )}
               >
