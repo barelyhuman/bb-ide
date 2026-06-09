@@ -1,7 +1,9 @@
 import type { Thread } from "@bb/domain";
-import { Button } from "@/components/ui/button.js";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
 import { threadTypeLabel } from "@/lib/thread-title";
+import {
+  ConfirmDeleteDialog,
+  ConfirmDeleteDialogContent,
+} from "./ConfirmDeleteDialog";
 
 export interface ThreadDeleteDialogTarget {
   thread: Thread;
@@ -23,18 +25,16 @@ export function ThreadDeleteDialog({
   onDelete,
 }: ThreadDeleteDialogProps) {
   return (
-    <Dialog open={target !== null} onOpenChange={onOpenChange}>
-      <DialogContent>
-        {target ? (
-          <ThreadDeleteDialogContent
-            target={target}
-            pending={pending}
-            onOpenChange={onOpenChange}
-            onDelete={onDelete}
-          />
-        ) : null}
-      </DialogContent>
-    </Dialog>
+    <ConfirmDeleteDialog open={target !== null} onOpenChange={onOpenChange}>
+      {target ? (
+        <ThreadDeleteDialogContent
+          target={target}
+          pending={pending}
+          onOpenChange={onOpenChange}
+          onDelete={onDelete}
+        />
+      ) : null}
+    </ConfirmDeleteDialog>
   );
 }
 
@@ -58,29 +58,13 @@ export function ThreadDeleteDialogContent({
   ].filter((part): part is string => part !== null);
 
   return (
-    <>
-      <DialogHeader>
-        <DialogTitle>Delete {label}?</DialogTitle>
-        <DialogDescription>{sentences.join(" ")}</DialogDescription>
-      </DialogHeader>
-      <DialogFooter>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={pending}
-          onClick={() => onOpenChange(false)}
-        >
-          Cancel
-        </Button>
-        <Button
-          type="button"
-          variant="destructive"
-          disabled={pending}
-          onClick={() => onDelete(target)}
-        >
-          Delete {label}
-        </Button>
-      </DialogFooter>
-    </>
+    <ConfirmDeleteDialogContent
+      title={`Delete ${label}?`}
+      description={sentences.join(" ")}
+      confirmLabel={`Delete ${label}`}
+      pending={pending}
+      onConfirm={() => onDelete(target)}
+      onCancel={() => onOpenChange(false)}
+    />
   );
 }

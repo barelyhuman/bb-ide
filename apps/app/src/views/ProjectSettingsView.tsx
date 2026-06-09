@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   findLocalPathProjectSourceForHost,
   isLocalPathProjectSource,
@@ -20,6 +19,7 @@ import {
 import { ProjectSourceRow } from "@/views/project-settings/ProjectSourceRow";
 import {
   useAddLocalProjectSource,
+  useDeleteLocalProjectSource,
   useUpdateLocalProjectSource,
 } from "@/hooks/mutations/project-mutations";
 import {
@@ -34,12 +34,6 @@ import {
   stripProjectThreads,
   useSidebarNavigation,
 } from "@/hooks/queries/project-queries";
-import { invalidateProjectSourceQueries } from "@/hooks/cache-owners/mutation-cache-effects";
-import * as api from "@/lib/api";
-
-interface DeleteProjectSourceMutationRequest {
-  sourceId: string;
-}
 
 export function ProjectSettingsView() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -49,25 +43,11 @@ export function ProjectSettingsView() {
     [sidebarNavigationQuery.data],
   );
   const isLoading = sidebarNavigationQuery.isFetching && projects === undefined;
-  const queryClient = useQueryClient();
 
   const [deleteTarget, setDeleteTarget] =
     useState<ProjectSourceDeleteDialogTarget | null>(null);
 
-  const deleteSource = useMutation({
-    meta: {
-      errorMessage: "Failed to remove source.",
-    },
-    mutationFn: ({ sourceId }: DeleteProjectSourceMutationRequest) => {
-      if (!projectId) return Promise.resolve();
-      return api.removeProjectSource(projectId, sourceId);
-    },
-    onSuccess: () => {
-      invalidateProjectSourceQueries({ projectId, queryClient });
-      setDeleteTarget(null);
-    },
-  });
-
+  const deleteSource = useDeleteLocalProjectSource();
   const addLocalSource = useAddLocalProjectSource();
   const updateLocalSource = useUpdateLocalProjectSource();
 
@@ -218,7 +198,13 @@ export function ProjectSettingsView() {
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null);
         }}
-        onDelete={(sourceId) => deleteSource.mutate({ sourceId })}
+        onDelete={(sourceId) => {
+          if (!projectId) return;
+          deleteSource.mutate(
+            { projectId, sourceId },
+            { onSuccess: () => setDeleteTarget(null) },
+          );
+        }}
       />
     </PageShell>
   );

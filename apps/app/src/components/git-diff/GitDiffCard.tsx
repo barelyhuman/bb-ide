@@ -14,6 +14,7 @@ import { CopyButton } from "@/components/ui/copy-button.js";
 import { DiffStatsTally } from "@/components/ui/diff-stats-tally.js";
 import { FilePathLink } from "@/components/ui/file-path-link.js";
 import { Icon } from "@/components/ui/icon.js";
+import { OpenInEditorButton } from "@/components/ui/open-in-editor-button.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
 import { TruncateStart } from "@/components/ui/truncate-start.js";
 import { resolveAbsoluteFilePath } from "@/lib/absolute-file-path";
@@ -439,15 +440,10 @@ export const GitDiffCard = memo(function GitDiffCard({
                 />
               ) : null}
               {canOpenFile && openablePath && onOpenFileInEditor ? (
-                <button
-                  type="button"
+                <OpenInEditorButton
                   onClick={() => onOpenFileInEditor(openablePath)}
-                  aria-label={`Open ${fileDiffLabel} in editor`}
-                  title="Open in editor"
-                  className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                >
-                  <Icon name="ExternalLink" aria-hidden className="size-3" />
-                </button>
+                  label={`Open ${fileDiffLabel} in editor`}
+                />
               ) : null}
             </span>
           </span>

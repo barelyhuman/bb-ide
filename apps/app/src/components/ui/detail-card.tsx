@@ -1,7 +1,12 @@
 import { type CSSProperties, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-const DETAIL_GRID_CLASS =
+/**
+ * The label/value column grid shared by every detail row. Exported so loading
+ * skeletons can align their placeholder bars to real rows without re-typing
+ * (and silently drifting from) the column template.
+ */
+export const DETAIL_GRID_CLASS =
   "grid grid-cols-[var(--detail-label-width,96px)_minmax(0,1fr)] gap-x-3";
 const DETAIL_LABEL_CLASS = "m-0 text-xs leading-5 text-muted-foreground";
 const DETAIL_VALUE_CLASS = "m-0 min-w-0 text-xs leading-5 text-foreground";

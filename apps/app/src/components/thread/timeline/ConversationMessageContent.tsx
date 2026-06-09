@@ -12,7 +12,6 @@ import { CopyButton } from "../../ui/copy-button.js";
 import { cn } from "@/lib/utils";
 import { MarkdownPreview } from "../../ui/markdown-preview.js";
 import type { MarkdownLinkRouting } from "@/components/ui/markdown-link-routing.js";
-import { Icon } from "@/components/ui/icon.js";
 import { computeMutedPrefixLength } from "./compute-muted-prefix-length.js";
 import type { TimelineTitleLinkResolver } from "./TimelineTitleView.js";
 import type {
@@ -36,6 +35,7 @@ import {
 } from "./ConversationMessageMentions.js";
 import { USER_MESSAGE_CHAR_CAP } from "./conversation-message-limits.js";
 import { turnRequestLabel } from "./conversation-turn-request-label.js";
+import { TurnRequestLabel } from "./TurnRequestLabel.js";
 import {
   ConversationMessageOverflowToggle,
   useIsOverflowing,
@@ -256,8 +256,6 @@ function UserConversationMessage({
   const mutePrefixLength = computeMutedPrefixLength(initiator, text);
   const messageText = text.trim();
   const requestLabel = turnRequestLabel(turnRequest);
-  const isPendingSteer =
-    turnRequest.kind === "steer" && turnRequest.status === "pending";
   const showToolbar = requestLabel !== null || messageText.length > 0;
 
   return (
@@ -283,20 +281,7 @@ function UserConversationMessage({
         </div>
         {showToolbar ? (
           <div className="mt-1 flex items-center justify-end gap-2">
-            {requestLabel ? (
-              <span
-                className={cn(
-                  "shrink-0 whitespace-nowrap text-xs leading-none text-muted-foreground",
-                  isPendingSteer && "animate-shine",
-                )}
-              >
-                <Icon
-                  name="CornerDownRight"
-                  className="mr-1 inline-block size-3 align-middle"
-                />
-                {requestLabel}
-              </span>
-            ) : null}
+            <TurnRequestLabel turnRequest={turnRequest} />
             {messageText ? (
               <CopyButton text={text} label="Copy message" />
             ) : null}

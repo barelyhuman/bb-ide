@@ -22,6 +22,7 @@ import {
 import { ResponsiveDrawerShell } from "@/components/ui/responsive-overlay.js";
 import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
+import { DETAIL_GRID_CLASS } from "@/components/ui/detail-card.js";
 import { useAtomValue } from "jotai";
 import {
   MAX_TERMINAL_PANEL_HEIGHT_PERCENT,
@@ -430,7 +431,7 @@ function ThreadMetadataLoadingSkeleton() {
         {METADATA_SKELETON_ROW_VALUE_WIDTHS.map((valueWidth, index) => (
           <div
             key={index}
-            className="grid grid-cols-[var(--detail-label-width,96px)_minmax(0,1fr)] items-center gap-x-3 py-0.5"
+            className={cn(DETAIL_GRID_CLASS, "items-center py-0.5")}
           >
             <Skeleton className="h-3 w-14 rounded-sm" />
             <Skeleton className={`h-3 ${valueWidth} max-w-full rounded-sm`} />

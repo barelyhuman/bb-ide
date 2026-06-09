@@ -17,6 +17,10 @@ import {
   sidebarNavigationQueryKey,
 } from "./query-keys";
 import { resolveProjectSourceBranchesPlaceholder } from "./query-placeholders";
+import {
+  PROMPT_HISTORY_STALE_TIME_MS,
+  requireEnabledQueryArg,
+} from "./query-helpers";
 
 interface QueryOptions {
   enabled?: boolean;
@@ -49,11 +53,11 @@ function requireProjectId(
   projectId: string | undefined,
   hookName: string,
 ): string {
-  if (!projectId) {
-    throw new Error(`${hookName}: projectId is required when query is enabled`);
-  }
-
-  return projectId;
+  return requireEnabledQueryArg({
+    value: projectId,
+    hookName,
+    argName: "projectId",
+  });
 }
 
 export function stripProjectThreads(
@@ -130,7 +134,7 @@ export function useProjectPromptHistory(
         signal,
       ),
     enabled: (options?.enabled ?? true) && Boolean(projectId),
-    staleTime: 10_000,
+    staleTime: PROMPT_HISTORY_STALE_TIME_MS,
   });
 }
 

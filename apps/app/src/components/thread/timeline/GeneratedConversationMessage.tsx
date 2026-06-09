@@ -2,7 +2,7 @@ import { memo, useCallback, useMemo } from "react";
 import type { TimelineUserConversationRow } from "@bb/server-contract";
 import type { PromptTextMention } from "@bb/domain";
 import type { TimelineTitle, TimelineTitleSegment } from "@bb/thread-view";
-import { Icon, type IconName } from "@/components/ui/icon.js";
+import { type IconName } from "@/components/ui/icon.js";
 import {
   ConversationAttachments,
   type ConversationAttachmentItems,
@@ -18,7 +18,7 @@ import { NESTED_TIMELINE_GROUP_LINE_CLASS_NAME } from "./timeline-nested-group-l
 import type { TimelineTitleLinkResolver } from "./TimelineTitleView.js";
 import type { ThreadTimelineLocalFileLinkHandler } from "./types.js";
 import { turnRequestLabel } from "./conversation-turn-request-label.js";
-import { cn } from "@/lib/utils";
+import { TurnRequestLabel } from "./TurnRequestLabel.js";
 
 interface GeneratedConversationMessageProps {
   attachmentItems: ConversationAttachmentItems;
@@ -197,8 +197,6 @@ export const GeneratedConversationMessage = memo(
       [mentions, messageText.length, trimStartLength],
     );
     const requestLabel = turnRequestLabel(turnRequest);
-    const isPendingSteer =
-      turnRequest.kind === "steer" && turnRequest.status === "pending";
     const title = useMemo(
       () =>
         generatedConversationTitle({
@@ -256,18 +254,7 @@ export const GeneratedConversationMessage = memo(
             />
             {requestLabel ? (
               <div className="mt-1 flex items-center justify-start gap-2">
-                <span
-                  className={cn(
-                    "shrink-0 whitespace-nowrap text-xs leading-none text-muted-foreground",
-                    isPendingSteer && "animate-shine",
-                  )}
-                >
-                  <Icon
-                    name="CornerDownRight"
-                    className="mr-1 inline-block size-3 align-middle"
-                  />
-                  {requestLabel}
-                </span>
+                <TurnRequestLabel turnRequest={turnRequest} />
               </div>
             ) : null}
           </div>
@@ -282,7 +269,7 @@ export const GeneratedConversationMessage = memo(
         projectId,
         sourceKind,
         requestLabel,
-        isPendingSteer,
+        turnRequest,
       ],
     );
 

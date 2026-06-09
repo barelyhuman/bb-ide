@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type { ThreadType } from "@bb/domain";
+import { directoryFromPath } from "@bb/thread-view";
 import { Icon, type IconName } from "@/components/ui/icon.js";
 import { EmptyStatePanel } from "@/components/ui/empty-state.js";
 import { Input } from "@/components/ui/input.js";
@@ -143,11 +144,6 @@ interface FileSearchSection {
   kind: FileSearchSectionKind;
   label: string;
   items: FileSearchSectionItem[];
-}
-
-interface SplitPathResult {
-  name: string;
-  directory: string;
 }
 
 type LauncherKeyDownHandler = (event: KeyboardEvent<HTMLElement>) => void;
@@ -286,17 +282,6 @@ function getFileSearchEntryId(entry: FileSearchSectionEntry): string {
     )}`;
   }
   return getFileSearchResultId(entry.suggestion);
-}
-
-function splitPath(path: string): SplitPathResult {
-  const lastSlash = path.lastIndexOf("/");
-  if (lastSlash === -1) {
-    return { name: path, directory: "" };
-  }
-  return {
-    name: path.slice(lastSlash + 1),
-    directory: path.slice(0, lastSlash),
-  };
 }
 
 function getFileSearchResultTitle(suggestion: FileSearchSuggestion): string {
@@ -564,7 +549,7 @@ function FileResultRow({
   const handleSelect = useCallback(() => {
     onSelect(suggestion);
   }, [onSelect, suggestion]);
-  const { directory } = splitPath(suggestion.path);
+  const directory = directoryFromPath(suggestion.path);
   const secondaryDirectory = directory || null;
 
   return (
@@ -617,7 +602,7 @@ function RecentResultRow({
   }, [item, onSelect]);
   const { chip, label } = resolveRecentFileKind(item.path);
   const name = getRecentItemName(item.path);
-  const { directory } = splitPath(item.path);
+  const directory = directoryFromPath(item.path);
   const relativeTime = formatRelativeTime({
     timestamp: item.openedAt,
     now: nowMs,

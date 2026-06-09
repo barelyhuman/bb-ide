@@ -46,6 +46,11 @@ interface UpdateLocalProjectSourceRequest {
   path: string;
 }
 
+interface DeleteLocalProjectSourceRequest {
+  projectId: string;
+  sourceId: string;
+}
+
 export interface HireProjectManagerRequest {
   projectId: string;
   name?: string;
@@ -272,6 +277,24 @@ export function useUpdateLocalProjectSource() {
         type: "local_path",
         path,
       }),
+    onSuccess: (_data, variables) => {
+      invalidateProjectSourceQueries({
+        projectId: variables.projectId,
+        queryClient,
+      });
+    },
+  });
+}
+
+export function useDeleteLocalProjectSource() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    meta: {
+      errorMessage: "Failed to remove source.",
+    },
+    mutationFn: ({ projectId, sourceId }: DeleteLocalProjectSourceRequest) =>
+      api.removeProjectSource(projectId, sourceId),
     onSuccess: (_data, variables) => {
       invalidateProjectSourceQueries({
         projectId: variables.projectId,

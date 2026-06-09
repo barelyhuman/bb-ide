@@ -11,7 +11,7 @@ import type { UrlTransform } from "react-markdown";
 import { Button } from "@/components/ui/button.js";
 import { EmptyStatePanel } from "@/components/ui/empty-state.js";
 import { CopyButton } from "@/components/ui/copy-button.js";
-import { Icon } from "@/components/ui/icon.js";
+import { OpenInEditorButton } from "@/components/ui/open-in-editor-button.js";
 import type { MarkdownLinkRouting } from "@/components/ui/markdown-link-routing.js";
 import { MarkdownPreview } from "@/components/ui/markdown-preview.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
@@ -316,15 +316,7 @@ function FilePreviewHeader({
             />
           )}
           {onOpenInEditor ? (
-            <button
-              type="button"
-              onClick={() => onOpenInEditor(path)}
-              aria-label="Open in editor"
-              title="Open in editor"
-              className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <Icon name="ExternalLink" aria-hidden className="size-3" />
-            </button>
+            <OpenInEditorButton onClick={() => onOpenInEditor(path)} />
           ) : null}
         </div>
         {toggleKind !== null ? (

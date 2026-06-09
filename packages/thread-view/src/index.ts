@@ -1,7 +1,10 @@
 export { formatThreadTimelineText } from "./format-timeline-text.js";
 export type { ThreadTimelineTextFormat } from "./format-timeline-text.js";
 export { assertNever } from "./assert-never.js";
-export { fileNameFromPath } from "./timeline-path-display.js";
+export {
+  directoryFromPath,
+  fileNameFromPath,
+} from "./timeline-path-display.js";
 export {
   buildTimelineActivityIntentTitles,
   buildTimelineRowTitle,
@@ -12,6 +15,7 @@ export {
 } from "./timeline-row-title.js";
 export { hasTimelineExplorationIntent } from "./timeline-activity-intents.js";
 export {
+  capitalize,
   durationToCompactString,
   formatDiffCount,
   formatDiffStatsText,

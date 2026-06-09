@@ -1,4 +1,5 @@
 import type { Thread } from "@bb/domain";
+import { capitalize } from "@bb/thread-view";
 import type { ReactNode } from "react";
 import {
   ContextMenu,
@@ -181,7 +182,7 @@ export function ThreadActionsMenu({
   align = "end",
 }: ThreadActionsMenuProps) {
   const label = threadTypeLabel(thread.type);
-  const capitalizedLabel = label.charAt(0).toUpperCase() + label.slice(1);
+  const capitalizedLabel = capitalize(label);
 
   return (
     <DropdownMenu onOpenChange={onOpenChange}>
@@ -223,7 +224,7 @@ export function ThreadActionsContextMenu({
   onOpenChange,
 }: ThreadActionsContextMenuProps) {
   const label = threadTypeLabel(thread.type);
-  const capitalizedLabel = label.charAt(0).toUpperCase() + label.slice(1);
+  const capitalizedLabel = capitalize(label);
 
   return (
     <ContextMenu onOpenChange={onOpenChange}>

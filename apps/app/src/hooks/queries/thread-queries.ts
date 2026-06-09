@@ -46,6 +46,10 @@ import {
   resolveThreadTimelinePlaceholder,
 } from "./query-placeholders";
 import {
+  PROMPT_HISTORY_STALE_TIME_MS,
+  requireEnabledQueryArg,
+} from "./query-helpers";
+import {
   archivedThreadsListQueryKey,
   automationsOverviewQueryKey,
   disabledThreadListQueryKey,
@@ -163,11 +167,7 @@ const THREAD_MENTION_CANDIDATE_FILTERS = {
 } satisfies UseThreadsFilters;
 
 function requireThreadId(id: string, hookName: string): string {
-  if (!id) {
-    throw new Error(`${hookName}: thread id is required when query is enabled`);
-  }
-
-  return id;
+  return requireEnabledQueryArg({ value: id, hookName, argName: "thread id" });
 }
 
 function buildThreadSubsetListFilters({
@@ -540,7 +540,7 @@ export function useThreadPromptHistory(
       ),
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnMount: options?.refetchOnMount ?? true,
-    staleTime: options?.staleTime ?? 10_000,
+    staleTime: options?.staleTime ?? PROMPT_HISTORY_STALE_TIME_MS,
   });
 }
 

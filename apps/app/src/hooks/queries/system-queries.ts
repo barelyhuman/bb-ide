@@ -13,6 +13,7 @@ import {
   systemExecutionOptionsQueryKey,
   systemVersionQueryKey,
 } from "./query-keys";
+import { requireEnabledQueryArg } from "./query-helpers";
 
 export interface UseSystemExecutionOptionsArgs {
   enabled?: boolean;
@@ -22,18 +23,6 @@ export interface UseSystemExecutionOptionsArgs {
 
 interface QueryOptions {
   enabled?: boolean;
-}
-
-function requireDaemonPort(
-  daemonPort: number | null,
-  hookName: string,
-): number {
-  if (daemonPort === null) {
-    throw new Error(
-      `${hookName}: daemonPort is required when query is enabled`,
-    );
-  }
-  return daemonPort;
 }
 
 export function useSystemExecutionOptions(
@@ -89,7 +78,11 @@ export function useLocalProviderCliStatus({
     queryKey: localProviderCliStatusQueryKey(daemonPort),
     queryFn: () =>
       fetchProviderCliStatus(
-        requireDaemonPort(daemonPort, "useLocalProviderCliStatus"),
+        requireEnabledQueryArg({
+          value: daemonPort,
+          hookName: "useLocalProviderCliStatus",
+          argName: "daemonPort",
+        }),
       ),
     enabled: (enabled ?? true) && daemonPort !== null,
     refetchOnMount: false,

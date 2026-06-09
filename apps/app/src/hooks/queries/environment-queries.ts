@@ -20,6 +20,7 @@ import {
   resolveEnvironmentGitDiffPlaceholder,
   resolveEnvironmentWorkStatusPlaceholder,
 } from "./query-placeholders";
+import { requireEnabledQueryArg } from "./query-helpers";
 
 interface QueryOptions {
   enabled?: boolean;
@@ -47,45 +48,11 @@ function requireEnvironmentId(
   environmentId: string | null | undefined,
   hookName: string,
 ): string {
-  if (!environmentId) {
-    throw new Error(
-      `${hookName}: environmentId is required when query is enabled`,
-    );
-  }
-
-  return environmentId;
-}
-
-function requireEnvironmentFilePreviewPath(path: string | null): string {
-  if (!path) {
-    throw new Error(
-      "useEnvironmentFilePreview: path is required when query is enabled",
-    );
-  }
-  return path;
-}
-
-function requireEnvironmentFilePreviewSource(
-  source: EnvironmentFilePreviewSource | null,
-): EnvironmentFilePreviewSource {
-  if (!source) {
-    throw new Error(
-      "useEnvironmentFilePreview: source is required when query is enabled",
-    );
-  }
-  return source;
-}
-
-function requireGitDiffTarget(
-  target: WorkspaceDiffTarget | undefined,
-): WorkspaceDiffTarget {
-  if (!target) {
-    throw new Error(
-      "useEnvironmentGitDiff: target is required when query is enabled",
-    );
-  }
-
-  return target;
+  return requireEnabledQueryArg({
+    value: environmentId,
+    hookName,
+    argName: "environmentId",
+  });
 }
 
 export function useEnvironment(
@@ -179,8 +146,16 @@ export function useEnvironmentFilePreview(
     queryFn: ({ signal }) =>
       api.getEnvironmentFilePreview({
         id: requireEnvironmentId(environmentId, "useEnvironmentFilePreview"),
-        path: requireEnvironmentFilePreviewPath(path),
-        source: requireEnvironmentFilePreviewSource(source),
+        path: requireEnabledQueryArg({
+          value: path,
+          hookName: "useEnvironmentFilePreview",
+          argName: "path",
+        }),
+        source: requireEnabledQueryArg({
+          value: source,
+          hookName: "useEnvironmentFilePreview",
+          argName: "source",
+        }),
         signal,
       }),
     enabled:
@@ -211,7 +186,14 @@ export function useEnvironmentGitDiff(
       targetKey,
     ),
     queryFn: () =>
-      api.getEnvironmentDiff(environmentId, requireGitDiffTarget(target)),
+      api.getEnvironmentDiff(
+        environmentId,
+        requireEnabledQueryArg({
+          value: target,
+          hookName: "useEnvironmentGitDiff",
+          argName: "target",
+        }),
+      ),
     enabled:
       (options.enabled ?? true) &&
       Boolean(environmentId) &&

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
+import { directoryFromPath } from "@bb/thread-view";
 import { promptMentionResourceFromSuggestion } from "@/components/promptbox/editor/prompt-editor-serialization";
 import { promptMentionIconName } from "@/components/promptbox/mentions/prompt-mention-display";
 import { Icon, type IconName } from "@/components/ui/icon.js";
@@ -36,22 +37,6 @@ interface MentionSection {
   kind: MentionSectionKind;
   label: string;
   items: MentionSectionItem[];
-}
-
-interface SplitPathResult {
-  name: string;
-  directory: string;
-}
-
-function splitPath(path: string): SplitPathResult {
-  const lastSlash = path.lastIndexOf("/");
-  if (lastSlash === -1) {
-    return { name: path, directory: "" };
-  }
-  return {
-    name: path.slice(lastSlash + 1),
-    directory: path.slice(0, lastSlash),
-  };
 }
 
 function groupSections(
@@ -191,7 +176,7 @@ export function MentionMenu({
                       secondaryContextKind =
                         item.projectName === undefined ? null : "project";
                     } else {
-                      const { directory } = splitPath(item.path);
+                      const directory = directoryFromPath(item.path);
                       primary = item.name;
                       secondaryContext = directory || null;
                       secondaryContextKind = directory ? "path" : null;

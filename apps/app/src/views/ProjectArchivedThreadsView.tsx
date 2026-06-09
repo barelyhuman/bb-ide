@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { ThreadListEntry } from "@bb/domain";
 import { Button } from "@/components/ui/button.js";
+import { EmptyStatePanel } from "@/components/ui/empty-state.js";
 import { OverflowFade } from "@/components/ui/overflow-fade.js";
 import { PageShell } from "@/components/ui/page-shell.js";
 import { Pill } from "@/components/ui/pill.js";
@@ -101,9 +102,9 @@ export function ProjectArchivedThreadsView() {
               Loading archived threads…
             </p>
           ) : showEmptyState ? (
-            <p className="rounded-md border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
+            <EmptyStatePanel className="py-4 text-left">
               No archived threads yet.
-            </p>
+            </EmptyStatePanel>
           ) : (
             <div className="space-y-1">
               {archivedThreads.map((thread) => {
