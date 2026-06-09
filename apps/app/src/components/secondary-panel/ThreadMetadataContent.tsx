@@ -538,7 +538,6 @@ export function ChangedFilesRow({
     <ChangedFilesDetailRow
       sections={selectWorkspaceChangedFilesSections(workspaceStatus)}
       onFileClick={onChangedFileClick}
-      rowClassName="min-h-32 flex-1"
       rowValueClassName="min-h-0 flex-1"
       listClassName="h-full"
     />
@@ -557,6 +556,13 @@ export function ThreadStorageRow({
   isFilesLoading,
 }: ThreadStorageRowProps) {
   const { isSearchOpen, openSearch } = controller;
+  // Mirror the other metadata rows (e.g. ThreadSchedulesRow): render nothing
+  // when there is no content to show. With no files there is nothing to browse,
+  // so the row would otherwise sit as an empty "No files yet." box competing for
+  // panel height. Stay visible on error so load failures still surface.
+  if (controller.loadedFiles.length === 0 && filesError == null) {
+    return null;
+  }
   return (
     <DetailRow
       orientation="vertical"
@@ -676,10 +682,12 @@ interface DetailCardWrapperProps {
 /**
  * Shared DetailCard styling used by ThreadMetadataContent and the per-row
  * stories so a single row in isolation looks the same as it does inside the
- * full panel. Owns the info tab's vertical scroll: the rows scroll as a group
- * so no section can be pushed out of reach. Any
- * flex-filling row carries its own min-height so it stays usable once the
- * group scrolls.
+ * full panel. Owns the info tab's vertical scroll as a last resort: when
+ * everything fits there is no scrolling at all. Changed files sizes to its
+ * content; thread storage fills the leftover space (its virtualized tree has no
+ * intrinsic height to size to). When the two together run out of room they
+ * shrink and scroll internally — storage down to a usable min-height — so the
+ * card itself only scrolls once those minimums no longer fit.
  */
 export function ThreadMetadataCard({ children }: DetailCardWrapperProps) {
   return (
