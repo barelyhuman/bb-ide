@@ -1421,39 +1421,27 @@ describe("bridge", () => {
     const { models, selectedOnlyModels } = await listClaudeCodeBridgeModels();
     expect(models).toEqual([
       expect.objectContaining({
+        id: "claude-fable-5",
+        model: "claude-fable-5",
+        displayName: "Fable 5",
+        isDefault: false,
+      }),
+      expect.objectContaining({
+        id: "claude-mythos-5",
+        model: "claude-mythos-5",
+        displayName: "Mythos 5",
+        isDefault: false,
+      }),
+      expect.objectContaining({
         id: "claude-opus-4-8[1m]",
         model: "claude-opus-4-8[1m]",
         displayName: "Opus 4.8 (1M)",
         isDefault: true,
       }),
       expect.objectContaining({
-        id: "claude-opus-4-8",
-        model: "claude-opus-4-8",
-        displayName: "Opus 4.8",
-        isDefault: false,
-      }),
-      expect.objectContaining({
         id: "claude-opus-4-7[1m]",
         model: "claude-opus-4-7[1m]",
         displayName: "Opus 4.7 (1M)",
-        isDefault: false,
-      }),
-      expect.objectContaining({
-        id: "claude-opus-4-7",
-        model: "claude-opus-4-7",
-        displayName: "Opus 4.7",
-        isDefault: false,
-      }),
-      expect.objectContaining({
-        id: "claude-opus-4-6[1m]",
-        model: "claude-opus-4-6[1m]",
-        displayName: "Opus 4.6 (1M)",
-        isDefault: false,
-      }),
-      expect.objectContaining({
-        id: "claude-opus-4-6",
-        model: "claude-opus-4-6",
-        displayName: "Opus 4.6",
         isDefault: false,
       }),
       expect.objectContaining({
@@ -1476,6 +1464,12 @@ describe("bridge", () => {
       }),
     ]);
     expect(selectedOnlyModels.map((model) => model.model)).toEqual([
+      "claude-opus-4-8",
+      "claude-opus-4-7",
+      "claude-opus-4-6[1m]",
+      "claude-opus-4-6",
+      "best",
+      "fable",
       "opus[1m]",
       "opus",
       "sonnet[1m]",
