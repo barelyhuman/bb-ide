@@ -25,13 +25,7 @@ interface AcceptedClientRequestFixtureArgs {
 const AGENT_STEER_TEXT = "Please account for the restart";
 const SENDER_THREAD_ID = "thr_sender";
 
-const standardVisibilityOptions: BuildEventProjectionMessagesOptions = {
-  systemClientRequestVisibility: "hidden",
-  threadStatus: "active",
-};
-
-const systemVisibilityOptions: BuildEventProjectionMessagesOptions = {
-  systemClientRequestVisibility: "visible",
+const standardProjectionOptions: BuildEventProjectionMessagesOptions = {
   threadStatus: "active",
 };
 
@@ -154,7 +148,7 @@ describe("user message parsing", () => {
     const message = parseUserFromClientRequest({
       decoded: event,
       meta,
-      options: standardVisibilityOptions,
+      options: standardProjectionOptions,
     });
 
     expect(message).toMatchObject({
@@ -180,7 +174,7 @@ describe("user message parsing", () => {
     const message = parseUserFromClientRequest({
       decoded: event,
       meta,
-      options: standardVisibilityOptions,
+      options: standardProjectionOptions,
     });
 
     expect(message).toMatchObject({
@@ -200,7 +194,7 @@ describe("user message parsing", () => {
     const message = parseUserFromClientRequest({
       decoded: event,
       meta,
-      options: systemVisibilityOptions,
+      options: standardProjectionOptions,
     });
 
     expect(message).toMatchObject({
@@ -211,7 +205,7 @@ describe("user message parsing", () => {
     });
   });
 
-  it("preserves mentions for visible system-initiated messages", () => {
+  it("preserves mentions for system-initiated messages", () => {
     const factory = createTimelineEventFactory({ threadId: "thread-1" });
     const mentionText = "@thread:thr_child";
     const text = `[bb system]\n\n${mentionText} needs attention.\nThe thread is blocked on a pending interaction.`;
@@ -238,7 +232,7 @@ describe("user message parsing", () => {
     const message = parseUserFromClientRequest({
       decoded: event,
       meta,
-      options: systemVisibilityOptions,
+      options: standardProjectionOptions,
     });
 
     expect(message).toMatchObject({
@@ -261,10 +255,6 @@ describe("user message parsing", () => {
       if (event.type !== "client/turn/requested") {
         throw new Error("Expected client/turn/requested event");
       }
-      const visibilityOptions =
-        event.initiator === "system"
-          ? systemVisibilityOptions
-          : standardVisibilityOptions;
       const expectedText = event.input
         .filter((part) => part.type === "text")
         .map((part) => part.text)
@@ -276,7 +266,7 @@ describe("user message parsing", () => {
           acceptedClientRequest: undefined,
           decoded: event,
           meta,
-          options: visibilityOptions,
+          options: standardProjectionOptions,
         }),
       ).toMatchObject({
         kind: "user",
@@ -291,7 +281,7 @@ describe("user message parsing", () => {
           acceptedClientRequest: accepted,
           decoded: event,
           meta,
-          options: visibilityOptions,
+          options: standardProjectionOptions,
         }),
       ).toMatchObject({
         kind: "user",
@@ -306,7 +296,7 @@ describe("user message parsing", () => {
         parseUserFromClientRequest({
           decoded: event,
           meta,
-          options: visibilityOptions,
+          options: standardProjectionOptions,
         }),
       ).toBeNull();
     }
@@ -321,7 +311,7 @@ describe("user message parsing", () => {
         acceptedClientRequest: accepted,
         decoded: event,
         meta,
-        options: standardVisibilityOptions,
+        options: standardProjectionOptions,
       }),
     ).toBeNull();
 
@@ -330,7 +320,7 @@ describe("user message parsing", () => {
         acceptedClientRequest: accepted,
         decoded: event,
         meta,
-        options: standardVisibilityOptions,
+        options: standardProjectionOptions,
       }),
     ).toMatchObject({
       kind: "user",
@@ -351,7 +341,7 @@ describe("user message parsing", () => {
         acceptedClientRequest: undefined,
         decoded: event,
         meta,
-        options: standardVisibilityOptions,
+        options: standardProjectionOptions,
       }),
     ).toBeNull();
 
@@ -359,7 +349,7 @@ describe("user message parsing", () => {
       parseUserFromClientRequest({
         decoded: event,
         meta,
-        options: standardVisibilityOptions,
+        options: standardProjectionOptions,
       }),
     ).toMatchObject({
       kind: "user",
@@ -368,15 +358,20 @@ describe("user message parsing", () => {
     });
   });
 
-  it("hides system-originated turns when system client requests are hidden", () => {
+  it("renders system-originated turns as user messages", () => {
     const { event, meta } = decodeThreadEventRow(systemMessageRequest());
 
     expect(
       parseUserFromClientRequest({
         decoded: event,
         meta,
-        options: standardVisibilityOptions,
+        options: standardProjectionOptions,
       }),
-    ).toBeNull();
+    ).toMatchObject({
+      initiator: "system",
+      kind: "user",
+      text: "[bb system] Scheduled turn: daily.",
+      turnRequest: { kind: "message", status: "pending" },
+    });
   });
 });

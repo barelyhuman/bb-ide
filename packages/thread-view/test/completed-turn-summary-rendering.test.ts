@@ -5,7 +5,6 @@ import {
   renderTimelineFixture,
 } from "./timeline-test-harness.js";
 import type { TimelineEventFactory } from "./timeline-test-harness.js";
-import type { SystemClientRequestVisibility } from "../src/event-projection-types.js";
 
 type TimelineFixtureEvent = ReturnType<
   TimelineEventFactory[keyof TimelineEventFactory]
@@ -16,7 +15,6 @@ type TimelineWorkRow = Extract<TimelineRow, { kind: "work" }>;
 interface RenderCompletedTimelineArgs {
   events: TimelineFixtureEvent[];
   includeDebugRawEvents?: boolean;
-  systemClientRequestVisibility?: SystemClientRequestVisibility;
 }
 
 function renderCompletedTimeline(args: RenderCompletedTimelineArgs) {
@@ -24,8 +22,6 @@ function renderCompletedTimeline(args: RenderCompletedTimelineArgs) {
     events: args.events,
     projectionOptions: {
       includeDebugRawEvents: args.includeDebugRawEvents,
-      systemClientRequestVisibility:
-        args.systemClientRequestVisibility ?? "hidden",
       threadStatus: "idle",
       turnMessageDetail: "summary",
     },
@@ -339,10 +335,7 @@ describe("completed turn summary rendering", () => {
       event.turnCompleted(),
     );
 
-    const timeline = renderCompletedTimeline({
-      events,
-      systemClientRequestVisibility: "visible",
-    });
+    const timeline = renderCompletedTimeline({ events });
 
     expect(rowSignatures(timeline.rows)).toEqual([
       "turn:1-7",

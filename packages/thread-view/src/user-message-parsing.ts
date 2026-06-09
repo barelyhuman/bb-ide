@@ -136,27 +136,6 @@ export function shouldPreservePendingMessages(
   }
 }
 
-function shouldRenderClientRequestInitiator(
-  decoded: ClientTurnRequestedEvent,
-  options: BuildEventProjectionMessagesOptions | undefined,
-): boolean {
-  if (options?.systemClientRequestVisibility === "visible") {
-    return true;
-  }
-
-  const initiator = decoded.initiator ?? "user";
-  switch (initiator) {
-    case "user":
-      return true;
-    case "agent":
-      return true;
-    case "system":
-      return false;
-    default:
-      return assertNever(initiator);
-  }
-}
-
 function buildAttachments(
   parsed: NonNullable<ReturnType<typeof parsePromptInput>>,
 ): EventProjectionUserMessage["attachments"] {
@@ -321,9 +300,6 @@ export function parseUserFromClientRequest(
     return null;
   }
 
-  if (!shouldRenderClientRequestInitiator(decoded, options)) {
-    return null;
-  }
   const parsedInput = parsePromptInput(decoded.input);
   if (!parsedInput) return null;
   if (!shouldRenderClientRequestedInput(options?.threadStatus)) {
@@ -361,9 +337,6 @@ export function parsePendingSteerFromClientRequest(
   if (!isSteerRequest(decoded)) {
     return null;
   }
-  if (!shouldRenderClientRequestInitiator(decoded, options)) {
-    return null;
-  }
   if (!shouldPreservePendingMessages(options?.threadStatus)) {
     return null;
   }
@@ -393,9 +366,6 @@ export function parseAcceptedSteerFromClientRequest(
       decoded,
     }) !== "steer"
   ) {
-    return null;
-  }
-  if (!shouldRenderClientRequestInitiator(decoded, options)) {
     return null;
   }
   const parsedInput = parsePromptInput(decoded.input);

@@ -33,7 +33,6 @@ function buildTimelineRows(events: ThreadEventWithMeta[]): TimelineRow[] {
       includeNestedRows: true,
       includeProviderUnhandledOperations: false,
       isLatestPage: true,
-      systemClientRequestVisibility: "hidden",
       threadStatus: "idle",
       turnMessageDetail: "full",
       workspaceRoot: null,

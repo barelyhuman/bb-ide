@@ -49,7 +49,6 @@ export type {
   AcceptedClientRequest,
   AcceptedClientRequestContext,
 } from "./accepted-client-request-context.js";
-export type { SystemClientRequestVisibility } from "./event-projection-message.js";
 export {
   buildTimelineViewRows,
   buildTimelineWorkSummaryLabel,

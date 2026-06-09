@@ -27,7 +27,6 @@ import type {
   EventProjectionProvisioningTranscriptEntry,
   EventProjectionToolParsedIntent,
   EventProjectionTurn,
-  SystemClientRequestVisibility,
 } from "./event-projection-types.js";
 import { assertNever } from "./assert-never.js";
 import {
@@ -67,7 +66,6 @@ interface ThreadTimelineFromEventsBaseOptions {
    * extraction work entirely instead of computing it and discarding.
    */
   isLatestPage: boolean;
-  systemClientRequestVisibility: SystemClientRequestVisibility;
   threadStatus: Thread["status"];
   /**
    * Absolute path of the thread's workspace root, used to relativize the
@@ -103,7 +101,6 @@ export interface ThreadTimelineSourceSeqRange {
 
 export interface BuildThreadTimelineTurnDetailsFromEventsOptions extends ThreadTimelineSourceSeqRange {
   includeProviderUnhandledOperations: boolean;
-  systemClientRequestVisibility: SystemClientRequestVisibility;
   threadStatus: Thread["status"];
   /** See {@link ThreadTimelineFromEventsBaseOptions.workspaceRoot}. */
   workspaceRoot: string | null;
@@ -1076,7 +1073,6 @@ export function buildThreadTimelineFromEvents(
     includeDebugRawEvents: args.options.includeDebugRawEvents,
     includeProviderUnhandledOperations:
       args.options.includeProviderUnhandledOperations,
-    systemClientRequestVisibility: args.options.systemClientRequestVisibility,
     threadStatus: args.options.threadStatus,
     turnMessageDetail: args.options.turnMessageDetail,
   } satisfies Parameters<typeof buildEventProjection>[1];
@@ -1117,7 +1113,6 @@ export function buildThreadTimelineTurnDetailsFromEvents(
     includeDebugRawEvents: false,
     includeProviderUnhandledOperations:
       args.options.includeProviderUnhandledOperations,
-    systemClientRequestVisibility: args.options.systemClientRequestVisibility,
     threadStatus: args.options.threadStatus,
     turnMessageDetail: "full",
   });

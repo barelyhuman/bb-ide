@@ -277,7 +277,6 @@ export type {
   ListEventsOptions,
   ListTimelineSegmentAnchorsDescendingArgs,
   TimelineSegmentAnchorLookupArgs,
-  TimelineSegmentAnchorAudience,
   ListStoredClientTurnRequestIdsInRangeArgs,
   ListStoredThreadProvisioningRowsByProvisioningIdArgs,
   ListStoredTimelineWindowEventRowsArgs,
