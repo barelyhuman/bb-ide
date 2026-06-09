@@ -93,10 +93,6 @@ export type ProjectDefaultExecutionOptionsQueryKey = readonly [
   typeof PROJECT_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY,
   string,
 ];
-export type ProjectDefaultExecutionOptionsQueryKeyPrefix = readonly [
-  typeof PROJECT_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY,
-  string,
-];
 export type ProjectPromptHistoryQueryKeyPrefix = readonly [
   typeof PROJECT_PROMPT_HISTORY_QUERY_KEY,
 ];
@@ -394,10 +390,6 @@ export interface ProjectDefaultExecutionOptionsQueryKeyArgs {
   projectId: string;
 }
 
-export interface ProjectDefaultExecutionOptionsQueryKeyPrefixArgs {
-  projectId: string;
-}
-
 export function hostsQueryKey(): HostsQueryKey {
   return [HOSTS_QUERY_KEY];
 }
@@ -446,12 +438,6 @@ export function projectPromptHistoryQueryKey(
 export function projectDefaultExecutionOptionsQueryKey({
   projectId,
 }: ProjectDefaultExecutionOptionsQueryKeyArgs): ProjectDefaultExecutionOptionsQueryKey {
-  return [PROJECT_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY, projectId];
-}
-
-export function projectDefaultExecutionOptionsQueryKeyPrefix({
-  projectId,
-}: ProjectDefaultExecutionOptionsQueryKeyPrefixArgs): ProjectDefaultExecutionOptionsQueryKeyPrefix {
   return [PROJECT_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY, projectId];
 }
 

@@ -230,10 +230,8 @@ export function listActiveVisiblePinnedThreadRoots(
   return filterVisiblePinnedThreadRoots({ pinnedThreads });
 }
 
-export function listActiveVisiblePinnedThreadRootsWithPendingInteractionState(
-  db: DbConnection,
-): ThreadWithPendingInteractionState[] {
-  const pinnedThreads = db
+function threadWithPendingInteractionBaseQuery(db: DbConnection) {
+  return db
     .select({
       ...getTableColumns(threads),
       environmentBranchName: environments.branchName,
@@ -251,7 +249,13 @@ export function listActiveVisiblePinnedThreadRootsWithPendingInteractionState(
         eq(pendingInteractions.threadId, threads.id),
         eq(pendingInteractions.status, "pending"),
       ),
-    )
+    );
+}
+
+export function listActiveVisiblePinnedThreadRootsWithPendingInteractionState(
+  db: DbConnection,
+): ThreadWithPendingInteractionState[] {
+  const pinnedThreads = threadWithPendingInteractionBaseQuery(db)
     .where(and(pinnedThreadWhere(), isNull(threads.archivedAt)))
     .groupBy(threads.id)
     .orderBy(asc(threads.pinSortKey), asc(threads.id))
@@ -534,25 +538,7 @@ export function listThreadsWithPendingInteractionState(
   db: DbConnection,
   options: ListThreadsOptions,
 ): ThreadWithPendingInteractionState[] {
-  let query = db
-    .select({
-      ...getTableColumns(threads),
-      environmentBranchName: environments.branchName,
-      environmentHostId: environments.hostId,
-      environmentIsWorktree: environments.isWorktree,
-      environmentName: environments.name,
-      environmentWorkspaceProvisionType: environments.workspaceProvisionType,
-      pendingInteractionCount: count(pendingInteractions.id),
-    })
-    .from(threads)
-    .leftJoin(environments, eq(threads.environmentId, environments.id))
-    .leftJoin(
-      pendingInteractions,
-      and(
-        eq(pendingInteractions.threadId, threads.id),
-        eq(pendingInteractions.status, "pending"),
-      ),
-    )
+  let query = threadWithPendingInteractionBaseQuery(db)
     .where(and(...buildListThreadsFilters(options)))
     .groupBy(threads.id)
     .orderBy(...buildListThreadsOrderBy(options))
@@ -576,25 +562,7 @@ export function listThreadsWithPendingInteractionStateForProjects(
     return [];
   }
 
-  const rows = db
-    .select({
-      ...getTableColumns(threads),
-      environmentBranchName: environments.branchName,
-      environmentHostId: environments.hostId,
-      environmentIsWorktree: environments.isWorktree,
-      environmentName: environments.name,
-      environmentWorkspaceProvisionType: environments.workspaceProvisionType,
-      pendingInteractionCount: count(pendingInteractions.id),
-    })
-    .from(threads)
-    .leftJoin(environments, eq(threads.environmentId, environments.id))
-    .leftJoin(
-      pendingInteractions,
-      and(
-        eq(pendingInteractions.threadId, threads.id),
-        eq(pendingInteractions.status, "pending"),
-      ),
-    )
+  const rows = threadWithPendingInteractionBaseQuery(db)
     .where(and(...buildListThreadsForProjectsFilters(options)))
     .groupBy(threads.id)
     .orderBy(...buildListThreadsForProjectsOrderBy(options))

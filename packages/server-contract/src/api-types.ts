@@ -602,7 +602,6 @@ export const scheduledThreadAutomationActionSchema = z.object({
 export const automationTriggerSchema = z.discriminatedUnion("triggerType", [
   automationScheduleTriggerSchema,
 ]);
-export type AutomationTrigger = z.infer<typeof automationTriggerSchema>;
 
 export const automationActionSchema = z.discriminatedUnion("actionType", [
   scheduledThreadAutomationActionSchema,

@@ -59,11 +59,6 @@ interface AdvanceThreadProvisioningArgs {
   threadId: string;
 }
 
-interface InterruptUnrecoverableThreadProvisioningArgs {
-  detail: string;
-  threadId: string;
-}
-
 interface RecordThreadProvisionWorkspaceReadyArgs {
   entries: ProvisioningTranscriptEntry[];
   environmentId: string;
@@ -300,26 +295,3 @@ export async function advanceThreadProvisioning(
   );
 }
 
-export function interruptUnrecoverableThreadProvisioning(
-  deps: ThreadProvisioningDeps,
-  args: InterruptUnrecoverableThreadProvisioningArgs,
-): void {
-  const thread = getThread(deps.db, args.threadId);
-  if (!thread || thread.deletedAt !== null) {
-    return;
-  }
-  const context = loadActiveThreadProvisionContext(deps, thread.id);
-  if (!context) {
-    failThreadProvisioning(deps, {
-      thread,
-      environmentId: thread.environmentId,
-      detail: args.detail,
-    });
-    return;
-  }
-  failThreadProvisioning(deps, {
-    thread,
-    environmentId: attachedEnvironmentIdForContext(context),
-    detail: args.detail,
-  });
-}

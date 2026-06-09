@@ -22,6 +22,7 @@ import {
   type JsonRpcMessage,
   type JsonRpcObject,
   parseJsonRpcLine,
+  type SendJsonRpcRequestArgs,
   sendJsonRpcError,
   sendJsonRpcRequest,
   settleJsonRpcResponse,
@@ -61,6 +62,13 @@ import {
 interface ReconfigureThreadIfNeededArgs {
   instructions: string | undefined;
   options: AgentRuntimeExecutionOptions;
+  threadId: string;
+}
+
+interface ArchiveOrUnarchiveThreadArgs {
+  commandType: "thread/archive" | "thread/unarchive";
+  providerId: string;
+  providerThreadId: string;
   threadId: string;
 }
 
@@ -237,6 +245,20 @@ function createAgentRuntimeInternal(
     return providerProcesses.requireProviderProcess(providerId);
   }
 
+  function sendCommand<TResult>(args: {
+    proc: ProviderProcess;
+    message: SendJsonRpcRequestArgs<TResult>["message"];
+    resultSchema: SendJsonRpcRequestArgs<TResult>["resultSchema"];
+  }): Promise<TResult> {
+    return sendJsonRpcRequest({
+      child: args.proc.child,
+      getNextId: () => nextRequestId++,
+      message: args.message,
+      pending: args.proc.pending,
+      resultSchema: args.resultSchema,
+    });
+  }
+
   function resolveProviderForThread(threadId: string): string {
     return threadIdentityRegistry.resolveProviderForThread(threadId);
   }
@@ -358,6 +380,55 @@ function createAgentRuntimeInternal(
     return message.includes("no archived rollout found for thread id");
   }
 
+  async function archiveOrUnarchiveThread(
+    args: ArchiveOrUnarchiveThreadArgs,
+  ): Promise<void> {
+    const { commandType, providerId, providerThreadId, threadId } = args;
+    await runtime.ensureProvider({ providerId });
+    const proc = requireProviderProcess(providerId);
+    if (!proc.adapter.capabilities.supportsArchive) {
+      throw new Error(
+        `Provider "${providerId}" does not support thread archive.`,
+      );
+    }
+
+    const adapterCommand: AdapterCommand = {
+      type: commandType,
+      threadId,
+      providerThreadId,
+    };
+    const cmd = requireProviderRequestPlan({
+      commandType: adapterCommand.type,
+      plan: proc.adapter.buildCommandPlan(adapterCommand),
+      providerId,
+    });
+    try {
+      await sendCommand({
+        proc,
+        message: cmd,
+        resultSchema: ignoredJsonRpcResultSchema,
+      });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        isAcceptedThreadArchiveError(commandType, error.message)
+      ) {
+        // Codex archive/unarchive is not idempotent at the protocol layer;
+        // duplicate-state errors mean the requested final state is already
+        // reached from bb's perspective.
+      } else {
+        throw error;
+      }
+    }
+    emitAcceptedCommandEvents({
+      command: adapterCommand,
+      proc,
+      providerId,
+      rawMethod: cmd.method,
+      sourceThreadId: threadId,
+    });
+  }
+
   async function reconfigureThreadIfNeeded(
     args: ReconfigureThreadIfNeededArgs,
   ): Promise<void> {
@@ -409,11 +480,9 @@ function createAgentRuntimeInternal(
     };
     const plan = proc.adapter.buildCommandPlan(adapterCommand);
     if (plan.kind === "request") {
-      const result = await sendJsonRpcRequest({
-        child: proc.child,
+      const result = await sendCommand({
+        proc,
         message: plan,
-        pending: proc.pending,
-        getNextId: () => nextRequestId++,
         resultSchema: threadIdentityResultSchema,
       });
       const providerThreadId = resolveThreadIdentityResult({
@@ -725,11 +794,9 @@ function createAgentRuntimeInternal(
         providerId,
       });
 
-      const result = await sendJsonRpcRequest({
-        child: proc.child,
+      const result = await sendCommand({
+        proc,
         message: cmd,
-        pending: proc.pending,
-        getNextId: () => nextRequestId++,
         resultSchema: threadIdentityResultSchema,
       });
       const providerThreadId = resolveThreadIdentityResult({
@@ -859,11 +926,9 @@ function createAgentRuntimeInternal(
       }
       const cmd = plan;
 
-      const result = await sendJsonRpcRequest({
-        child: proc.child,
+      const result = await sendCommand({
+        proc,
         message: cmd,
-        pending: proc.pending,
-        getNextId: () => nextRequestId++,
         resultSchema: threadIdentityResultSchema,
       });
       const resolvedId =
@@ -927,11 +992,9 @@ function createAgentRuntimeInternal(
       });
       const preparedTurnStart = proc.adapter.prepareTurnStart(adapterCommand);
       try {
-        await sendJsonRpcRequest({
-          child: proc.child,
+        await sendCommand({
+          proc,
           message: cmd,
-          pending: proc.pending,
-          getNextId: () => nextRequestId++,
           resultSchema: ignoredJsonRpcResultSchema,
         });
       } catch (error) {
@@ -998,11 +1061,9 @@ function createAgentRuntimeInternal(
         plan: proc.adapter.buildCommandPlan(adapterCommand),
         providerId: pid,
       });
-      await sendJsonRpcRequest({
-        child: proc.child,
+      await sendCommand({
+        proc,
         message: cmd,
-        pending: proc.pending,
-        getNextId: () => nextRequestId++,
         resultSchema: ignoredJsonRpcResultSchema,
       });
       emitAcceptedCommandEvents({
@@ -1046,11 +1107,9 @@ function createAgentRuntimeInternal(
         ? providerProcesses.markProviderShutdownExpected({ providerId: pid })
         : false;
       try {
-        await sendJsonRpcRequest({
-          child: proc.child,
+        await sendCommand({
+          proc,
           message: cmd,
-          pending: proc.pending,
-          getNextId: () => nextRequestId++,
           resultSchema: ignoredJsonRpcResultSchema,
         });
         emitAcceptedCommandEvents({
@@ -1095,11 +1154,9 @@ function createAgentRuntimeInternal(
         plan: proc.adapter.buildCommandPlan(adapterCommand),
         providerId: pid,
       });
-      await sendJsonRpcRequest({
-        child: proc.child,
+      await sendCommand({
+        proc,
         message: cmd,
-        pending: proc.pending,
-        getNextId: () => nextRequestId++,
         resultSchema: ignoredJsonRpcResultSchema,
       });
       emitAcceptedCommandEvents({
@@ -1112,98 +1169,20 @@ function createAgentRuntimeInternal(
     },
 
     async archiveThread({ threadId, providerId, providerThreadId }) {
-      await runtime.ensureProvider({ providerId });
-      const proc = requireProviderProcess(providerId);
-      if (!proc.adapter.capabilities.supportsArchive) {
-        throw new Error(
-          `Provider "${providerId}" does not support thread archive.`,
-        );
-      }
-
-      const adapterCommand: AdapterCommand = {
-        type: "thread/archive",
-        threadId,
+      await archiveOrUnarchiveThread({
+        commandType: "thread/archive",
+        providerId,
         providerThreadId,
-      };
-      const cmd = requireProviderRequestPlan({
-        commandType: adapterCommand.type,
-        plan: proc.adapter.buildCommandPlan(adapterCommand),
-        providerId,
-      });
-      try {
-        await sendJsonRpcRequest({
-          child: proc.child,
-          message: cmd,
-          pending: proc.pending,
-          getNextId: () => nextRequestId++,
-          resultSchema: ignoredJsonRpcResultSchema,
-        });
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          isAcceptedThreadArchiveError(adapterCommand.type, error.message)
-        ) {
-          // Codex archive/unarchive is not idempotent at the protocol layer;
-          // duplicate-state errors mean the requested final state is already
-          // reached from bb's perspective.
-        } else {
-          throw error;
-        }
-      }
-      emitAcceptedCommandEvents({
-        command: adapterCommand,
-        proc,
-        providerId,
-        rawMethod: cmd.method,
-        sourceThreadId: threadId,
+        threadId,
       });
     },
 
     async unarchiveThread({ threadId, providerId, providerThreadId }) {
-      await runtime.ensureProvider({ providerId });
-      const proc = requireProviderProcess(providerId);
-      if (!proc.adapter.capabilities.supportsArchive) {
-        throw new Error(
-          `Provider "${providerId}" does not support thread archive.`,
-        );
-      }
-
-      const adapterCommand: AdapterCommand = {
-        type: "thread/unarchive",
-        threadId,
+      await archiveOrUnarchiveThread({
+        commandType: "thread/unarchive",
+        providerId,
         providerThreadId,
-      };
-      const cmd = requireProviderRequestPlan({
-        commandType: adapterCommand.type,
-        plan: proc.adapter.buildCommandPlan(adapterCommand),
-        providerId,
-      });
-      try {
-        await sendJsonRpcRequest({
-          child: proc.child,
-          message: cmd,
-          pending: proc.pending,
-          getNextId: () => nextRequestId++,
-          resultSchema: ignoredJsonRpcResultSchema,
-        });
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          isAcceptedThreadArchiveError(adapterCommand.type, error.message)
-        ) {
-          // Codex archive/unarchive is not idempotent at the protocol layer;
-          // duplicate-state errors mean the requested final state is already
-          // reached from bb's perspective.
-        } else {
-          throw error;
-        }
-      }
-      emitAcceptedCommandEvents({
-        command: adapterCommand,
-        proc,
-        providerId,
-        rawMethod: cmd.method,
-        sourceThreadId: threadId,
+        threadId,
       });
     },
 
@@ -1215,11 +1194,9 @@ function createAgentRuntimeInternal(
         plan: proc.adapter.buildCommandPlan({ type: "model/list" }),
         providerId,
       });
-      const result = await sendJsonRpcRequest({
-        child: proc.child,
+      const result = await sendCommand({
+        proc,
         message: command,
-        pending: proc.pending,
-        getNextId: () => nextRequestId++,
         resultSchema: ignoredJsonRpcResultSchema,
       });
       return proc.adapter.parseModelListResult(result);

@@ -77,13 +77,6 @@ export function generatedConversationBodySlice({
   };
 }
 
-export function generatedConversationBodyText({
-  initiator,
-  text,
-}: GeneratedConversationBodyTextArgs): string {
-  return generatedConversationBodySlice({ initiator, text }).text;
-}
-
 function timelineTitleSegment({
   em,
   link,

@@ -265,10 +265,6 @@ export interface ReadIntentArgs {
   path: string;
 }
 
-export interface ListFilesIntentArgs {
-  path: string | null;
-}
-
 export interface SearchIntentArgs {
   path: string | null;
   query: string;
@@ -458,16 +454,6 @@ export function readIntent({ path }: ReadIntentArgs): TimelineActivityIntent {
     type: "read",
     command: `cat ${path}`,
     name: path.split("/").pop() ?? path,
-    path,
-  };
-}
-
-export function listFilesIntent({
-  path,
-}: ListFilesIntentArgs): TimelineActivityIntent {
-  return {
-    type: "list_files",
-    command: path ? `ls ${path}` : "ls",
     path,
   };
 }

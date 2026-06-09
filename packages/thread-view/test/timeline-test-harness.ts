@@ -1,4 +1,3 @@
-import { expect } from "vitest";
 import {
   encodeClientTurnRequestIdNumber,
   threadScope,
@@ -51,10 +50,6 @@ export interface RenderedTimelineFixture {
   rows: TimelineRow[];
   text: string;
   turnRows: Extract<TimelineRow, { kind: "turn" }>[];
-}
-
-export interface RenderTimelinePrefixesArgs extends RenderTimelineFixtureArgs {
-  startAt?: number;
 }
 
 export interface TimelineEventFactoryDefaults {
@@ -394,19 +389,6 @@ export function flattenEventProjectionMessages(
 
 export function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
-}
-
-export function assertMonotonicSourceSeq(
-  messages: EventProjectionMessage[],
-): void {
-  for (let i = 1; i < messages.length; i += 1) {
-    const prev = messages[i - 1];
-    const next = messages[i];
-    expect(prev).toBeDefined();
-    expect(next).toBeDefined();
-    if (!prev || !next) continue;
-    expect(next.sourceSeqStart).toBeGreaterThanOrEqual(prev.sourceSeqStart);
-  }
 }
 
 function withExplicitApprovalStatus(row: ThreadEventRow): ThreadEventRow {
@@ -1120,23 +1102,6 @@ export function renderTimelineFixture(
     text,
     turnRows,
   };
-}
-
-export function renderTimelinePrefixes(
-  args: RenderTimelinePrefixesArgs,
-): RenderedTimelineFixture[] {
-  const startAt = args.startAt ?? 1;
-  return args.events
-    .map((_, index) => index + 1)
-    .filter((prefixLength) => prefixLength >= startAt)
-    .map((prefixLength) =>
-      renderTimelineFixture({
-        events: args.events.slice(0, prefixLength),
-        includeNestedRows: args.includeNestedRows,
-        projectionOptions: args.projectionOptions,
-        verbose: args.verbose,
-      }),
-    );
 }
 
 export function messageKinds(

@@ -1,9 +1,4 @@
-import {
-  environments,
-  events,
-  transitionThreadStatusInTransaction,
-  threads,
-} from "@bb/db";
+import { environments, events, threads } from "@bb/db";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import {
   getBuiltInAgentProviderInfo,
@@ -27,7 +22,6 @@ import type {
 import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
 import type { CommandResultSideEffectsDeps } from "../../internal/command-result-side-effects.js";
 import { ApiError } from "../../errors.js";
-import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import {
   LIVE_DAEMON_COMMAND_TIMEOUT_MS,
   startLiveHostCommand,
@@ -132,11 +126,6 @@ type BuildExecutionOptionsSource =
   | "client/thread/start"
   | "client/turn/requested"
   | "client/turn/start";
-
-interface DispatchTurnSubmitCommandArgs
-  extends PrepareTurnSubmitCommandPayloadArgs {
-  requestId: ClientTurnRequestId;
-}
 
 interface DispatchThreadRenameCommandArgs {
   environment: ThreadHostCommandEnvironment;
@@ -300,49 +289,6 @@ export async function prepareTurnSubmitCommandPayload(
     target: args.target,
     threadId: args.thread.id,
   });
-}
-
-export async function dispatchTurnSubmitCommand(
-  deps: CommandResultSideEffectsDeps,
-  args: DispatchTurnSubmitCommandArgs,
-): Promise<void> {
-  await ensureHostSessionReadyForWork(deps, {
-    hostId: args.environment.hostId,
-  });
-  const preparedCommand = await prepareTurnSubmitCommandPayload(deps, args);
-  const command = addRequestIdToTurnSubmitCommandPayload({
-    requestId: args.requestId,
-    preparedCommand,
-  });
-  let transitioned = false;
-  deps.db.transaction(
-    (tx) => {
-      if (args.thread.status === "idle") {
-        transitionThreadStatusInTransaction(tx, {
-          id: args.thread.id,
-          newStatus: "active",
-        });
-        transitioned = true;
-      }
-    },
-    { behavior: "immediate" },
-  );
-  startLiveHostCommand(deps, {
-    command,
-    hostId: args.environment.hostId,
-    timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
-    onError: (error) => {
-      deps.logger.warn(
-        { err: error, threadId: args.thread.id },
-        "Live turn submit command failed",
-      );
-    },
-  });
-  if (transitioned) {
-    deps.hub.notifyThread(args.thread.id, ["status-changed"], {
-      projectId: args.thread.projectId,
-    });
-  }
 }
 
 function requireProviderThreadId(

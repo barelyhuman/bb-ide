@@ -120,11 +120,6 @@ interface CreateCatalogFileArgs {
   trees: readonly CollectedSkillTree[];
 }
 
-export interface InjectedSkillRootsDiagnostics {
-  dataDirSkillsRootPath: string;
-  stagingRootPath: string;
-}
-
 function createNoopLogger(): InjectedSkillsLogger {
   return {
     debug: () => undefined,
@@ -552,13 +547,4 @@ export async function cleanupInjectedSkillStagingDirs(
       });
     }),
   );
-}
-
-export function resolveInjectedSkillRootsForDiagnostics(
-  dataDir: string,
-): InjectedSkillRootsDiagnostics {
-  return {
-    dataDirSkillsRootPath: resolveDataDirSkillsRootPath(dataDir),
-    stagingRootPath: resolveStagingRootPath(dataDir),
-  };
 }

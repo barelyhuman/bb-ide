@@ -40,7 +40,6 @@ interface LastFixedPanelTabsTouch {
 type FixedPanelSecondaryPanelSetter = (panel: ThreadSecondaryPanel) => void;
 type FixedPanelSecondaryPanelOpener = () => void;
 type FixedPanelSecondaryPanelCloser = () => void;
-type FixedPanelSecondaryPanelToggler = () => void;
 type FixedPanelTerminalIdSetter = (terminalId: string | null) => void;
 type FixedPanelTerminalIdRemover = (terminalId: string) => void;
 
@@ -311,19 +310,6 @@ export function useOpenFixedSecondaryPanel(
   const updateState = useUpdateFixedPanelTabsState(threadId);
   return useCallback(() => {
     updateState(openFixedSecondaryPanelState);
-  }, [updateState]);
-}
-
-export function useToggleFixedSecondaryPanel(
-  threadId: string | null | undefined,
-): FixedPanelSecondaryPanelToggler {
-  const updateState = useUpdateFixedPanelTabsState(threadId);
-  return useCallback(() => {
-    updateState((current) =>
-      current.secondary.isOpen
-        ? closeFixedSecondaryPanelState(current)
-        : openFixedSecondaryPanelState(current),
-    );
   }, [updateState]);
 }
 

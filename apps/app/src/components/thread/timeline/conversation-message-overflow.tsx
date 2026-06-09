@@ -11,10 +11,6 @@ interface UseOverflowMeasurementArgs {
   measurementKey: string;
 }
 
-interface UseLineOverflowMeasurementArgs extends UseOverflowMeasurementArgs {
-  visibleLineCount: number;
-}
-
 type OverflowMeasurement = "unmeasured" | "fits" | "overflowing";
 
 interface ConversationMessageOverflowToggleLabels {
@@ -75,56 +71,6 @@ export function useOverflowMeasurement({
     resizeObserver.observe(element);
     return () => resizeObserver.disconnect();
   }, [elementRef, enabled, measurementKey]);
-
-  return measurement;
-}
-
-function elementLineHeight(element: HTMLElement): number {
-  const computedLineHeight = window.getComputedStyle(element).lineHeight;
-  const lineHeight = Number.parseFloat(computedLineHeight);
-  if (Number.isFinite(lineHeight)) {
-    return lineHeight;
-  }
-  return element.clientHeight;
-}
-
-export function useLineOverflowMeasurement({
-  elementRef,
-  enabled,
-  measurementKey,
-  visibleLineCount,
-}: UseLineOverflowMeasurementArgs): OverflowMeasurement {
-  const [measurement, setMeasurement] =
-    useState<OverflowMeasurement>("unmeasured");
-
-  useLayoutEffect(() => {
-    if (!enabled) {
-      setMeasurement("fits");
-      return;
-    }
-
-    const element = elementRef.current;
-    if (!element) {
-      setMeasurement("unmeasured");
-      return;
-    }
-
-    const measure = () => {
-      const visibleHeight = elementLineHeight(element) * visibleLineCount;
-      setMeasurement(
-        element.scrollHeight > visibleHeight + 1 ? "overflowing" : "fits",
-      );
-    };
-    measure();
-
-    if (typeof ResizeObserver === "undefined") {
-      return;
-    }
-
-    const resizeObserver = new ResizeObserver(measure);
-    resizeObserver.observe(element);
-    return () => resizeObserver.disconnect();
-  }, [elementRef, enabled, measurementKey, visibleLineCount]);
 
   return measurement;
 }

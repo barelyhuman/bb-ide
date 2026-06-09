@@ -7,7 +7,7 @@ import {
 } from "./inference-model.js";
 import { validateLogLevel } from "./log-level.js";
 import { validateOptionalUrl, validateRequiredUrl } from "./public-url.js";
-import { parseDataDirEnvValue, parsePortValue } from "./runtime.js";
+import { parsePortValue } from "./runtime.js";
 
 export function parseBooleanEnvValue(args: EnvVarParseArgs): boolean {
   const normalizedValue = args.value.trim().toLowerCase();
@@ -78,13 +78,6 @@ function parseOptionalUrlEnvValue(args: EnvVarParseArgs): string {
   return validateOptionalUrl(args.name, args.value);
 }
 
-function parseDataDirValue(args: EnvVarParseArgs): string {
-  return parseDataDirEnvValue({
-    homeDir: args.context.homeDir,
-    rawDataDir: args.value,
-  });
-}
-
 function parseLogLevelValue(args: EnvVarParseArgs): string {
   return validateLogLevel(args.value);
 }
@@ -110,12 +103,6 @@ function parseHostTypeValue(args: EnvVarParseArgs): HostType | undefined {
 
   return parsedHostType.data;
 }
-
-export const BB_DATA_DIR_ENV = defineEnvVar<string>({
-  description: "Root directory for all bb data (db, logs, host-id, etc.)",
-  name: "BB_DATA_DIR",
-  parse: parseDataDirValue,
-});
 
 export const BB_LOG_LEVEL_ENV = defineEnvVar<string>({
   description: "Log level: trace, debug, info, warn, error, fatal",

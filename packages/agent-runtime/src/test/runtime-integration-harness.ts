@@ -37,8 +37,6 @@ import {
   waitForRuntimeConditionUnsafe,
   waitForThreadTurnCompleted as waitForSharedThreadTurnCompleted,
   waitForThreadTurnStarted as waitForSharedThreadTurnStarted,
-  type RuntimeWaitConditionOptions,
-  type RuntimeWaitFailureDescription,
   type RuntimeWaitPredicate,
 } from "./runtime-wait-helpers.js";
 
@@ -56,8 +54,6 @@ export type ErrorThreadEvent = Extract<
   { type: "provider/error" | "system/error" }
 >;
 export type WaitPredicate = RuntimeWaitPredicate;
-export type WaitFailureDescription = RuntimeWaitFailureDescription;
-export type WaitForConditionOptions = RuntimeWaitConditionOptions;
 
 export interface RuntimeDiagnosticsArgs {
   ctx: TestContext;

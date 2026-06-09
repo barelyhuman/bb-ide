@@ -10,7 +10,6 @@
 import { AuthStorage, ModelRegistry } from "@mariozechner/pi-coding-agent";
 import { getBuiltInAgentProviderInfo } from "@bb/agent-providers";
 import { z } from "zod";
-import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import type {
   ThreadEvent,
   ThreadEventContextWindowUsage,
@@ -82,9 +81,6 @@ import { piVisibilityMetadata } from "./visibility.js";
 // ---------------------------------------------------------------------------
 // Pi event and command types
 // ---------------------------------------------------------------------------
-
-/** The raw SDK event type from the Pi coding agent. */
-export type PiEvent = AgentSessionEvent;
 
 interface PiUnhandledEventArgs {
   rawEvent: JsonRpcMessage;

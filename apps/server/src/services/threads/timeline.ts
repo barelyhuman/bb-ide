@@ -151,11 +151,6 @@ export interface ThreadTimelineBuildProfile {
   stageTimings: ThreadTimelineBuildProfileStageTiming[];
 }
 
-export interface ProfileThreadTimelineResult {
-  profile: ThreadTimelineBuildProfile;
-  response: ThreadTimelineResponse;
-}
-
 interface BuildThreadTimelineInternalResult {
   profile: ThreadTimelineBuildProfile | null;
   response: ThreadTimelineResponse;
@@ -940,24 +935,6 @@ export function buildThreadTimeline(
     ...options,
     includeProfile: false,
   }).response;
-}
-
-export function profileThreadTimeline(
-  db: DbConnection,
-  thread: Thread,
-  options: BuildThreadTimelineOptions,
-): ProfileThreadTimelineResult {
-  const result = buildThreadTimelineInternal(db, thread, {
-    ...options,
-    includeProfile: true,
-  });
-  if (result.profile === null) {
-    throw new Error("Timeline profile was not captured");
-  }
-  return {
-    profile: result.profile,
-    response: result.response,
-  };
 }
 
 export function buildTimelineTurnSummaryDetails(

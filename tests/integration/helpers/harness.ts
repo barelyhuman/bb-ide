@@ -338,7 +338,7 @@ async function startHarnessDaemon(
     // restarts stay attached to the same host.
     await persistHostId({ dataDir, hostId: identity.hostId });
     const adapterFactory = resolveAdapterFactory(options);
-    const hostWatcher = await createHostWatcher({ hostType: "persistent" });
+    const hostWatcher = await createHostWatcher();
     const daemonApp = await createHostDaemonApp({
       createRuntime: adapterFactory
         ? (runtimeOptions) =>

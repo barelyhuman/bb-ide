@@ -153,11 +153,7 @@ export async function startHostDaemon(
     const bbExecutableDirectory =
       options.bbExecutableDirectory ??
       (await resolveLocalBbExecutableDirectory());
-    const hostWatcher =
-      options.hostWatcher ??
-      (await createHostWatcher({
-        hostType,
-      }));
+    const hostWatcher = options.hostWatcher ?? (await createHostWatcher());
     const runtimeShellEnv = prepareRuntimeShellEnv({
       appsRootPath: resolveAppsRootPath(dataDir),
       bbExecutableDirectory,

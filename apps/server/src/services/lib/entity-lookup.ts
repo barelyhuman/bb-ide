@@ -6,7 +6,6 @@ import {
   getProject,
   getThread,
   listConnectedHostIds,
-  listHostThreadIds as listHostThreadIdsFromDb,
   listPublicHosts,
 } from "@bb/db";
 import type { Environment, Host } from "@bb/domain";
@@ -271,8 +270,4 @@ export function requirePublicThreadEnvironment(
   const result = requirePublicThreadEnvironmentAllowingDestroyed(db, threadId);
   ensureThreadEnvironmentAvailable(result.environment);
   return result;
-}
-
-export function listHostThreadIds(db: DbConnection, hostId: string): string[] {
-  return listHostThreadIdsFromDb(db, { hostId });
 }

@@ -1194,20 +1194,6 @@ export function requestActiveRuntimeThreadStopIfNeeded(
   });
 }
 
-export function interruptActiveTurnForThread(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: InterruptActiveTurnForThreadArgs,
-): boolean {
-  return deps.db.transaction(
-    (tx) =>
-      interruptActiveTurnForThreadInTransaction(
-        { db: tx, hub: deps.hub },
-        args,
-      ),
-    { behavior: "immediate" },
-  );
-}
-
 function interruptActiveTurnForThreadInTransaction(
   deps: ThreadLifecycleTransactionDeps,
   args: InterruptActiveTurnForThreadArgs,

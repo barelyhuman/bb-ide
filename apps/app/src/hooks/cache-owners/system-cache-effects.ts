@@ -92,14 +92,6 @@ export function invalidateHostChangeDependentQueries({
   });
 }
 
-export function invalidateHostDeleteDependentQueries({
-  queryClient,
-}: QueryClientArg): void {
-  invalidateHostAvailabilityQueries({ queryClient });
-  queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
-  queryClient.invalidateQueries({ queryKey: sidebarNavigationQueryKey() });
-}
-
 export function invalidateReplayCaptures({
   queryClient,
 }: QueryClientArg): void {

@@ -24,7 +24,6 @@ import type {
   ServiceTier,
   ThreadEvent,
 } from "@bb/domain";
-import type { ClientRequest as CodexClientRequest } from "./generated/codex-app-server/schema/ClientRequest.js";
 import type { ReasoningEffort as CodexReasoningEffort } from "./generated/codex-app-server/schema/ReasoningEffort.js";
 import type { JsonValue } from "./generated/codex-app-server/schema/serde_json/JsonValue.js";
 import type { ServerNotification as CodexServerNotification } from "./generated/codex-app-server/schema/ServerNotification.js";
@@ -629,10 +628,6 @@ function toCodexPermissionSettings(
 
 export type CodexEvent = CodexServerNotification;
 
-export type CodexCommand = DistributiveOmit<CodexClientRequest, "id">;
-type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
-  ? Omit<T, K>
-  : never;
 
 function toCodexServiceTier(tier: ServiceTier | undefined): "fast" | undefined {
   return tier === "fast" ? "fast" : undefined;

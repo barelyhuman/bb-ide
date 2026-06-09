@@ -1,5 +1,4 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { ThreadWithRuntime } from "@bb/domain";
 import type {
   EnvironmentArchiveThreadsResponse,
 } from "@bb/server-contract";
@@ -9,7 +8,6 @@ import {
   threadsQueryKey,
 } from "../queries/query-keys";
 import {
-  optimisticallyInsertThread,
   restoreCachedSidebarNavigation,
   snapshotCachedSidebarNavigation,
   type CachedSidebarNavigationSnapshot,
@@ -43,23 +41,11 @@ interface SettleArchiveEnvironmentThreadsTransactionArgs {
   transaction: ArchiveEnvironmentThreadsTransaction | undefined;
 }
 
-interface CreatedThreadCacheArgs {
-  queryClient: QueryClient;
-  thread: ThreadWithRuntime;
-}
-
 export interface ArchiveEnvironmentThreadsTransaction {
   archivedThreadIds: string[];
   previousSidebarNavigation: CachedSidebarNavigationSnapshot;
   previousThreadLists: CachedThreadListSnapshot;
   previousThreads: CachedThreadSnapshot[];
-}
-
-export function insertCreatedThreadIntoCachedLists({
-  queryClient,
-  thread,
-}: CreatedThreadCacheArgs): void {
-  optimisticallyInsertThread(queryClient, thread);
 }
 
 export async function beginArchiveEnvironmentThreadsTransaction({

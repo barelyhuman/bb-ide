@@ -466,13 +466,6 @@ function resolveProvisionedEnvironmentBranchMetadata(
   };
 }
 
-export function completeEnvironmentProvisioning(
-  deps: EnvironmentProvisionReadDeps,
-  args: { environmentId: string },
-): boolean {
-  return getEnvironment(deps.db, args.environmentId)?.status === "ready";
-}
-
 function recordEnvironmentProvisioningFailureInTransaction(
   deps: EnvironmentProvisionTransactionDeps,
   args: FailEnvironmentProvisioningDurablyArgs,

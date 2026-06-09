@@ -207,6 +207,43 @@ function isActiveTabStillOpen(
   return activeTabId !== null && tabs.some((tab) => tab.id === activeTabId);
 }
 
+function removeTabFromState(
+  state: FixedPanelTabsState,
+  tab: FixedPanelTab | null,
+): FixedPanelTabsState {
+  if (!tab) {
+    return state;
+  }
+  const tabs = removeSecondaryTab(state.secondary.tabs, tab.id);
+  return setSecondaryTabs({
+    activeTabId:
+      state.secondary.activeTabId === tab.id
+        ? null
+        : state.secondary.activeTabId,
+    isOpen: state.secondary.isOpen,
+    state,
+    tabs,
+  });
+}
+
+function activateTabInState(
+  state: FixedPanelTabsState,
+  tab: FixedPanelTab | null,
+): FixedPanelTabsState {
+  if (!tab) {
+    return state;
+  }
+  if (state.secondary.activeTabId === tab.id && state.secondary.isOpen) {
+    return state;
+  }
+  return setSecondaryTabs({
+    activeTabId: tab.id,
+    isOpen: true,
+    state,
+    tabs: state.secondary.tabs,
+  });
+}
+
 function createStorageTab(path: string): ThreadStorageFilePreviewFixedPanelTab {
   return createThreadStorageFilePreviewFixedPanelTab({
     isPinned: false,
@@ -543,22 +580,9 @@ export function useThreadFileTabs({
 
   const closeWorkspaceFileTab = useCallback(
     (path: string) => {
-      updateFixedPanelTabsState((state) => {
-        const tab = findWorkspaceTab(state.secondary.tabs, path);
-        if (!tab) {
-          return state;
-        }
-        const tabs = removeSecondaryTab(state.secondary.tabs, tab.id);
-        return setSecondaryTabs({
-          activeTabId:
-            state.secondary.activeTabId === tab.id
-              ? null
-              : state.secondary.activeTabId,
-          isOpen: state.secondary.isOpen,
-          state,
-          tabs,
-        });
-      });
+      updateFixedPanelTabsState((state) =>
+        removeTabFromState(state, findWorkspaceTab(state.secondary.tabs, path)),
+      );
     },
     [updateFixedPanelTabsState],
   );
@@ -569,21 +593,12 @@ export function useThreadFileTabs({
         return;
       }
       setThreadSecondaryPanelOpen(true);
-      updateFixedPanelTabsState((state) => {
-        const tab = findWorkspaceTab(state.secondary.tabs, path);
-        if (!tab) {
-          return state;
-        }
-        if (state.secondary.activeTabId === tab.id && state.secondary.isOpen) {
-          return state;
-        }
-        return setSecondaryTabs({
-          activeTabId: tab.id,
-          isOpen: true,
+      updateFixedPanelTabsState((state) =>
+        activateTabInState(
           state,
-          tabs: state.secondary.tabs,
-        });
-      });
+          findWorkspaceTab(state.secondary.tabs, path),
+        ),
+      );
     },
     [
       fixedPanelTabsState.secondary.tabs,
@@ -653,22 +668,9 @@ export function useThreadFileTabs({
 
   const closeHostFileTab = useCallback(
     (path: string) => {
-      updateFixedPanelTabsState((state) => {
-        const tab = findHostFileTab(state.secondary.tabs, path);
-        if (!tab) {
-          return state;
-        }
-        const tabs = removeSecondaryTab(state.secondary.tabs, tab.id);
-        return setSecondaryTabs({
-          activeTabId:
-            state.secondary.activeTabId === tab.id
-              ? null
-              : state.secondary.activeTabId,
-          isOpen: state.secondary.isOpen,
-          state,
-          tabs,
-        });
-      });
+      updateFixedPanelTabsState((state) =>
+        removeTabFromState(state, findHostFileTab(state.secondary.tabs, path)),
+      );
     },
     [updateFixedPanelTabsState],
   );
@@ -679,21 +681,9 @@ export function useThreadFileTabs({
         return;
       }
       setThreadSecondaryPanelOpen(true);
-      updateFixedPanelTabsState((state) => {
-        const tab = findHostFileTab(state.secondary.tabs, path);
-        if (!tab) {
-          return state;
-        }
-        if (state.secondary.activeTabId === tab.id && state.secondary.isOpen) {
-          return state;
-        }
-        return setSecondaryTabs({
-          activeTabId: tab.id,
-          isOpen: true,
-          state,
-          tabs: state.secondary.tabs,
-        });
-      });
+      updateFixedPanelTabsState((state) =>
+        activateTabInState(state, findHostFileTab(state.secondary.tabs, path)),
+      );
     },
     [
       fixedPanelTabsState.secondary.tabs,
@@ -706,22 +696,12 @@ export function useThreadFileTabs({
 
   const closeAppTab = useCallback(
     (applicationId: string) => {
-      updateFixedPanelTabsState((state) => {
-        const tab = findAppTab(state.secondary.tabs, applicationId);
-        if (!tab) {
-          return state;
-        }
-        const tabs = removeSecondaryTab(state.secondary.tabs, tab.id);
-        return setSecondaryTabs({
-          activeTabId:
-            state.secondary.activeTabId === tab.id
-              ? null
-              : state.secondary.activeTabId,
-          isOpen: state.secondary.isOpen,
+      updateFixedPanelTabsState((state) =>
+        removeTabFromState(
           state,
-          tabs,
-        });
-      });
+          findAppTab(state.secondary.tabs, applicationId),
+        ),
+      );
     },
     [updateFixedPanelTabsState],
   );
@@ -734,21 +714,12 @@ export function useThreadFileTabs({
         return;
       }
       setThreadSecondaryPanelOpen(true);
-      updateFixedPanelTabsState((state) => {
-        const tab = findAppTab(state.secondary.tabs, applicationId);
-        if (!tab) {
-          return state;
-        }
-        if (state.secondary.activeTabId === tab.id && state.secondary.isOpen) {
-          return state;
-        }
-        return setSecondaryTabs({
-          activeTabId: tab.id,
-          isOpen: true,
+      updateFixedPanelTabsState((state) =>
+        activateTabInState(
           state,
-          tabs: state.secondary.tabs,
-        });
-      });
+          findAppTab(state.secondary.tabs, applicationId),
+        ),
+      );
     },
     [
       fixedPanelTabsState.secondary.tabs,
@@ -776,21 +747,9 @@ export function useThreadFileTabs({
         return;
       }
       setThreadSecondaryPanelOpen(true);
-      updateFixedPanelTabsState((state) => {
-        const tab = findBrowserTab(state.secondary.tabs, tabId);
-        if (!tab) {
-          return state;
-        }
-        if (state.secondary.activeTabId === tab.id && state.secondary.isOpen) {
-          return state;
-        }
-        return setSecondaryTabs({
-          activeTabId: tab.id,
-          isOpen: true,
-          state,
-          tabs: state.secondary.tabs,
-        });
-      });
+      updateFixedPanelTabsState((state) =>
+        activateTabInState(state, findBrowserTab(state.secondary.tabs, tabId)),
+      );
     },
     [
       fixedPanelTabsState.secondary.tabs,
@@ -801,22 +760,9 @@ export function useThreadFileTabs({
 
   const closeBrowserTab = useCallback(
     (tabId: string) => {
-      updateFixedPanelTabsState((state) => {
-        const tab = findBrowserTab(state.secondary.tabs, tabId);
-        if (!tab) {
-          return state;
-        }
-        const tabs = removeSecondaryTab(state.secondary.tabs, tab.id);
-        return setSecondaryTabs({
-          activeTabId:
-            state.secondary.activeTabId === tab.id
-              ? null
-              : state.secondary.activeTabId,
-          isOpen: state.secondary.isOpen,
-          state,
-          tabs,
-        });
-      });
+      updateFixedPanelTabsState((state) =>
+        removeTabFromState(state, findBrowserTab(state.secondary.tabs, tabId)),
+      );
     },
     [updateFixedPanelTabsState],
   );
@@ -853,22 +799,12 @@ export function useThreadFileTabs({
 
   const closeStorageFileTab = useCallback(
     (path: string) => {
-      updateFixedPanelTabsState((state) => {
-        const tab = findStorageFileTab(state.secondary.tabs, path);
-        if (!tab) {
-          return state;
-        }
-        const tabs = removeSecondaryTab(state.secondary.tabs, tab.id);
-        return setSecondaryTabs({
-          activeTabId:
-            state.secondary.activeTabId === tab.id
-              ? null
-              : state.secondary.activeTabId,
-          isOpen: state.secondary.isOpen,
+      updateFixedPanelTabsState((state) =>
+        removeTabFromState(
           state,
-          tabs,
-        });
-      });
+          findStorageFileTab(state.secondary.tabs, path),
+        ),
+      );
     },
     [updateFixedPanelTabsState],
   );
@@ -879,21 +815,12 @@ export function useThreadFileTabs({
         return;
       }
       setThreadSecondaryPanelOpen(true);
-      updateFixedPanelTabsState((state) => {
-        const tab = findStorageFileTab(state.secondary.tabs, path);
-        if (!tab) {
-          return state;
-        }
-        if (state.secondary.activeTabId === tab.id && state.secondary.isOpen) {
-          return state;
-        }
-        return setSecondaryTabs({
-          activeTabId: tab.id,
-          isOpen: true,
+      updateFixedPanelTabsState((state) =>
+        activateTabInState(
           state,
-          tabs: state.secondary.tabs,
-        });
-      });
+          findStorageFileTab(state.secondary.tabs, path),
+        ),
+      );
     },
     [
       fixedPanelTabsState.secondary.tabs,
