@@ -40,15 +40,21 @@ export function formatEnvironmentDisplay({
 
   // While the workspace is still being provisioned, discovered properties such
   // as `isWorktree` are not yet populated, so the mode is not yet knowable.
-  // Report the lifecycle state honestly instead of guessing "Working locally".
+  // Managed worktrees can also sit in a prepared metadata-inference stage with
+  // no workspace path before the actual provision request is queued. Report the
+  // setup lifecycle honestly instead of guessing "Working locally".
+  const isProvisioningDisplay =
+    environment.status === "provisioning" ||
+    (environment.workspaceProvisionType === "managed-worktree" &&
+      environment.path === null);
   const generatedModeLabel =
-    environment.status === "provisioning"
+    isProvisioningDisplay
       ? "Provisioning"
       : mode === "worktree"
         ? "Worktree"
         : "Working locally";
   const generatedCompactModeLabel =
-    environment.status === "provisioning"
+    isProvisioningDisplay
       ? "Provisioning"
       : mode === "worktree"
         ? "Worktree"

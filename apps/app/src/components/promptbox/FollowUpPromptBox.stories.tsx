@@ -123,16 +123,17 @@ const worktreeEnvironmentSummary: ReactNode = makeEnvironmentSummary({
   onCreateNewThreadInWorktree: noop,
 });
 
-// A freshly-created worktree whose workspace is still being provisioned:
-// discovered properties (isWorktree, branch) aren't populated yet, so the
-// formatter reports the lifecycle ("Provisioning") instead of guessing a mode,
-// and there is no branch chip. Because this runs the real formatter, it is
-// structurally impossible for this row to show "Working locally".
+// A freshly-created worktree can briefly sit in the prepared metadata-inference
+// stage: the environment row is attached and marked ready for lifecycle
+// bookkeeping, but no workspace path or discovered worktree properties exist
+// yet. The formatter should still report the setup lifecycle ("Provisioning")
+// instead of guessing a direct workspace mode, and there is no branch chip.
 const provisioningEnvironmentSummary: ReactNode = makeEnvironmentSummary({
   environment: makeEnvironment({
+    path: null,
     isWorktree: false,
     workspaceProvisionType: "managed-worktree",
-    status: "provisioning",
+    status: "ready",
   }),
 });
 

@@ -112,6 +112,24 @@ describe("formatEnvironmentDisplay", () => {
       expect(result.mode).toBe("direct");
     });
 
+    it("reports 'Provisioning' for a prepared managed worktree before the workspace path exists", () => {
+      const result = formatEnvironmentDisplay({
+        environment: makeEnvironment({
+          status: "ready",
+          path: null,
+          workspaceProvisionType: "managed-worktree",
+          isWorktree: false,
+        }),
+      });
+      expect(result).toEqual({
+        modeLabel: "Provisioning",
+        compactModeLabel: "Provisioning",
+        id: "env_test",
+        mode: "direct",
+        workspaceDisplayKind: "managed-worktree",
+      });
+    });
+
     it("reports 'Provisioning' for a local unmanaged env", () => {
       const result = formatEnvironmentDisplay({
         environment: makeEnvironment({ status: "provisioning" }),
