@@ -8,11 +8,15 @@ import {
   makeProject as makeSharedProject,
   makeThreadListEntry,
 } from "../../../.ladle/story-fixtures";
-import { SidebarMenu, SidebarStickyStack } from "@/components/ui/sidebar.js";
+import { SidebarStickyStack } from "@/components/ui/sidebar.js";
 import { ProjectActionsProvider } from "@/components/project/ProjectActionsProvider";
 import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
-import { ProjectListActionButtons, ProjectListShell } from "./ProjectList";
-import { ProjectRow, type ProjectThreadListState } from "./ProjectRow";
+import { ProjectListShell } from "./ProjectList";
+import type { ProjectThreadListState } from "./ProjectRow";
+import {
+  ProjectListProjects,
+  type ProjectListRowModel,
+} from "./ProjectListProjects";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
@@ -46,7 +50,91 @@ const makeThread = (overrides: Partial<ThreadListEntry> = {}) =>
 
 type ToggleStoryCollapsedId = (id: string) => void;
 
-interface InteractiveProjectRowArgs {
+function toggleStoryCollapsedId(
+  current: ReadonlySet<string>,
+  id: string,
+): Set<string> {
+  const next = new Set(current);
+  if (next.has(id)) {
+    next.delete(id);
+  } else {
+    next.add(id);
+  }
+  return next;
+}
+
+interface StoryProjectRow {
+  project?: ProjectResponse;
+  threadListState: ProjectThreadListState;
+  isActive?: boolean;
+  isLocalPathInvalid?: boolean;
+  initiallyCollapsed?: boolean;
+}
+
+interface InteractiveProjectListArgs {
+  rows: StoryProjectRow[];
+  initialCollapsedThreadIds?: ReadonlySet<string>;
+  initialCollapsedEnvironmentIds?: ReadonlySet<string>;
+}
+
+// Owns the list-level collapse state that jotai atoms own in production
+// (ProjectList) so the chevrons in stories actually toggle, then renders the
+// real ProjectListProjects — the same component the live sidebar uses.
+function InteractiveProjectList({
+  rows,
+  initialCollapsedThreadIds,
+  initialCollapsedEnvironmentIds,
+}: InteractiveProjectListArgs) {
+  const resolvedRows: ProjectListRowModel[] = rows.map((row) => ({
+    project: row.project ?? makeProject(),
+    threadListState: row.threadListState,
+    isActive: row.isActive ?? false,
+    isLocalPathInvalid: row.isLocalPathInvalid ?? false,
+  }));
+  const [collapsedProjectIds, setCollapsedProjectIds] = useState<Set<string>>(
+    () =>
+      new Set(
+        rows.flatMap((row, index) =>
+          row.initiallyCollapsed ? [resolvedRows[index].project.id] : [],
+        ),
+      ),
+  );
+  const [collapsedThreadIds, setCollapsedThreadIds] = useState<Set<string>>(
+    () => new Set(initialCollapsedThreadIds ?? []),
+  );
+  const [collapsedEnvironmentIds, setCollapsedEnvironmentIds] = useState<
+    Set<string>
+  >(() => new Set(initialCollapsedEnvironmentIds ?? []));
+  const onToggleProjectCollapsed = useCallback<ToggleStoryCollapsedId>((id) => {
+    setCollapsedProjectIds((current) => toggleStoryCollapsedId(current, id));
+  }, []);
+  const onToggleThreadCollapsed = useCallback<ToggleStoryCollapsedId>((id) => {
+    setCollapsedThreadIds((current) => toggleStoryCollapsedId(current, id));
+  }, []);
+  const onToggleEnvironmentCollapsed = useCallback<ToggleStoryCollapsedId>(
+    (id) => {
+      setCollapsedEnvironmentIds((current) =>
+        toggleStoryCollapsedId(current, id),
+      );
+    },
+    [],
+  );
+  return (
+    <ProjectListProjects
+      status="ready"
+      rows={resolvedRows}
+      collapsedProjectIds={collapsedProjectIds}
+      collapsedThreadIds={collapsedThreadIds}
+      collapsedEnvironmentIds={collapsedEnvironmentIds}
+      onCreateProjectThread={noop}
+      onToggleProjectCollapsed={onToggleProjectCollapsed}
+      onToggleThreadCollapsed={onToggleThreadCollapsed}
+      onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
+    />
+  );
+}
+
+interface SingleProjectArgs {
   project?: ProjectResponse;
   threadListState: ProjectThreadListState;
   initialCollapsed?: boolean;
@@ -56,82 +144,33 @@ interface InteractiveProjectRowArgs {
   isLocalPathInvalid?: boolean;
 }
 
-// Holds local collapse state so the chevrons in stories actually toggle. The
-// component is fully controlled in production (by jotai atoms in ProjectList),
-// so here we just stand in for that owner.
-function InteractiveProjectRow({
-  project = makeProject(),
+// Isolated single-project demos: no "Projects" label — just the minimum
+// sticky-stack context the row depends on.
+function singleProject({
+  project,
   threadListState,
-  initialCollapsed = false,
+  initialCollapsed,
   initialCollapsedThreadIds,
   initialCollapsedEnvironmentIds,
-  isActive = false,
-  isLocalPathInvalid = false,
-}: InteractiveProjectRowArgs) {
-  const [isCollapsed, setIsCollapsed] = useState(initialCollapsed);
-  const [collapsedThreadIds, setCollapsedThreadIds] = useState<Set<string>>(
-    () => new Set(initialCollapsedThreadIds ?? []),
-  );
-  const [collapsedEnvironmentIds, setCollapsedEnvironmentIds] = useState<
-    Set<string>
-  >(() => new Set(initialCollapsedEnvironmentIds ?? []));
-  const onToggleProjectCollapsed = useCallback(() => {
-    setIsCollapsed((current) => !current);
-  }, []);
-  const onToggleThreadCollapsed = useCallback<ToggleStoryCollapsedId>(
-    (threadId) => {
-      setCollapsedThreadIds((current) => {
-        const next = new Set(current);
-        if (next.has(threadId)) {
-          next.delete(threadId);
-        } else {
-          next.add(threadId);
-        }
-        return next;
-      });
-    },
-    [],
-  );
-  const onToggleEnvironmentCollapsed = useCallback<ToggleStoryCollapsedId>(
-    (environmentId) => {
-      setCollapsedEnvironmentIds((current) => {
-        const next = new Set(current);
-        if (next.has(environmentId)) {
-          next.delete(environmentId);
-        } else {
-          next.add(environmentId);
-        }
-        return next;
-      });
-    },
-    [],
-  );
-  return (
-    <ProjectRow
-      project={project}
-      threadListState={threadListState}
-      isActive={isActive}
-      isCollapsed={isCollapsed}
-      collapsedThreadIds={collapsedThreadIds}
-      collapsedEnvironmentIds={collapsedEnvironmentIds}
-      isLocalPathInvalid={isLocalPathInvalid}
-      onCreateProjectThread={noop}
-      onToggleProjectCollapsed={onToggleProjectCollapsed}
-      onToggleThreadCollapsed={onToggleThreadCollapsed}
-      onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
-    />
-  );
-}
-
-// Isolated ProjectRow demos: no "Projects" label — just the minimum
-// sticky-stack context the row depends on.
-function singleProject(args: InteractiveProjectRowArgs) {
+  isActive,
+  isLocalPathInvalid,
+}: SingleProjectArgs) {
   return (
     <SidebarStage>
       <SidebarStickyStack>
-        <SidebarMenu className="gap-1">
-          <InteractiveProjectRow {...args} />
-        </SidebarMenu>
+        <InteractiveProjectList
+          rows={[
+            {
+              project,
+              threadListState,
+              isActive,
+              isLocalPathInvalid,
+              initiallyCollapsed: initialCollapsed,
+            },
+          ]}
+          initialCollapsedThreadIds={initialCollapsedThreadIds}
+          initialCollapsedEnvironmentIds={initialCollapsedEnvironmentIds}
+        />
       </SidebarStickyStack>
     </SidebarStage>
   );
@@ -261,13 +300,8 @@ const deepWorktreeB = makeThread({
   hasPendingInteraction: true,
 });
 
-interface MultiProjectEntry extends InteractiveProjectRowArgs {
-  key: string;
-}
-
-const multipleProjects: MultiProjectEntry[] = [
+const multipleProjects: StoryProjectRow[] = [
   {
-    key: "bb",
     project: makeProject({ id: "proj_bb", name: "bb" }),
     isActive: true,
     threadListState: {
@@ -283,19 +317,17 @@ const multipleProjects: MultiProjectEntry[] = [
     },
   },
   {
-    key: "pierre",
     project: makeProject({
       id: "proj_pierre",
       name: "pierre — long project name that should truncate cleanly",
     }),
-    initialCollapsed: true,
+    initiallyCollapsed: true,
     threadListState: {
       status: "ready",
       threads: [{ ...idleThread, projectId: "proj_pierre" }],
     },
   },
   {
-    key: "ingest",
     project: makeProject({ id: "proj_ingest", name: "ingest-pipeline" }),
     threadListState: {
       status: "ready",
@@ -306,7 +338,6 @@ const multipleProjects: MultiProjectEntry[] = [
     },
   },
   {
-    key: "experiment",
     project: makeProject({ id: "proj_empty", name: "fresh-experiment" }),
     threadListState: { status: "ready", threads: [] },
   },
@@ -511,11 +542,7 @@ export function Overview() {
       >
         <SidebarStage>
           <SidebarStickyStack>
-            <SidebarMenu className="gap-1">
-              {multipleProjects.map(({ key, ...args }) => (
-                <InteractiveProjectRow key={key} {...args} />
-              ))}
-            </SidebarMenu>
+            <InteractiveProjectList rows={multipleProjects} />
           </SidebarStickyStack>
         </SidebarStage>
       </StoryRow>
@@ -524,9 +551,10 @@ export function Overview() {
 }
 
 // ---------------------------------------------------------------------------
-// Full sidebar — three realistic projects expanded together. Helpful for
-// eyeballing the vertical rhythm: project↔project separation vs. the tighter
-// grouping inside a parent thread.
+// Projects list — three realistic, fully-expanded projects stacked together.
+// Scoped to the Projects section (not the whole sidebar: no Pinned/Threads/Apps
+// sections or section chrome). Helpful for eyeballing the vertical rhythm:
+// project↔project separation vs. the tighter grouping inside a parent thread.
 // ---------------------------------------------------------------------------
 
 const fullParentA = makeThread({
@@ -674,24 +702,17 @@ const fullProjectCThreads: ThreadListEntry[] = [
   }),
 ];
 
-interface FullProjectEntry extends InteractiveProjectRowArgs {
-  key: string;
-}
-
-const fullProjects: FullProjectEntry[] = [
+const fullProjects: StoryProjectRow[] = [
   {
-    key: "bb",
     project: makeProject({ id: "proj_full_a", name: "bb" }),
     isActive: true,
     threadListState: { status: "ready", threads: fullProjectAThreads },
   },
   {
-    key: "pierre",
     project: makeProject({ id: "proj_full_b", name: "pierre" }),
     threadListState: { status: "ready", threads: fullProjectBThreads },
   },
   {
-    key: "ingest",
     project: makeProject({ id: "proj_full_c", name: "ingest-pipeline" }),
     threadListState: { status: "ready", threads: fullProjectCThreads },
   },
@@ -699,24 +720,16 @@ const fullProjects: FullProjectEntry[] = [
 
 const noop = () => {};
 
-export function Full() {
+export function MultipleProjects() {
   return (
     <StoryCard>
       <StoryRow
-        label="full sidebar"
-        hint="action buttons + three projects: bb (active) with a parent that has 4 loose children + a 2-thread env sub-group, plus 2 standalones and a 2-thread project-level env group; pierre with 3 standalones; ingest-pipeline with a parent + 1 standalone"
+        label="projects list — three projects"
+        hint="the Projects section only (no Pinned/Threads/Apps): bb (active) with a parent that has 4 loose children + a 2-thread env sub-group, plus 2 standalones and a 2-thread project-level env group; pierre with 3 standalones; ingest-pipeline with a parent + 1 standalone"
       >
         <SidebarStage>
-          <div className="px-2 pb-2">
-            <ProjectListActionButtons
-              onNewChat={noop}
-              onOpenAutomations={noop}
-            />
-          </div>
           <ProjectListShell>
-            {fullProjects.map(({ key, ...args }) => (
-              <InteractiveProjectRow key={key} {...args} />
-            ))}
+            <InteractiveProjectList rows={fullProjects} />
           </ProjectListShell>
         </SidebarStage>
       </StoryRow>

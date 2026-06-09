@@ -50,13 +50,9 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button.js";
 import { CHROME_SECTION_LABEL_CLASS } from "@/components/ui/chromeStyleTokens";
-import { EmptyState } from "@/components/ui/empty-state.js";
 import { Icon, type IconName } from "@/components/ui/icon.js";
 import {
   SidebarGroupContent,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuSkeleton,
   SidebarStickyGroup,
   SidebarStickyStack,
   SidebarStickyTier,
@@ -66,9 +62,14 @@ import {
   COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
   COARSE_POINTER_ROW_HEIGHT_CLASS,
 } from "@/components/ui/coarse-pointer-sizing.js";
-import { ProjectRow, ProjectThreadTree } from "./ProjectRow";
+import { ProjectThreadTree } from "./ProjectRow";
 import { SidebarAppsSection } from "./SidebarAppsSection";
-import type { ProjectRowProps, ProjectThreadListState } from "./ProjectRow";
+import type { ProjectThreadListState } from "./ProjectRow";
+import {
+  ProjectListProjects,
+  type ProjectListReorderBindings,
+  type ProjectListRowModel,
+} from "./ProjectListProjects";
 import {
   PinnedThreadTree,
   type PinnedThreadTreeProps,
@@ -173,10 +174,6 @@ type ToggleCollapsedId = (id: string) => void;
 type ToggleCollapsedSidebarSectionId = (
   id: CollapsibleSidebarSectionId,
 ) => void;
-
-interface SortableProjectRowProps extends ProjectRowProps {
-  reorderDisabled: boolean;
-}
 
 interface TopLevelSidebarSectionProps {
   label: string;
@@ -509,27 +506,6 @@ const SortableSidebarSection = memo(function SortableSidebarSection({
   );
 });
 
-const SortableProjectRow = memo(function SortableProjectRow({
-  project,
-  reorderDisabled,
-  ...props
-}: SortableProjectRowProps) {
-  const { dragBindings, setNodeRef, style } = useSidebarSortable({
-    id: project.id,
-    disabled: reorderDisabled,
-  });
-
-  return (
-    <ProjectRow
-      {...props}
-      project={project}
-      projectDragBindings={dragBindings}
-      projectRowRef={setNodeRef}
-      projectRowStyle={style}
-    />
-  );
-});
-
 export function ProjectListActionButtons({
   onNewChat,
   onOpenAutomations,
@@ -840,6 +816,42 @@ function ProjectListComponent({
     return map;
   }, [projectsState.status, renderedProjects, threadsByProject]);
 
+  const projectRows = useMemo<ProjectListRowModel[]>(
+    () =>
+      renderedProjects.map((project) => ({
+        project,
+        threadListState:
+          threadListStatesByProjectId.get(project.id) ??
+          EMPTY_PROJECT_THREAD_LIST_STATE,
+        isActive: false,
+        isLocalPathInvalid: isLocalPathMissing(
+          pathExistence,
+          localSourcePathsByProjectId.get(project.id),
+        ),
+      })),
+    [
+      localSourcePathsByProjectId,
+      pathExistence,
+      renderedProjects,
+      threadListStatesByProjectId,
+    ],
+  );
+
+  const projectReorder = useMemo<ProjectListReorderBindings>(
+    () => ({
+      dndContextProps: projectDndContextProps,
+      itemIds: renderedProjectIds,
+      disabled: projectReorderDisabled,
+      consumeClickSuppression: consumeProjectClickSuppression,
+    }),
+    [
+      consumeProjectClickSuppression,
+      projectDndContextProps,
+      projectReorderDisabled,
+      renderedProjectIds,
+    ],
+  );
+
   const toggleProjectCollapsed = useCallback<ToggleCollapsedId>(
     (projectId) => {
       setCollapsedProjectIdList((current) => {
@@ -933,99 +945,20 @@ function ProjectListComponent({
     />
   );
   const projectsSectionContent = (
-    <SidebarMenu className="gap-1">
-      {projectsState.status === "loading" ? (
-        <>
-          <SidebarMenuSkeleton />
-          <SidebarMenuSkeleton />
-        </>
-      ) : renderedProjects.length > 1 ? (
-        <DndContext {...projectDndContextProps}>
-          <SortableContext
-            items={renderedProjectIds}
-            strategy={verticalListSortingStrategy}
-          >
-            {renderedProjects.map((project) => {
-              const threadListState =
-                threadListStatesByProjectId.get(project.id) ??
-                EMPTY_PROJECT_THREAD_LIST_STATE;
-              const localSourcePath = localSourcePathsByProjectId.get(
-                project.id,
-              );
-              const isLocalPathInvalid = isLocalPathMissing(
-                pathExistence,
-                localSourcePath,
-              );
-              return (
-                <SortableProjectRow
-                  key={project.id}
-                  project={project}
-                  reorderDisabled={projectReorderDisabled}
-                  threadListState={threadListState}
-                  selectedThreadId={selectedThreadId}
-                  isActive={false}
-                  isCollapsed={collapsedProjectIds.has(project.id)}
-                  collapsedThreadIds={collapsedThreadIds}
-                  collapsedEnvironmentIds={collapsedEnvironmentIds}
-                  isLocalPathInvalid={isLocalPathInvalid}
-                  onProjectSelect={onProjectSelect}
-                  onCreateProjectThread={handleCreateProjectThread}
-                  onToggleProjectCollapsed={toggleProjectCollapsed}
-                  onToggleThreadCollapsed={toggleThreadCollapsed}
-                  onToggleEnvironmentCollapsed={toggleEnvironmentCollapsed}
-                  consumeProjectClickSuppression={
-                    consumeProjectClickSuppression
-                  }
-                />
-              );
-            })}
-          </SortableContext>
-        </DndContext>
-      ) : renderedProjects.length > 0 ? (
-        renderedProjects.map((project) => {
-          const threadListState =
-            threadListStatesByProjectId.get(project.id) ??
-            EMPTY_PROJECT_THREAD_LIST_STATE;
-          const localSourcePath = localSourcePathsByProjectId.get(project.id);
-          const isLocalPathInvalid = isLocalPathMissing(
-            pathExistence,
-            localSourcePath,
-          );
-          return (
-            <ProjectRow
-              key={project.id}
-              project={project}
-              threadListState={threadListState}
-              selectedThreadId={selectedThreadId}
-              isActive={false}
-              isCollapsed={collapsedProjectIds.has(project.id)}
-              collapsedThreadIds={collapsedThreadIds}
-              collapsedEnvironmentIds={collapsedEnvironmentIds}
-              isLocalPathInvalid={isLocalPathInvalid}
-              onProjectSelect={onProjectSelect}
-              onCreateProjectThread={handleCreateProjectThread}
-              onToggleProjectCollapsed={toggleProjectCollapsed}
-              onToggleThreadCollapsed={toggleThreadCollapsed}
-              onToggleEnvironmentCollapsed={toggleEnvironmentCollapsed}
-            />
-          );
-        })
-      ) : (
-        <SidebarMenuItem>
-          <EmptyState
-            message={
-              projectsState.status === "unavailable"
-                ? "Projects unavailable"
-                : "No projects"
-            }
-            icon="Folder"
-            className="px-2 py-1.5"
-            iconClassName="size-3.5 text-sidebar-foreground/75"
-            messageClassName="text-xs font-medium text-sidebar-foreground/85"
-          />
-        </SidebarMenuItem>
-      )}
-    </SidebarMenu>
+    <ProjectListProjects
+      status={projectsState.status}
+      rows={projectRows}
+      selectedThreadId={selectedThreadId}
+      collapsedProjectIds={collapsedProjectIds}
+      collapsedThreadIds={collapsedThreadIds}
+      collapsedEnvironmentIds={collapsedEnvironmentIds}
+      onProjectSelect={onProjectSelect}
+      onCreateProjectThread={handleCreateProjectThread}
+      onToggleProjectCollapsed={toggleProjectCollapsed}
+      onToggleThreadCollapsed={toggleThreadCollapsed}
+      onToggleEnvironmentCollapsed={toggleEnvironmentCollapsed}
+      reorder={projectReorder}
+    />
   );
   const threadsSectionContent = (
     <ProjectThreadTree
