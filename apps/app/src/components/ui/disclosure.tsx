@@ -279,22 +279,23 @@ export function ExpandablePanel({
       : null;
 
   return (
-    <div
-      className={cn(
-        "group/timeline-row rounded-md text-muted-foreground",
-        className,
-      )}
-    >
-      <CollapsibleHeader
-        isExpanded={isExpanded}
-        onToggle={onToggle}
-        toneClassName={headerToneClass}
-        className={headerRootClassName}
-        summaryClassName={
-          summaryContentClassName ?? COLLAPSIBLE_HEADER_TEXT_CLASS
-        }
-        summaryContent={summaryContent}
-      />
+    <div className={cn("rounded-md text-muted-foreground", className)}>
+      {/* Scope the hover group to the header line only. Putting it on the
+          whole panel would let a hover on a nested bundle child (which lives
+          in the body below) reveal every sibling row's chevron, since they
+          share this panel as a hovered ancestor. */}
+      <div className="group/timeline-row">
+        <CollapsibleHeader
+          isExpanded={isExpanded}
+          onToggle={onToggle}
+          toneClassName={headerToneClass}
+          className={headerRootClassName}
+          summaryClassName={
+            summaryContentClassName ?? COLLAPSIBLE_HEADER_TEXT_CLASS
+          }
+          summaryContent={summaryContent}
+        />
+      </div>
       {hasCollapsedContent ? (
         <AnimatedExpandablePanelContent
           bodyClassName={bodyClassName}
