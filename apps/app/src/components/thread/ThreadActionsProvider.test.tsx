@@ -257,9 +257,10 @@ describe("ThreadActionsProvider", () => {
     });
   });
 
-  it("archives and supports undo from the toast action", async () => {
-    const thread = makeThread();
-    vi.mocked(api.archiveThread).mockResolvedValue(undefined);
+  it("unarchives an archived thread", async () => {
+    const thread = makeThread({
+      archivedAt: 1_000,
+    });
     vi.mocked(api.unarchiveThread).mockResolvedValue(undefined);
 
     let actions: ReturnType<typeof useThreadActions> | null = null;
@@ -272,24 +273,7 @@ describe("ThreadActionsProvider", () => {
     );
 
     act(() => {
-      actions!.toggleArchive(thread);
-    });
-
-    await waitFor(() => {
-      expect(api.archiveThread).toHaveBeenCalledWith(thread.id);
-    });
-    expect(api.getThreadChildSummary).not.toHaveBeenCalled();
-    const successInvocation = requireLatestThreadToastInvocation();
-    expect(successInvocation.props.tone).toBe("success");
-    expect(successInvocation.props.title).toBe("Thread archived");
-    expect(successInvocation.props.cancel?.label).toBe("Undo");
-    const undo = successInvocation.props.cancel;
-    if (!undo) {
-      throw new Error("Expected archive success toast to include Undo.");
-    }
-
-    act(() => {
-      undo.onClick();
+      actions!.unarchiveThread(thread);
     });
 
     await waitFor(() => {
@@ -314,7 +298,7 @@ describe("ThreadActionsProvider", () => {
     );
 
     act(() => {
-      actions!.archiveAllChildren(thread);
+      actions!.archiveThreadAndChildren(thread);
     });
 
     await waitFor(() => {
@@ -327,7 +311,7 @@ describe("ThreadActionsProvider", () => {
     );
   });
 
-  it("returns to root compose when archive all includes the current projectless thread", async () => {
+  it("returns to root compose when archive thread and children includes the current projectless thread", async () => {
     const thread = makeThread({
       id: "manager-1",
       projectId: PERSONAL_PROJECT_ID,
@@ -351,7 +335,7 @@ describe("ThreadActionsProvider", () => {
     );
 
     act(() => {
-      actions!.archiveAllChildren(thread);
+      actions!.archiveThreadAndChildren(thread);
     });
 
     await waitFor(() => {

@@ -463,7 +463,6 @@ function ThreadRowComponent({
           >
             <ThreadActionsMenu
               thread={thread}
-              showArchiveAll={hasChildren}
               triggerClassName={cn(
                 "text-muted-foreground",
                 COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
@@ -488,7 +487,6 @@ function ThreadRowComponent({
   return (
     <ThreadActionsContextMenu
       thread={thread}
-      showArchiveAll={hasChildren}
       onOpenChange={setIsContextActionsOpen}
     >
       {row}

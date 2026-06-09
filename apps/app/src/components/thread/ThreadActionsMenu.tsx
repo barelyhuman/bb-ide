@@ -27,7 +27,6 @@ interface ThreadActionsMenuBaseProps {
    * to true.
    */
   canDelete?: boolean;
-  showArchiveAll?: boolean;
 }
 
 interface ThreadActionsMenuProps extends ThreadActionsMenuBaseProps {
@@ -78,21 +77,19 @@ function ThreadActionMenuItem({
 function ThreadActionsMenuItems({
   thread,
   canDelete = true,
-  showArchiveAll = false,
   surface,
 }: ThreadActionsMenuItemsProps) {
   const {
-    archiveAllChildren,
+    archiveThreadAndChildren,
     requestRename,
     requestDelete,
-    toggleArchive,
     togglePin,
     toggleRead,
+    unarchiveThread,
   } = useThreadActions();
   const isRead = isThreadRead(thread);
   const isArchived = thread.archivedAt != null;
   const isPinned = thread.pinnedAt !== null;
-  const canArchiveAll = !isArchived && showArchiveAll;
 
   return (
     <>
@@ -134,24 +131,15 @@ function ThreadActionsMenuItems({
           if (surface === "dropdown") {
             event.preventDefault();
           }
-          toggleArchive(thread);
+          if (isArchived) {
+            unarchiveThread(thread);
+            return;
+          }
+          archiveThreadAndChildren(thread);
         }}
       >
-        {isArchived ? "Unarchive" : "Archive thread"}
+        {isArchived ? "Unarchive" : "Archive"}
       </ThreadActionMenuItem>
-      {canArchiveAll ? (
-        <ThreadActionMenuItem
-          surface={surface}
-          onSelect={(event) => {
-            if (surface === "dropdown") {
-              event.preventDefault();
-            }
-            archiveAllChildren(thread);
-          }}
-        >
-          Archive all
-        </ThreadActionMenuItem>
-      ) : null}
       {canDelete ? (
         <ThreadActionMenuItem
           surface={surface}
@@ -172,7 +160,6 @@ function ThreadActionsMenuItems({
 export function ThreadActionsMenu({
   thread,
   canDelete = true,
-  showArchiveAll,
   onOpenChange,
   triggerClassName,
   align = "end",
@@ -201,7 +188,6 @@ export function ThreadActionsMenu({
         <ThreadActionsMenuItems
           thread={thread}
           canDelete={canDelete}
-          showArchiveAll={showArchiveAll}
           surface="dropdown"
         />
       </DropdownMenuContent>
@@ -213,7 +199,6 @@ export function ThreadActionsContextMenu({
   children,
   thread,
   canDelete = true,
-  showArchiveAll,
   onOpenChange,
 }: ThreadActionsContextMenuProps) {
   return (
@@ -226,7 +211,6 @@ export function ThreadActionsContextMenu({
         <ThreadActionsMenuItems
           thread={thread}
           canDelete={canDelete}
-          showArchiveAll={showArchiveAll}
           surface="context"
         />
       </ContextMenuContent>

@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ThreadWithRuntime } from "@bb/domain";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Provider as JotaiProvider } from "jotai";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
+import * as api from "@/lib/api";
 import { createAppQueryClient } from "@/lib/query-client";
 import { ThreadActionsProvider } from "./ThreadActionsProvider";
 import { ThreadActionsMenu } from "./ThreadActionsMenu";
@@ -69,7 +70,7 @@ function renderMenu(thread: ThreadWithRuntime) {
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
           <ThreadActionsProvider>
-            <ThreadActionsMenu thread={thread} showArchiveAll />
+            <ThreadActionsMenu thread={thread} />
           </ThreadActionsProvider>
         </MemoryRouter>
       </QueryClientProvider>
@@ -78,8 +79,13 @@ function renderMenu(thread: ThreadWithRuntime) {
 }
 
 describe("ThreadActionsMenu", () => {
-  it("shows archive-all actions when requested", async () => {
-    renderMenu(makeThread());
+  it("archives threads and children from the archive action", async () => {
+    const thread = makeThread();
+    vi.mocked(api.archiveThreadAndChildren).mockResolvedValue({
+      ok: true,
+      archivedThreadIds: [thread.id, "child-1"],
+    });
+    renderMenu(thread);
 
     fireEvent.pointerDown(
       screen.getByRole("button", { name: "Thread actions" }),
@@ -89,7 +95,15 @@ describe("ThreadActionsMenu", () => {
       },
     );
 
-    expect(await screen.findByText("Archive thread")).toBeTruthy();
-    expect(screen.getByText("Archive all")).toBeTruthy();
+    const archiveAction = await screen.findByText("Archive");
+    expect(screen.queryByText("Archive thread")).toBeNull();
+    expect(screen.queryByText("Archive all")).toBeNull();
+
+    fireEvent.click(archiveAction);
+
+    await waitFor(() => {
+      expect(api.archiveThreadAndChildren).toHaveBeenCalledWith(thread.id);
+    });
+    expect(api.archiveThread).not.toHaveBeenCalled();
   });
 });

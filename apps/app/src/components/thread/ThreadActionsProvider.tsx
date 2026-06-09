@@ -11,7 +11,6 @@ import { useNavigate } from "react-router-dom";
 import { appToast } from "@/components/ui/app-toast";
 import type { Thread } from "@bb/domain";
 import {
-  useArchiveThread,
   useArchiveThreadAndChildren,
   useDeleteThread,
   useMarkThreadRead,
@@ -44,10 +43,10 @@ import { getDesktopBrowserApi } from "@/lib/bb-desktop";
 import { useSetRootComposeProjectId } from "@/lib/root-compose-selection";
 
 export interface ThreadActionsContextValue {
-  archiveAllChildren: (thread: Thread) => void;
+  archiveThreadAndChildren: (thread: Thread) => void;
   requestRename: (thread: Thread) => void;
   requestDelete: (thread: Thread) => void;
-  toggleArchive: (thread: Thread) => void;
+  unarchiveThread: (thread: Thread) => void;
   togglePin: (thread: Thread) => void;
   toggleRead: (thread: Thread) => void;
 }
@@ -80,7 +79,9 @@ interface ThreadActionContext {
   childThreadCount: number;
 }
 
-function formatArchiveAllSuccessMessage(archivedThreadCount: number): string {
+function formatArchiveThreadAndChildrenSuccessMessage(
+  archivedThreadCount: number,
+): string {
   if (archivedThreadCount <= 1) {
     return "Archived thread";
   }
@@ -96,9 +97,8 @@ export function ThreadActionsProvider({
   const navigate = useNavigate();
   const setRootComposeProjectId = useSetRootComposeProjectId();
   const { threadId: viewedThreadId } = useAppRoute();
-  const archiveThread = useArchiveThread();
-  const archiveThreadAndChildren = useArchiveThreadAndChildren();
-  const unarchiveThread = useUnarchiveThread();
+  const archiveThreadAndChildrenMutation = useArchiveThreadAndChildren();
+  const unarchiveThreadMutation = useUnarchiveThread();
   const markThreadRead = useMarkThreadRead();
   const markThreadUnread = useMarkThreadUnread();
   const pinThread = usePinThread();
@@ -110,9 +110,9 @@ export function ThreadActionsProvider({
   // renders. Depending on the full mutation objects would churn callback
   // identities on every isPending flip and force every useThreadActions()
   // consumer to re-render whenever any mutation fires.
-  const { mutate: archiveMutate } = archiveThread;
-  const { mutate: archiveThreadAndChildrenMutate } = archiveThreadAndChildren;
-  const { mutate: unarchiveMutate } = unarchiveThread;
+  const { mutate: archiveThreadAndChildrenMutate } =
+    archiveThreadAndChildrenMutation;
+  const { mutate: unarchiveMutate } = unarchiveThreadMutation;
   const { mutate: markReadMutate } = markThreadRead;
   const { mutate: markUnreadMutate } = markThreadUnread;
   const { mutate: pinMutate } = pinThread;
@@ -271,53 +271,14 @@ export function ThreadActionsProvider({
     [closeDeleteDialog, performDelete],
   );
 
-  const showArchiveError = useCallback((thread: Thread, error: Error) => {
-    appToast.error(
-      getMutationErrorMessage({
-        error,
-        fallbackMessage: "Failed to archive thread",
-        lifecycleOperation: "archive_thread",
-      }),
-    );
-  }, []);
-
-  const archiveWithUndoToast = useCallback(
+  const unarchiveThreadAction = useCallback(
     (thread: Thread) => {
-      archiveMutate(
-        { id: thread.id },
-        {
-          onSuccess: () => {
-            navigateAwayIfViewing(thread);
-            appToast.success("Thread archived", {
-              cancel: {
-                label: "Undo",
-                onClick: () => {
-                  unarchiveMutate({ id: thread.id });
-                },
-              },
-            });
-          },
-          onError: (error) => {
-            showArchiveError(thread, error);
-          },
-        },
-      );
+      unarchiveMutate({ id: thread.id });
     },
-    [archiveMutate, navigateAwayIfViewing, showArchiveError, unarchiveMutate],
+    [unarchiveMutate],
   );
 
-  const toggleArchive = useCallback(
-    (thread: Thread) => {
-      if (thread.archivedAt != null) {
-        unarchiveMutate({ id: thread.id });
-        return;
-      }
-      archiveWithUndoToast(thread);
-    },
-    [archiveWithUndoToast, unarchiveMutate],
-  );
-
-  const archiveAllChildren = useCallback(
+  const archiveThreadAndChildrenAction = useCallback(
     (thread: Thread) => {
       archiveThreadAndChildrenMutate(
         { id: thread.id },
@@ -331,7 +292,9 @@ export function ThreadActionsProvider({
               navigate(getRootComposeRoutePath());
             }
             appToast.success(
-              formatArchiveAllSuccessMessage(response.archivedThreadIds.length),
+              formatArchiveThreadAndChildrenSuccessMessage(
+                response.archivedThreadIds.length,
+              ),
             );
           },
           onError: (error) => {
@@ -398,18 +361,18 @@ export function ThreadActionsProvider({
     () => ({
       requestRename,
       requestDelete,
-      archiveAllChildren,
-      toggleArchive,
+      archiveThreadAndChildren: archiveThreadAndChildrenAction,
+      unarchiveThread: unarchiveThreadAction,
       togglePin,
       toggleRead,
     }),
     [
-      archiveAllChildren,
+      archiveThreadAndChildrenAction,
       requestRename,
       requestDelete,
-      toggleArchive,
       togglePin,
       toggleRead,
+      unarchiveThreadAction,
     ],
   );
 

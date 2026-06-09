@@ -1153,7 +1153,6 @@ export function ThreadDetailView() {
   const threadActionsMenu = (
     <ThreadActionsMenu
       thread={thread}
-      showArchiveAll={(childThreadSubsetQuery.data ?? []).length > 0}
       triggerClassName={HEADER_ICON_BUTTON_CLASS}
       align="end"
     />
