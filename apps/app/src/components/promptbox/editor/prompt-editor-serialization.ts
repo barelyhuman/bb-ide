@@ -172,7 +172,6 @@ export function promptMentionResourceFromSuggestion(
       kind: "thread",
       threadId: suggestion.threadId,
       projectId: suggestion.projectId,
-      threadType: suggestion.threadType,
       label: suggestion.title?.trim() || suggestion.threadId,
     };
   }

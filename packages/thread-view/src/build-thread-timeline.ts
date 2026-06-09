@@ -3,7 +3,7 @@ import type {
   TimelineActivityIntent,
   TimelineConversationAttachments,
   TimelineFileChange,
-  TimelineManagerAssignment,
+  TimelineParentChange,
   TimelineRow,
   TimelineRowBase,
   TimelineRowStatus,
@@ -173,9 +173,9 @@ interface BuildGenericOperationSystemRowArgs {
   operationKind: TimelineGenericSystemOperationKind;
 }
 
-interface BuildManagerAssignmentSystemRowArgs {
+interface BuildParentChangeSystemRowArgs {
   base: TimelineRowBase;
-  managerAssignment: TimelineManagerAssignment;
+  parentChange: TimelineParentChange;
   message: TimelineOperationMessage;
 }
 
@@ -187,12 +187,12 @@ type TimelineOperationMessage = Extract<
 >;
 type TimelineGenericSystemOperationKind = Exclude<
   TimelineSystemOperationKind,
-  "manager-assignment"
+  "parent-change"
 >;
 
 function operationKindForMessage(
   message: TimelineOperationMessage,
-  managerAssignment: TimelineManagerAssignment | null,
+  parentChange: TimelineParentChange | null,
 ): TimelineSystemOperationKind {
   switch (message.opType) {
     case "compaction":
@@ -203,15 +203,15 @@ function operationKindForMessage(
     case "deprecation":
       return message.opType;
     case "operation":
-      return managerAssignment !== null ? "manager-assignment" : "generic";
+      return parentChange !== null ? "parent-change" : "generic";
     default:
       return assertNever(message.opType);
   }
 }
 
-function managerAssignmentForMessage(
+function parentChangeForMessage(
   message: TimelineOperationMessage,
-): TimelineManagerAssignment | null {
+): TimelineParentChange | null {
   if (
     message.opType !== "operation" ||
     message.threadOperation?.operation !== "ownership_change"
@@ -230,10 +230,10 @@ function managerAssignmentForMessage(
     case "transfer":
       return {
         action,
-        previousManagerThreadId: metadata.previousParentThreadId,
-        previousManagerThreadTitle: metadata.previousParentThreadTitle,
-        nextManagerThreadId: metadata.nextParentThreadId,
-        nextManagerThreadTitle: metadata.nextParentThreadTitle,
+        previousParentThreadId: metadata.previousParentThreadId,
+        previousParentThreadTitle: metadata.previousParentThreadTitle,
+        nextParentThreadId: metadata.nextParentThreadId,
+        nextParentThreadTitle: metadata.nextParentThreadTitle,
       };
     default:
       return assertNever(action);
@@ -257,21 +257,21 @@ function buildGenericOperationSystemRow({
   };
 }
 
-function buildManagerAssignmentSystemRow({
+function buildParentChangeSystemRow({
   base,
-  managerAssignment,
+  parentChange,
   message,
-}: BuildManagerAssignmentSystemRowArgs): TimelineSystemRow {
+}: BuildParentChangeSystemRowArgs): TimelineSystemRow {
   if (message.status === undefined) {
-    throw new Error("Manager assignment operation message requires a status");
+    throw new Error("Parent change operation message requires a status");
   }
   const status: TimelineRowStatus = message.status;
   return {
     ...base,
     kind: "system",
     systemKind: "operation",
-    operationKind: "manager-assignment",
-    managerAssignment,
+    operationKind: "parent-change",
+    parentChange,
     title: message.title,
     detail: buildTimelineOperationDetail(message),
     status,
@@ -675,15 +675,15 @@ function convertMessage(
         },
       ];
     case "operation": {
-      const managerAssignment = managerAssignmentForMessage(message);
-      const operationKind = operationKindForMessage(message, managerAssignment);
+      const parentChange = parentChangeForMessage(message);
+      const operationKind = operationKindForMessage(message, parentChange);
       const base = buildTimelineRowBase(message, options.rowIdPrefix);
-      if (operationKind === "manager-assignment") {
-        return managerAssignment !== null
+      if (operationKind === "parent-change") {
+        return parentChange !== null
           ? [
-              buildManagerAssignmentSystemRow({
+              buildParentChangeSystemRow({
                 base,
-                managerAssignment,
+                parentChange,
                 message,
               }),
             ]
@@ -1078,7 +1078,6 @@ export function buildThreadTimelineFromEvents(
       args.options.includeProviderUnhandledOperations,
     systemClientRequestVisibility: args.options.systemClientRequestVisibility,
     threadStatus: args.options.threadStatus,
-    threadType: "standard",
     turnMessageDetail: args.options.turnMessageDetail,
   } satisfies Parameters<typeof buildEventProjection>[1];
   const projection = buildEventProjection(args.events, projectionOptions);
@@ -1120,7 +1119,6 @@ export function buildThreadTimelineTurnDetailsFromEvents(
       args.options.includeProviderUnhandledOperations,
     systemClientRequestVisibility: args.options.systemClientRequestVisibility,
     threadStatus: args.options.threadStatus,
-    threadType: "standard",
     turnMessageDetail: "full",
   });
   const nestedRows = buildTimelineRows(projection, {

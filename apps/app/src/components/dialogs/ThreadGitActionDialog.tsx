@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { assertNever } from "@bb/core-ui";
-import type { GitBranchRefClassification, ThreadType } from "@bb/domain";
+import type { GitBranchRefClassification } from "@bb/domain";
 import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
 import type { ThreadGitStatusDisplay } from "@/components/workspace/workspace-status";
 import { ChangedFilesDetailRow } from "@/components/workspace/ChangedFilesDetailRow";
@@ -30,8 +30,6 @@ interface ThreadGitActionDialogProps {
   branchName?: string;
   gitStatusDisplay?: ThreadGitStatusDisplay;
   changedFilesSection?: WorkspaceChangedFilesSection | null;
-  threadId?: string;
-  threadType?: ThreadType;
   showMergeBaseDetails?: boolean;
   mergeBaseBranch?: string;
   mergeBaseBranchRef?: GitBranchRefClassification | null;
@@ -83,8 +81,6 @@ export function ThreadGitActionDialog({
   branchName,
   gitStatusDisplay,
   changedFilesSection,
-  threadId,
-  threadType,
   showMergeBaseDetails = false,
   mergeBaseBranch,
   mergeBaseBranchRef,
@@ -113,8 +109,6 @@ export function ThreadGitActionDialog({
             branchName={branchName}
             gitStatusDisplay={gitStatusDisplay}
             changedFilesSection={changedFilesSection}
-            threadId={threadId}
-            threadType={threadType}
             showMergeBaseDetails={showMergeBaseDetails}
             mergeBaseBranch={mergeBaseBranch}
             mergeBaseBranchRef={mergeBaseBranchRef}
@@ -148,8 +142,6 @@ export function ThreadGitActionDialogContent({
   branchName,
   gitStatusDisplay,
   changedFilesSection,
-  threadId,
-  threadType,
   showMergeBaseDetails,
   mergeBaseBranch,
   mergeBaseBranchRef,

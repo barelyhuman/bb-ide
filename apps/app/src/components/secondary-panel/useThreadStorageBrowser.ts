@@ -10,13 +10,13 @@ import type { WorkspaceFile } from "@bb/server-contract";
 
 const EMPTY_STORAGE_FILES: readonly WorkspaceFile[] = [];
 
-interface UseManagerStorageBrowserArgs {
+interface UseThreadStorageBrowserArgs {
   files: readonly WorkspaceFile[] | undefined;
   onSelectPath: (path: string) => void;
   selectedPath: string | null;
 }
 
-export interface ManagerStorageBrowserController {
+export interface ThreadStorageBrowserController {
   closeSearch: () => void;
   filteredFiles: readonly WorkspaceFile[];
   isSearchOpen: boolean;
@@ -44,7 +44,7 @@ function buildDirectoryPaths(paths: readonly string[]): string[] {
 }
 
 /**
- * Owns the manager-thread storage browser's tree model and related UI state.
+ * Owns the thread storage browser's tree model and related UI state.
  *
  * Pierre tree's `useFileTree` destroys its model on the owning component's
  * unmount (`model.cleanUp()` unsubscribes the selection listener and destroys
@@ -54,11 +54,11 @@ function buildDirectoryPaths(paths: readonly string[]): string[] {
  * that survives that toggle (e.g., ThreadDetailView), with the model and
  * search state passed down to the presentational browser.
  */
-export function useManagerStorageBrowser({
+export function useThreadStorageBrowser({
   files,
   onSelectPath,
   selectedPath,
-}: UseManagerStorageBrowserArgs): ManagerStorageBrowserController {
+}: UseThreadStorageBrowserArgs): ThreadStorageBrowserController {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 

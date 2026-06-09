@@ -308,7 +308,6 @@ describe("environment reprovisioning", () => {
           origin: "cli",
           projectId: project.id,
           providerId: "codex",
-          type: "standard",
         });
       } catch (error) {
         if (error instanceof ApiError) {
@@ -358,7 +357,6 @@ describe("environment reprovisioning", () => {
         origin: "cli",
         projectId: project.id,
         providerId: "codex",
-        type: "standard",
       });
       const provisionCommand = await waitForQueuedCommand(
         harness,
@@ -442,7 +440,6 @@ describe("environment reprovisioning", () => {
         origin: "cli",
         projectId: project.id,
         providerId: "codex",
-        type: "standard",
       });
       const provisionCommand = await waitForQueuedCommand(
         harness,
@@ -472,7 +469,6 @@ describe("environment reprovisioning", () => {
         origin: "cli",
         projectId: project.id,
         providerId: "codex",
-        type: "standard",
       });
       await advanceThreadProvisioning(harness.deps, {
         threadId: secondThread.id,

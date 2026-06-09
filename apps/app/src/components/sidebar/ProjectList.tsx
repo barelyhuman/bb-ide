@@ -32,10 +32,7 @@ import {
   stripProjectThreads,
   useSidebarNavigation,
 } from "@/hooks/queries/project-queries";
-import {
-  useReorderProject,
-  useReorderProjectManager,
-} from "@/hooks/mutations/project-mutations";
+import { useReorderProject } from "@/hooks/mutations/project-mutations";
 import { useReorderPinnedThread } from "@/hooks/mutations/thread-state-mutations";
 import {
   isLocalPathMissing,
@@ -48,9 +45,7 @@ import {
   buildNeighborReorderRequest,
 } from "@/lib/neighbor-reorder";
 import {
-  useSetRootComposeMode,
   useSetRootComposeProjectId,
-  type RootComposeMode,
 } from "@/lib/root-compose-selection";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button.js";
@@ -117,7 +112,6 @@ interface ProjectListProps {
 
 export interface ProjectListActionButtonsProps {
   onNewChat?: () => void;
-  onNewManager?: () => void;
   onOpenAutomations?: () => void;
 }
 
@@ -139,18 +133,12 @@ interface ProjectListProjectsSectionActionsProps {
 }
 
 interface ProjectListThreadsSectionActionsProps {
-  onNewManager: () => void;
   onNewThread: () => void;
 }
 
 interface LocalSourcePathTarget {
   path: string;
   projectId: string;
-}
-
-interface OpenRootComposeForProjectArgs {
-  projectId: string;
-  mode: RootComposeMode;
 }
 
 const PROJECT_LIST_ACTION_BUTTON_CLASS = cn(
@@ -365,24 +353,15 @@ function ProjectListProjectsSectionActions({
 }
 
 function ProjectListThreadsSectionActions({
-  onNewManager,
   onNewThread,
 }: ProjectListThreadsSectionActionsProps) {
   return (
-    <>
-      <ProjectListSectionIconButton
-        ariaLabel="New manager"
-        title="New manager"
-        iconName="UserRoundPlus"
-        onClick={onNewManager}
-      />
-      <ProjectListSectionIconButton
-        ariaLabel="New thread"
-        title="New thread"
-        iconName="MessageSquarePlus"
-        onClick={onNewThread}
-      />
-    </>
+    <ProjectListSectionIconButton
+      ariaLabel="New thread"
+      title="New thread"
+      iconName="MessageSquarePlus"
+      onClick={onNewThread}
+    />
   );
 }
 
@@ -553,15 +532,10 @@ const SortableProjectRow = memo(function SortableProjectRow({
 
 export function ProjectListActionButtons({
   onNewChat,
-  onNewManager,
   onOpenAutomations,
 }: ProjectListActionButtonsProps) {
   const isNewChatDisabled = !onNewChat;
-  const isNewManagerDisabled = !onNewManager;
   const newChatTitle = isNewChatDisabled ? "Start a new thread" : "New thread";
-  const newManagerTitle = isNewManagerDisabled
-    ? "Hire a new manager"
-    : "New manager";
 
   return (
     <div className="space-y-1">
@@ -576,22 +550,6 @@ export function ProjectListActionButtons({
       >
         <Icon name="MessageSquarePlus" />
         <span className="min-w-0 flex-1 truncate text-left">New thread</span>
-        <span
-          className={PROJECT_LIST_ACTION_TRAILING_SLOT_CLASS}
-          aria-hidden="true"
-        />
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        className={PROJECT_LIST_ACTION_BUTTON_CLASS}
-        onClick={onNewManager}
-        disabled={isNewManagerDisabled}
-        title={newManagerTitle}
-      >
-        <Icon name="UserRoundPlus" />
-        <span className="min-w-0 flex-1 truncate text-left">New manager</span>
         <span
           className={PROJECT_LIST_ACTION_TRAILING_SLOT_CLASS}
           aria-hidden="true"
@@ -633,7 +591,6 @@ function ProjectListComponent({
 }: ProjectListProps) {
   const navigate = useNavigate();
   const setRootComposeProjectId = useSetRootComposeProjectId();
-  const setRootComposeMode = useSetRootComposeMode();
   const sidebarNavigationQuery = useSidebarNavigation();
   const sidebarNavigation = sidebarNavigationQuery.data;
   const appsQuery = useApps();
@@ -695,10 +652,6 @@ function ProjectListComponent({
   const { isPending: isProjectReorderPending, mutate: reorderProjectMutate } =
     useReorderProject();
   const {
-    isPending: isManagerReorderPending,
-    mutate: reorderProjectManagerMutate,
-  } = useReorderProjectManager();
-  const {
     isPending: isPinnedReorderPending,
     mutate: reorderPinnedThreadMutate,
   } = useReorderPinnedThread();
@@ -736,24 +689,6 @@ function ProjectListComponent({
     dndContextProps: projectDndContextProps,
     consumeClickSuppression: consumeProjectClickSuppression,
   } = useSidebarReorderDnd({ onDragEnd: handleSortableProjectDragEnd });
-  const handleReorderManager = useCallback<
-    NonNullable<ProjectRowProps["onReorderManager"]>
-  >(
-    (projectId, request, callbacks) => {
-      reorderProjectManagerMutate(
-        {
-          projectId,
-          threadId: request.itemId,
-          previousThreadId: request.previousItemId,
-          nextThreadId: request.nextItemId,
-        },
-        {
-          onSettled: callbacks.onSettled,
-        },
-      );
-    },
-    [reorderProjectManagerMutate],
-  );
   const handleReorderPinnedRoot = useCallback<
     NonNullable<PinnedThreadTreeProps["onReorderPinnedRoot"]>
   >(
@@ -772,39 +707,23 @@ function ProjectListComponent({
     [reorderPinnedThreadMutate],
   );
   const openRootComposeForProject = useCallback(
-    ({ projectId, mode }: OpenRootComposeForProjectArgs) => {
+    (projectId: string) => {
       setRootComposeProjectId(projectId);
-      setRootComposeMode(mode);
       onProjectSelect?.();
       navigate(getRootComposeRoutePath(), {
         state: { focusPrompt: true },
       });
     },
-    [navigate, onProjectSelect, setRootComposeMode, setRootComposeProjectId],
+    [navigate, onProjectSelect, setRootComposeProjectId],
   );
   const handleCreateProjectThread = useCallback(
     (projectId: string) => {
-      openRootComposeForProject({ projectId, mode: "thread" });
-    },
-    [openRootComposeForProject],
-  );
-  const handleCreateProjectManager = useCallback(
-    (projectId: string) => {
-      openRootComposeForProject({ projectId, mode: "manager" });
+      openRootComposeForProject(projectId);
     },
     [openRootComposeForProject],
   );
   const handleCreateProjectlessThread = useCallback(() => {
-    openRootComposeForProject({
-      projectId: PERSONAL_PROJECT_ID,
-      mode: "thread",
-    });
-  }, [openRootComposeForProject]);
-  const handleCreateProjectlessManager = useCallback(() => {
-    openRootComposeForProject({
-      projectId: PERSONAL_PROJECT_ID,
-      mode: "manager",
-    });
+    openRootComposeForProject(PERSONAL_PROJECT_ID);
   }, [openRootComposeForProject]);
   const [collapsedProjectIdList, setCollapsedProjectIdList] = useAtom(
     collapsedProjectIdsAtom,
@@ -1051,12 +970,9 @@ function ProjectListComponent({
                   isLocalPathInvalid={isLocalPathInvalid}
                   onProjectSelect={onProjectSelect}
                   onCreateProjectThread={handleCreateProjectThread}
-                  onCreateProjectManager={handleCreateProjectManager}
                   onToggleProjectCollapsed={toggleProjectCollapsed}
                   onToggleThreadCollapsed={toggleThreadCollapsed}
                   onToggleEnvironmentCollapsed={toggleEnvironmentCollapsed}
-                  isManagerReorderPending={isManagerReorderPending}
-                  onReorderManager={handleReorderManager}
                   consumeProjectClickSuppression={
                     consumeProjectClickSuppression
                   }
@@ -1088,12 +1004,9 @@ function ProjectListComponent({
               isLocalPathInvalid={isLocalPathInvalid}
               onProjectSelect={onProjectSelect}
               onCreateProjectThread={handleCreateProjectThread}
-              onCreateProjectManager={handleCreateProjectManager}
               onToggleProjectCollapsed={toggleProjectCollapsed}
               onToggleThreadCollapsed={toggleThreadCollapsed}
               onToggleEnvironmentCollapsed={toggleEnvironmentCollapsed}
-              isManagerReorderPending={isManagerReorderPending}
-              onReorderManager={handleReorderManager}
             />
           );
         })
@@ -1125,8 +1038,6 @@ function ProjectListComponent({
       onProjectSelect={onProjectSelect}
       onToggleThreadCollapsed={toggleThreadCollapsed}
       onToggleEnvironmentCollapsed={toggleEnvironmentCollapsed}
-      isManagerReorderPending={isManagerReorderPending}
-      onReorderManager={handleReorderManager}
     />
   );
   const appsSectionContent = <SidebarAppsSection apps={apps} />;
@@ -1141,7 +1052,6 @@ function ProjectListComponent({
   const threadsSectionActions = (
     <ProjectListThreadsSectionActions
       onNewThread={handleCreateProjectlessThread}
-      onNewManager={handleCreateProjectlessManager}
     />
   );
 

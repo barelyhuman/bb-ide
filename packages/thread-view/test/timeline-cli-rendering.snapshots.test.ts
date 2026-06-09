@@ -1554,9 +1554,9 @@ describe("timeline CLI rendering snapshots", () => {
     `);
   });
 
-  it("shows manager thread assistant text and user-message tool output in the regular timeline", () => {
+  it("shows legacy visible system assistant text and user-message tool output in the regular timeline", () => {
     const event = createTimelineEventFactory({
-      threadId: "manager-thread-1",
+      threadId: "legacy-thread-1",
       turnId: "turn-1",
     });
     const timeline = renderTimelineFixture({
@@ -1564,14 +1564,13 @@ describe("timeline CLI rendering snapshots", () => {
         event.turnStarted(),
         event.assistantCompleted({
           itemId: "assistant-1",
-          text: "internal manager chatter",
+          text: "internal system chatter",
         }),
-        event.managerUserMessage({ text: "Visible manager update" }),
+        event.legacyUserMessage({ text: "Visible legacy update" }),
       ],
       projectionOptions: {
         systemClientRequestVisibility: "hidden",
         threadStatus: "idle",
-        threadType: "manager",
         turnMessageDetail: "summary",
       },
     });
@@ -1582,10 +1581,10 @@ describe("timeline CLI rendering snapshots", () => {
     ]);
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Assistant ───────────────────────────────────────────────
-      internal manager chatter
+      internal system chatter
 
       ── Assistant ───────────────────────────────────────────────
-      Visible manager update"
+      Visible legacy update"
     `);
   });
 

@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import type { ThreadType } from "@bb/domain";
 import { Provider as JotaiProvider } from "jotai";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
@@ -48,7 +47,6 @@ interface HookProps {
   environmentId: string | null | undefined;
   storageFiles: readonly { path: string }[] | undefined;
   threadId: string;
-  threadType: ThreadType | undefined;
 }
 
 interface BuildWorkspaceFileTabArgs {
@@ -249,7 +247,6 @@ describe("useThreadFileTabs", () => {
   it("records opened working-tree and storage files as thread recents", () => {
     const { result } = renderThreadFileTabsHook({
       environmentId: "env-recent",
-      threadType: "manager",
       storageFiles: [],
       threadId: "thr-recent-record",
     });
@@ -275,7 +272,6 @@ describe("useThreadFileTabs", () => {
   it("does not record diff-only (non-working-tree) workspace previews as recents", () => {
     const { result } = renderThreadFileTabsHook({
       environmentId: "env-recent",
-      threadType: "standard",
       storageFiles: undefined,
       threadId: "thr-recent-diff",
     });
@@ -296,7 +292,6 @@ describe("useThreadFileTabs", () => {
   it("persists workspace tabs for the current thread", () => {
     const { result } = renderThreadFileTabsHook({
       environmentId: "env-one",
-      threadType: "standard",
       storageFiles: undefined,
       threadId: "thr-one",
     });
@@ -326,7 +321,6 @@ describe("useThreadFileTabs", () => {
   it("keeps file tabs isolated by thread id", () => {
     const { result, rerender } = renderThreadFileTabsHook({
       environmentId: "env-one",
-      threadType: "standard",
       storageFiles: undefined,
       threadId: "thr-one",
     });
@@ -341,7 +335,6 @@ describe("useThreadFileTabs", () => {
 
     rerender({
       environmentId: "env-two",
-      threadType: "standard",
       storageFiles: undefined,
       threadId: "thr-two",
     });
@@ -353,7 +346,6 @@ describe("useThreadFileTabs", () => {
 
     rerender({
       environmentId: "env-one",
-      threadType: "standard",
       storageFiles: undefined,
       threadId: "thr-one",
     });
@@ -367,7 +359,6 @@ describe("useThreadFileTabs", () => {
   it("keeps workspace and storage active tabs mutually exclusive", () => {
     const { result } = renderThreadFileTabsHook({
       environmentId: "env-one",
-      threadType: "manager",
       storageFiles: [{ path: "notes.md" }],
       threadId: "thr-manager",
     });
@@ -393,7 +384,6 @@ describe("useThreadFileTabs", () => {
   it("opens, activates, and closes host-file tabs", () => {
     const { result } = renderThreadFileTabsHook({
       environmentId: "env-one",
-      threadType: "standard",
       storageFiles: undefined,
       threadId: "thr-host-files",
     });
@@ -438,7 +428,6 @@ describe("useThreadFileTabs", () => {
     const { result } = renderThreadFileTabsHook({
       apps: [{ applicationId: "review" }],
       environmentId: "env-one",
-      threadType: "manager",
       storageFiles: [{ path: "notes.md" }],
       threadId: "thr-manager-open-order",
     });
@@ -463,7 +452,6 @@ describe("useThreadFileTabs", () => {
   it("opens the transient new tab once and does not persist it", () => {
     const { result } = renderThreadFileTabsHook({
       environmentId: "env-one",
-      threadType: "standard",
       storageFiles: undefined,
       threadId: "thr-new-tab",
     });
@@ -487,7 +475,6 @@ describe("useThreadFileTabs", () => {
   it("replaces the new tab with a selected workspace preview", () => {
     const { result } = renderThreadFileTabsHook({
       environmentId: "env-one",
-      threadType: "standard",
       storageFiles: undefined,
       threadId: "thr-new-tab-workspace",
     });
@@ -518,7 +505,6 @@ describe("useThreadFileTabs", () => {
   it("focuses an already-open workspace preview and removes the new tab", () => {
     const { result } = renderThreadFileTabsHook({
       environmentId: "env-one",
-      threadType: "standard",
       storageFiles: undefined,
       threadId: "thr-new-tab-dedupe",
     });
@@ -545,7 +531,6 @@ describe("useThreadFileTabs", () => {
   it("updates host-file line numbers without duplicating tabs", () => {
     const { result } = renderThreadFileTabsHook({
       environmentId: "env-one",
-      threadType: "standard",
       storageFiles: undefined,
       threadId: "thr-host-file-dedupe",
     });
@@ -565,7 +550,6 @@ describe("useThreadFileTabs", () => {
   it("clears workspace tabs when the environment changes", async () => {
     const { result, rerender } = renderThreadFileTabsHook({
       environmentId: "env-one",
-      threadType: "standard",
       storageFiles: undefined,
       threadId: "thr-one",
     });
@@ -580,7 +564,6 @@ describe("useThreadFileTabs", () => {
 
     rerender({
       environmentId: "env-two",
-      threadType: "standard",
       storageFiles: undefined,
       threadId: "thr-one",
     });
@@ -593,12 +576,11 @@ describe("useThreadFileTabs", () => {
     expect(result.current.activeWorkspaceFilePath).toBeNull();
   });
 
-  it("prunes manager storage tabs against the current storage file list", async () => {
+  it("prunes storage tabs against the current storage file list", async () => {
     const { result, rerender } = renderThreadFileTabsHook({
       environmentId: null,
-      threadType: "manager",
       storageFiles: [{ path: "notes.md" }, { path: "plan.md" }],
-      threadId: "thr-manager",
+      threadId: "thr-storage",
     });
 
     act(() => {
@@ -613,9 +595,8 @@ describe("useThreadFileTabs", () => {
 
     rerender({
       environmentId: null,
-      threadType: "manager",
       storageFiles: [{ path: "notes.md" }],
-      threadId: "thr-manager",
+      threadId: "thr-storage",
     });
 
     await waitFor(() => {
@@ -626,9 +607,9 @@ describe("useThreadFileTabs", () => {
     expect(result.current.activeStorageFilePath).toBeNull();
   });
 
-  it("keeps seeded manager storage tabs while thread type is unresolved", async () => {
+  it("keeps seeded storage tabs while thread storage is unresolved", async () => {
     vi.spyOn(Date, "now").mockReturnValue(NOW);
-    const threadId = "thr-manager-cold-load";
+    const threadId = "thr-storage-cold-load";
     seedStoredState(
       threadId,
       createEmptyFixedPanelTabsState({
@@ -645,14 +626,15 @@ describe("useThreadFileTabs", () => {
     );
     const { result, rerender } = renderThreadFileTabsHook({
       environmentId: undefined,
-      threadType: undefined,
       storageFiles: undefined,
       threadId,
     });
 
-    expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual(
-      [],
-    );
+    expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual([
+      "overview.md",
+      "notes.md",
+    ]);
+    expect(result.current.activeStorageFilePath).toBe("notes.md");
     expect(getStoredStoragePaths(readStoredState(threadId))).toEqual([
       "overview.md",
       "notes.md",
@@ -663,7 +645,6 @@ describe("useThreadFileTabs", () => {
 
     rerender({
       environmentId: null,
-      threadType: "manager",
       storageFiles: [{ path: "overview.md" }, { path: "notes.md" }],
       threadId,
     });
@@ -696,7 +677,6 @@ describe("useThreadFileTabs", () => {
     );
     const { result, rerender } = renderThreadFileTabsHook({
       environmentId: undefined,
-      threadType: undefined,
       storageFiles: undefined,
       threadId,
     });
@@ -713,7 +693,6 @@ describe("useThreadFileTabs", () => {
 
     rerender({
       environmentId: "env-one",
-      threadType: "standard",
       storageFiles: undefined,
       threadId,
     });
@@ -728,7 +707,7 @@ describe("useThreadFileTabs", () => {
 
   it("keeps active seeded storage when it remains in the file list", async () => {
     vi.spyOn(Date, "now").mockReturnValue(NOW);
-    const threadId = "thr-manager-seeded-active";
+    const threadId = "thr-storage-seeded-active";
     seedStoredState(
       threadId,
       createEmptyFixedPanelTabsState({
@@ -742,7 +721,6 @@ describe("useThreadFileTabs", () => {
     );
     const { result } = renderThreadFileTabsHook({
       environmentId: null,
-      threadType: "manager",
       storageFiles: [{ path: "notes.md" }],
       threadId,
     });
@@ -755,12 +733,11 @@ describe("useThreadFileTabs", () => {
     expect(result.current.activeStorageFilePath).toBe("notes.md");
   });
 
-  it("closes manager storage tabs", () => {
+  it("closes storage tabs", () => {
     const { result } = renderThreadFileTabsHook({
       environmentId: null,
-      threadType: "manager",
       storageFiles: [{ path: "notes.md" }],
-      threadId: "thr-manager-storage-close",
+      threadId: "thr-storage-close",
     });
 
     act(() => {
@@ -782,9 +759,8 @@ describe("useThreadFileTabs", () => {
     const { result } = renderThreadFileTabsHook({
       apps: [{ applicationId: "review" }],
       environmentId: null,
-      threadType: "manager",
       storageFiles: undefined,
-      threadId: "thr-manager-app",
+      threadId: "thr-storage-app",
     });
 
     act(() => {
@@ -808,7 +784,6 @@ describe("useThreadFileTabs", () => {
     const { result } = renderThreadFileTabsHook({
       apps: [{ applicationId: "demo" }],
       environmentId: "env-one",
-      threadType: "standard",
       storageFiles: undefined,
       threadId: "thr-app-selection",
     });
@@ -852,7 +827,6 @@ describe("useThreadFileTabs", () => {
     );
     const { result } = renderThreadFileTabsHook({
       environmentId: "env-one",
-      threadType: "standard",
       storageFiles: undefined,
       threadId,
     });
@@ -870,7 +844,7 @@ describe("useThreadFileTabs", () => {
     ).toEqual([workspaceTab]);
   });
 
-  it("does not rewrite manager storage tabs for no-op callbacks", async () => {
+  it("does not rewrite storage tabs for no-op callbacks", async () => {
     const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(NOW);
     const threadId = "thr-storage-no-op";
     seedStoredState(
@@ -889,7 +863,6 @@ describe("useThreadFileTabs", () => {
     );
     const { result } = renderThreadFileTabsHook({
       environmentId: null,
-      threadType: "manager",
       storageFiles: [{ path: "overview.md" }, { path: "notes.md" }],
       threadId,
     });
@@ -912,8 +885,8 @@ describe("useThreadFileTabs", () => {
     ]);
   });
 
-  it("ignores stored storage tabs for standard threads", async () => {
-    const threadId = "thr-standard";
+  it("keeps stored storage tabs for any thread", async () => {
+    const threadId = "thr-storage-existing";
     seedStoredState(
       threadId,
       createEmptyFixedPanelTabsState({
@@ -928,18 +901,19 @@ describe("useThreadFileTabs", () => {
 
     const { result } = renderThreadFileTabsHook({
       environmentId: "env-one",
-      threadType: "standard",
       storageFiles: undefined,
       threadId,
     });
 
     await waitFor(() => {
       expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual(
-        [],
+        ["notes.md"],
       );
     });
-    expect(result.current.activeStorageFilePath).toBeNull();
-    expect(getStoredStoragePaths(readStoredState(threadId))).toEqual([]);
+    expect(result.current.activeStorageFilePath).toBe("notes.md");
+    expect(getStoredStoragePaths(readStoredState(threadId))).toEqual([
+      "notes.md",
+    ]);
   });
 });
 
@@ -947,7 +921,6 @@ describe("useThreadFileTabs — browser tabs", () => {
   it("opens a browser tab via openBrowserTab and persists it (not transient)", () => {
     const { result } = renderThreadFileTabsHook({
       environmentId: "env-one",
-      threadType: "standard",
       storageFiles: undefined,
       threadId: "thr-browser-open",
     });
@@ -970,7 +943,6 @@ describe("useThreadFileTabs — browser tabs", () => {
   it("opens a browser tab at a given URL (popup path)", () => {
     const { result } = renderThreadFileTabsHook({
       environmentId: "env-one",
-      threadType: "standard",
       storageFiles: undefined,
       threadId: "thr-browser-url",
     });
@@ -985,7 +957,6 @@ describe("useThreadFileTabs — browser tabs", () => {
   it("persists url/title/favicon pushed from the view via updateBrowserTab", () => {
     const { result } = renderThreadFileTabsHook({
       environmentId: "env-one",
-      threadType: "standard",
       storageFiles: undefined,
       threadId: "thr-browser-update",
     });
@@ -1021,7 +992,6 @@ describe("useThreadFileTabs — browser tabs", () => {
   it("supports multiple independent browser tabs and closes by id", () => {
     const { result } = renderThreadFileTabsHook({
       environmentId: "env-one",
-      threadType: "standard",
       storageFiles: undefined,
       threadId: "thr-browser-multi",
     });

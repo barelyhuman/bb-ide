@@ -80,7 +80,6 @@ const createdThread = {
   projectId: "project-1",
   automationId: null,
   providerId: "codex",
-  type: "standard",
   createdAt: 10,
   status: "idle",
   updatedAt: 10,
@@ -108,7 +107,6 @@ function makeThreadWithRuntime(
     projectId: "project-1",
     automationId: null,
     providerId: "codex",
-    type: "standard",
     createdAt: 1,
     status: "active",
     updatedAt: 1,
@@ -464,7 +462,7 @@ describe("thread runtime mutations", () => {
     });
   });
 
-  it("optimistically appends pending steers to manager thread timelines", async () => {
+  it("optimistically appends pending steers to thread timelines", async () => {
     let resolveSend: (() => void) | null = null;
     vi.mocked(api.sendThreadMessage).mockImplementation(
       () =>
@@ -475,7 +473,7 @@ describe("thread runtime mutations", () => {
     const { queryClient, wrapper } = createQueryClientTestHarness();
     queryClient.setQueryData<ThreadWithRuntime>(
       threadQueryKey("thread-1"),
-      makeThreadWithRuntime({ status: "active", type: "manager" }),
+      makeThreadWithRuntime({ status: "active" }),
     );
     queryClient.setQueryData<ThreadTimelineResponse>(
       threadTimelineQueryKey("thread-1"),
@@ -546,7 +544,7 @@ describe("thread runtime mutations", () => {
     );
   });
 
-  it("skips optimistic pending steer timeline writes when thread data is missing", async () => {
+  it("adds optimistic pending steer timeline rows when thread detail data is missing", async () => {
     let resolveSend: (() => void) | null = null;
     vi.mocked(api.sendThreadMessage).mockImplementation(
       () =>
@@ -577,7 +575,7 @@ describe("thread runtime mutations", () => {
       queryClient.getQueryData<ThreadTimelineResponse>(
         threadTimelineQueryKey("thread-1"),
       )?.rows,
-    ).toEqual([]);
+    ).toHaveLength(1);
     await act(async () => {
       resolveSend?.();
       await mutationPromise;

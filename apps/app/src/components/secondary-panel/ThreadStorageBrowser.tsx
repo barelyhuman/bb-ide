@@ -10,7 +10,7 @@ import {
   formatLifecycleErrorDescription,
 } from "@/lib/lifecycle-errors";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
-import type { ManagerStorageBrowserController } from "./useManagerStorageBrowser";
+import type { ThreadStorageBrowserController } from "./useThreadStorageBrowser";
 
 interface FileTreeHostStyle extends CSSProperties {
   "--trees-accent-override": string;
@@ -52,17 +52,17 @@ const FILE_TREE_BASE_HOST_STYLE: FileTreeHostStyle = {
   height: "100%",
 };
 
-interface ManagerThreadStorageBrowserProps {
-  controller: ManagerStorageBrowserController;
+interface ThreadStorageBrowserProps {
+  controller: ThreadStorageBrowserController;
   filesError?: Error | null;
   isFilesLoading: boolean;
 }
 
-export function ManagerThreadStorageBrowser({
+export function ThreadStorageBrowser({
   controller,
   filesError,
   isFilesLoading,
-}: ManagerThreadStorageBrowserProps) {
+}: ThreadStorageBrowserProps) {
   const {
     closeSearch,
     filteredFiles,
@@ -93,7 +93,7 @@ export function ManagerThreadStorageBrowser({
   if (filesError) {
     const lifecycleErrorDescription = describeLifecycleError({
       error: filesError,
-      operation: "load_manager_storage",
+      operation: "load_thread_storage",
     });
     body = (
       <EmptyState
@@ -103,8 +103,8 @@ export function ManagerThreadStorageBrowser({
             : null) ??
           getMutationErrorMessage({
             error: filesError,
-            fallbackMessage: "Failed to load manager workspace",
-            lifecycleOperation: "load_manager_storage",
+            fallbackMessage: "Failed to load thread storage",
+            lifecycleOperation: "load_thread_storage",
           })
         }
         messageClassName="text-destructive"

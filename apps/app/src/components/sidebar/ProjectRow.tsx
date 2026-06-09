@@ -7,11 +7,6 @@ import {
   type MouseEventHandler,
   type ReactNode,
 } from "react";
-import { DndContext } from "@dnd-kit/core";
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
 import type { ThreadListEntry } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { NavLink, useNavigate } from "react-router-dom";
@@ -61,7 +56,6 @@ import { cn } from "@/lib/utils";
 import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { getProjectSettingsRoutePath } from "@/lib/app-route-paths";
-import type { NeighborReorderRequest } from "@/lib/neighbor-reorder";
 import { appToast } from "@/components/ui/app-toast";
 import {
   ThreadRow,
@@ -82,17 +76,11 @@ import {
   getSidebarThreadRowPaddingLeft,
 } from "./sidebarRowClasses";
 import {
-  useSidebarSortable,
   type SidebarSortableDragBindings,
 } from "./sortableMotion";
-import { useSidebarReorderDnd } from "./useSidebarReorderDnd";
 import type { ConsumeDragClickSuppression } from "./useDragClickSuppression";
-import {
-  useNeighborReorderSortable,
-  type UseNeighborReorderSortableArgs,
-} from "./useNeighborReorderSortable";
 
-// Pin the project row plus this many parent levels (managers, parent threads,
+// Pin the project row plus this many parent levels (parent threads,
 // worktree group headers); rows deeper than the cap render non-sticky so a deep
 // chain can't pin more ancestors than a short viewport can hold.
 const SIDEBAR_STICKY_PARENT_DEPTH_CAP = 4;
@@ -109,10 +97,6 @@ export type ProjectThreadListState =
       status: "unavailable";
     };
 
-export interface ProjectManagerReorderCallbacks {
-  onSettled: () => void;
-}
-
 export interface ProjectRowProps {
   project: ProjectResponse;
   threadListState: ProjectThreadListState;
@@ -124,16 +108,9 @@ export interface ProjectRowProps {
   isLocalPathInvalid: boolean;
   onProjectSelect?: () => void;
   onCreateProjectThread?: (projectId: string) => void;
-  onCreateProjectManager?: (projectId: string) => void;
   onToggleProjectCollapsed: (projectId: string) => void;
   onToggleThreadCollapsed: (threadId: string) => void;
   onToggleEnvironmentCollapsed: (environmentId: string) => void;
-  isManagerReorderPending?: boolean;
-  onReorderManager?: (
-    projectId: string,
-    request: NeighborReorderRequest,
-    callbacks: ProjectManagerReorderCallbacks,
-  ) => void;
   consumeProjectClickSuppression?: ConsumeDragClickSuppression;
   projectDragBindings?: SidebarSortableDragBindings;
   projectRowRef?: (element: HTMLLIElement | null) => void;
@@ -150,12 +127,6 @@ export interface ProjectThreadTreeProps {
   onProjectSelect?: () => void;
   onToggleThreadCollapsed: (threadId: string) => void;
   onToggleEnvironmentCollapsed: (environmentId: string) => void;
-  isManagerReorderPending?: boolean;
-  onReorderManager?: (
-    projectId: string,
-    request: NeighborReorderRequest,
-    callbacks: ProjectManagerReorderCallbacks,
-  ) => void;
 }
 
 export type ProjectThreadTreeVariant = "project" | "section";
@@ -189,10 +160,6 @@ interface ThreadTreeNodeRowProps {
   dragBindings?: SidebarSortableDragBindings;
   sortableRef?: (element: HTMLDivElement | null) => void;
   sortableStyle?: CSSProperties;
-}
-
-interface SortableRootThreadNodeRowProps extends ThreadTreeNodeRowProps {
-  disabled: boolean;
 }
 
 interface ThreadTreeItemRowProps {
@@ -285,10 +252,6 @@ interface UseEnvironmentThreadGroupRenameActionResult {
   renameDialogTarget: EnvironmentRenameDialogTarget | null;
   renameEnvironmentErrorMessage: string | null;
   renameEnvironmentPending: boolean;
-}
-
-function getRootThreadNodeId(node: ProjectThreadNode): string {
-  return node.thread.id;
 }
 
 function getProjectThreadTreeEmptyStateIcon(
@@ -418,10 +381,6 @@ function getThreadNodeStickyLevel({
 }: GetThreadNodeStickyLevelArgs): number | undefined {
   const level = node.depth + depthOffset;
   return level < SIDEBAR_STICKY_PARENT_DEPTH_CAP ? level : undefined;
-}
-
-function isTopLevelManagerNode(node: ProjectThreadNode): boolean {
-  return node.depth === 0 && node.thread.type === "manager";
 }
 
 function ThreadTreeGroupLine({ parentRowDepth }: ThreadTreeGroupLineProps) {
@@ -984,8 +943,7 @@ export const ThreadTreeNodeRow = memo(function ThreadTreeNodeRow({
 }: ThreadTreeNodeRowProps) {
   const isCollapsed = collapsedThreadIds.has(node.thread.id);
   const hasChildren = node.children.length > 0;
-  const hasStickyParentRole = hasChildren || isTopLevelManagerNode(node);
-  const isParent = hasStickyParentRole || Boolean(dragBindings);
+  const isParent = hasChildren;
   const parentRowDepth = getThreadRowDepth({
     depthOffset,
     nodeDepth: node.depth,
@@ -1004,7 +962,7 @@ export const ThreadTreeNodeRow = memo(function ThreadTreeNodeRow({
         isParent,
         nodeDepth: node.depth,
         onToggleThreadCollapsed,
-        stickyLevel: hasStickyParentRole
+        stickyLevel: hasChildren
           ? getThreadNodeStickyLevel({ depthOffset, node })
           : undefined,
         variant,
@@ -1016,7 +974,7 @@ export const ThreadTreeNodeRow = memo(function ThreadTreeNodeRow({
       isCollapsed,
       isEnvGrouped,
       isParent,
-      hasStickyParentRole,
+      hasChildren,
       node,
       onToggleThreadCollapsed,
       variant,
@@ -1038,7 +996,7 @@ export const ThreadTreeNodeRow = memo(function ThreadTreeNodeRow({
     />
   );
 
-  if (!hasChildren && !sortableRef && !isTopLevelManagerNode(node)) {
+  if (!hasChildren && !sortableRef) {
     return row;
   }
 
@@ -1077,27 +1035,6 @@ export const ThreadTreeNodeRow = memo(function ThreadTreeNodeRow({
   );
 });
 
-const SortableRootThreadNodeRow = memo(function SortableRootThreadNodeRow({
-  disabled,
-  node,
-  ...props
-}: SortableRootThreadNodeRowProps) {
-  const { dragBindings, setNodeRef, style } = useSidebarSortable({
-    id: node.thread.id,
-    disabled,
-  });
-
-  return (
-    <ThreadTreeNodeRow
-      {...props}
-      node={node}
-      dragBindings={dragBindings}
-      sortableRef={setNodeRef}
-      sortableStyle={style}
-    />
-  );
-});
-
 export const ProjectThreadTree = memo(function ProjectThreadTree({
   projectId,
   threadListState,
@@ -1108,8 +1045,6 @@ export const ProjectThreadTree = memo(function ProjectThreadTree({
   onProjectSelect,
   onToggleThreadCollapsed,
   onToggleEnvironmentCollapsed,
-  isManagerReorderPending = false,
-  onReorderManager,
 }: ProjectThreadTreeProps) {
   const projectThreads =
     threadListState.status === "ready"
@@ -1119,49 +1054,6 @@ export const ProjectThreadTree = memo(function ProjectThreadTree({
     () => buildProjectThreadGroups(projectThreads),
     [projectThreads],
   );
-  const rootManagerNodes = useMemo(
-    () =>
-      rootItems.flatMap((item) =>
-        item.kind === "thread" && isTopLevelManagerNode(item.node)
-          ? [item.node]
-          : [],
-      ),
-    [rootItems],
-  );
-  const remainingRootItems = useMemo(
-    () =>
-      rootItems.filter(
-        (item) => item.kind !== "thread" || !isTopLevelManagerNode(item.node),
-      ),
-    [rootItems],
-  );
-  const handleReorderManager = useCallback<
-    UseNeighborReorderSortableArgs<ProjectThreadNode>["onReorder"]
-  >(
-    (request, callbacks) => {
-      onReorderManager?.(projectId, request, callbacks);
-    },
-    [onReorderManager, projectId],
-  );
-  const managerReorderDisabled =
-    isManagerReorderPending ||
-    !onReorderManager ||
-    rootManagerNodes.length < 2;
-  const {
-    handleDragEnd: handleSortableManagerDragEnd,
-    itemIds: renderedRootManagerThreadIds,
-    renderedItems: renderedRootManagerNodes,
-  } = useNeighborReorderSortable({
-    disabled: managerReorderDisabled,
-    getId: getRootThreadNodeId,
-    items: rootManagerNodes,
-    onReorder: handleReorderManager,
-  });
-  const {
-    dndContextProps: managerDndContextProps,
-    consumeClickSuppression: consumeManagerClickSuppression,
-    onClickCapture: handleManagerListClickCapture,
-  } = useSidebarReorderDnd({ onDragEnd: handleSortableManagerDragEnd });
 
   if (threadListState.status === "loading") {
     return (
@@ -1200,56 +1092,8 @@ export const ProjectThreadTree = memo(function ProjectThreadTree({
   }
 
   return (
-    <ProjectThreadTreeGroup
-      variant={variant}
-      onClickCapture={handleManagerListClickCapture}
-    >
-      {renderedRootManagerNodes.length > 1 ? (
-        <DndContext {...managerDndContextProps}>
-          <SortableContext
-            items={renderedRootManagerThreadIds}
-            strategy={verticalListSortingStrategy}
-          >
-            {renderedRootManagerNodes.map((node) => (
-              <SortableRootThreadNodeRow
-                key={node.thread.id}
-                disabled={managerReorderDisabled}
-                projectId={projectId}
-                node={node}
-                depthOffset={0}
-                isEnvGrouped={false}
-                selectedThreadId={selectedThreadId}
-                collapsedThreadIds={collapsedThreadIds}
-                collapsedEnvironmentIds={collapsedEnvironmentIds}
-                variant={variant}
-                onProjectSelect={onProjectSelect}
-                onToggleThreadCollapsed={onToggleThreadCollapsed}
-                onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
-                consumeClickSuppression={consumeManagerClickSuppression}
-              />
-            ))}
-          </SortableContext>
-        </DndContext>
-      ) : (
-        renderedRootManagerNodes.map((node) => (
-          <ThreadTreeNodeRow
-            key={node.thread.id}
-            projectId={projectId}
-            node={node}
-            depthOffset={0}
-            isEnvGrouped={false}
-            selectedThreadId={selectedThreadId}
-            collapsedThreadIds={collapsedThreadIds}
-            collapsedEnvironmentIds={collapsedEnvironmentIds}
-            variant={variant}
-            onProjectSelect={onProjectSelect}
-            onToggleThreadCollapsed={onToggleThreadCollapsed}
-            onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
-            consumeClickSuppression={consumeManagerClickSuppression}
-          />
-        ))
-      )}
-      {remainingRootItems.map((item) => (
+    <ProjectThreadTreeGroup variant={variant}>
+      {rootItems.map((item) => (
         <ThreadTreeItemRow
           key={
             item.kind === "thread"
@@ -1283,12 +1127,9 @@ function ProjectRowComponent({
   isLocalPathInvalid,
   onProjectSelect,
   onCreateProjectThread,
-  onCreateProjectManager,
   onToggleProjectCollapsed,
   onToggleThreadCollapsed,
   onToggleEnvironmentCollapsed,
-  isManagerReorderPending = false,
-  onReorderManager,
   consumeProjectClickSuppression,
   projectDragBindings,
   projectRowRef,
@@ -1311,9 +1152,6 @@ function ProjectRowComponent({
   const handleProjectRowToggle = useCallback(() => {
     onToggleProjectCollapsed(project.id);
   }, [onToggleProjectCollapsed, project.id]);
-  const handleCreateManager = useCallback(() => {
-    onCreateProjectManager?.(project.id);
-  }, [onCreateProjectManager, project.id]);
   const handleCreateThread = useCallback(() => {
     onCreateProjectThread?.(project.id);
   }, [onCreateProjectThread, project.id]);
@@ -1445,27 +1283,6 @@ function ProjectRowComponent({
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label={`New manager in ${project.name}`}
-                title="New manager"
-                disabled={!onCreateProjectManager}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleCreateManager();
-                }}
-                className={cn(
-                  "rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                  COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
-                )}
-              >
-                <Icon
-                  name="UserRoundPlus"
-                  className={COARSE_POINTER_ICON_SIZE_CLASS}
-                />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
                 aria-label={`New thread in ${project.name}`}
                 title="New thread"
                 disabled={!onCreateProjectThread}
@@ -1498,8 +1315,6 @@ function ProjectRowComponent({
             onProjectSelect={onProjectSelect}
             onToggleThreadCollapsed={onToggleThreadCollapsed}
             onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
-            isManagerReorderPending={isManagerReorderPending}
-            onReorderManager={onReorderManager}
           />
         ) : null}
       </SidebarMenuItem>
@@ -1590,12 +1405,9 @@ function areProjectRowPropsEqual(
     prev.isLocalPathInvalid !== next.isLocalPathInvalid ||
     prev.onProjectSelect !== next.onProjectSelect ||
     prev.onCreateProjectThread !== next.onCreateProjectThread ||
-    prev.onCreateProjectManager !== next.onCreateProjectManager ||
     prev.onToggleProjectCollapsed !== next.onToggleProjectCollapsed ||
     prev.onToggleThreadCollapsed !== next.onToggleThreadCollapsed ||
     prev.onToggleEnvironmentCollapsed !== next.onToggleEnvironmentCollapsed ||
-    prev.isManagerReorderPending !== next.isManagerReorderPending ||
-    prev.onReorderManager !== next.onReorderManager ||
     prev.consumeProjectClickSuppression !==
       next.consumeProjectClickSuppression ||
     prev.projectDragBindings !== next.projectDragBindings ||

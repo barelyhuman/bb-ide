@@ -11,7 +11,7 @@ import type {
   TimelineFileChange,
   TimelineFileChangeWorkRow,
   TimelineImageViewWorkRow,
-  TimelineManagerAssignment,
+  TimelineParentChange,
   TimelineNonOperationSystemRow,
   TimelinePermissionGrantApprovalGrantScope,
   TimelineQuestionWorkRow,
@@ -207,7 +207,7 @@ export interface SystemRowArgs extends RowBaseOverrideArgs {
   detail?: string | null;
   durationMs?: number | null;
   id?: string;
-  managerAssignment?: TimelineManagerAssignment;
+  parentChange?: TimelineParentChange;
   operationKind?: TimelineSystemOperationKind;
   seq?: number;
   sourceSeqEnd?: number;
@@ -221,7 +221,7 @@ export interface SystemRowArgs extends RowBaseOverrideArgs {
 export interface NonOperationSystemRowArgs
   extends Omit<
     SystemRowArgs,
-    "completedAt" | "durationMs" | "managerAssignment" | "operationKind" | "systemKind"
+    "completedAt" | "durationMs" | "parentChange" | "operationKind" | "systemKind"
   > {
   systemKind: TimelineNonOperationSystemRow["systemKind"];
 }
@@ -938,7 +938,7 @@ export function systemRow({
   detail = "Running setup\nProvisioned thread (2s)",
   durationMs,
   id = DEFAULT_SYSTEM_ID,
-  managerAssignment,
+  parentChange,
   operationKind,
   seq,
   sourceSeqEnd,
@@ -973,7 +973,7 @@ export function systemRow({
     };
   }
   const resolvedOperationKind =
-    operationKind ?? (managerAssignment ? "manager-assignment" : "generic");
+    operationKind ?? (parentChange ? "parent-change" : "generic");
   const resolvedCompletedAt =
     completedAt !== undefined
       ? completedAt
@@ -984,9 +984,9 @@ export function systemRow({
             status === "interrupted"
           ? base.createdAt
           : null;
-  if (resolvedOperationKind === "manager-assignment") {
+  if (resolvedOperationKind === "parent-change") {
     if (status === null) {
-      throw new Error("Manager assignment system row requires a status");
+      throw new Error("Parent change system row requires a status");
     }
     return {
       ...base,
@@ -994,12 +994,12 @@ export function systemRow({
       operationKind: resolvedOperationKind,
       status,
       completedAt: resolvedCompletedAt,
-      managerAssignment: managerAssignment ?? {
+      parentChange: parentChange ?? {
         action: "assign",
-        previousManagerThreadId: null,
-        previousManagerThreadTitle: null,
-        nextManagerThreadId: null,
-        nextManagerThreadTitle: null,
+        previousParentThreadId: null,
+        previousParentThreadTitle: null,
+        nextParentThreadId: null,
+        nextParentThreadTitle: null,
       },
     };
   }

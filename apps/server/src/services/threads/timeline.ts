@@ -213,10 +213,8 @@ interface SplitFutureSteerAcceptedContextRowsResult {
   rows: StoredEventRow[];
 }
 
-function resolveSystemClientRequestVisibility(
-  thread: Thread,
-): SystemClientRequestVisibility {
-  return thread.type === "manager" ? "visible" : "hidden";
+function resolveSystemClientRequestVisibility(): SystemClientRequestVisibility {
+  return "hidden";
 }
 
 export function toThreadEventWithMeta(
@@ -798,8 +796,7 @@ function buildThreadTimelineInternal(
     : null;
   const includeNestedRows = options.includeNestedRows ?? false;
   const includeProviderUnhandledOperations = options.isDevelopment;
-  const systemClientRequestVisibility =
-    resolveSystemClientRequestVisibility(thread);
+  const systemClientRequestVisibility = resolveSystemClientRequestVisibility();
   const eventSelection = measureThreadTimelineStage(
     profile,
     "event-query",
@@ -1055,8 +1052,7 @@ export function buildTimelineTurnSummaryDetails(
       `Timeline turn summary details range ${options.sourceSeqStart}-${options.sourceSeqEnd} cannot resolve turn/started for ${options.turnId}`,
     );
   }
-  const systemClientRequestVisibility =
-    resolveSystemClientRequestVisibility(thread);
+  const systemClientRequestVisibility = resolveSystemClientRequestVisibility();
   const sourceRange = resolveTurnSummaryDetailsSourceRange({
     exactEventRows: exactEventRowsForRequestedTurn.rows,
     fallbackRange: {

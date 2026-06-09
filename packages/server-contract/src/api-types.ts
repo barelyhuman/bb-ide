@@ -30,7 +30,6 @@ import {
   threadGitDiffResponseSchema,
   threadTimelinePendingTodosSchema,
   threadScheduleKindSchema,
-  threadTypeSchema,
   threadWithRuntimeSchema,
   threadQueuedMessageSchema,
   workspaceStatusSchema,
@@ -521,18 +520,6 @@ export type CreateExecutionInputSources = z.infer<
   typeof createExecutionInputSourcesSchema
 >;
 
-export const createManagerExecutionInputSourcesSchema = z
-  .object({
-    providerId: executionInputFieldSourceSchema.optional(),
-    model: executionInputFieldSourceSchema.optional(),
-    serviceTier: executionInputFieldSourceSchema.optional(),
-    reasoningLevel: executionInputFieldSourceSchema.optional(),
-  })
-  .strict();
-export type CreateManagerExecutionInputSources = z.infer<
-  typeof createManagerExecutionInputSourcesSchema
->;
-
 export const existingThreadExecutionInputSourcesSchema = z
   .object({
     model: executionInputFieldSourceSchema.optional(),
@@ -677,7 +664,6 @@ export const automationsOverviewThreadSchema = z.object({
   projectId: z.string().min(1),
   title: z.string().nullable(),
   titleFallback: z.string().nullable(),
-  type: threadTypeSchema,
 });
 export type AutomationsOverviewThread = z.infer<
   typeof automationsOverviewThreadSchema
@@ -912,15 +898,15 @@ export type ThreadQueuedMessageListResponse = z.infer<
   typeof threadQueuedMessageListResponseSchema
 >;
 
-export const threadAssignedChildSummaryResponseSchema = z.object({
-  nonDeletedAssignedChildCount: z.number().int().nonnegative(),
+export const threadChildSummaryResponseSchema = z.object({
+  nonDeletedChildCount: z.number().int().nonnegative(),
 });
-export type ThreadAssignedChildSummaryResponse = z.infer<
-  typeof threadAssignedChildSummaryResponseSchema
+export type ThreadChildSummaryResponse = z.infer<
+  typeof threadChildSummaryResponseSchema
 >;
 
 export const deleteThreadRequestSchema = z.object({
-  managerChildThreadsConfirmed: z.boolean(),
+  childThreadsConfirmed: z.boolean(),
 });
 export type DeleteThreadRequest = z.infer<typeof deleteThreadRequestSchema>;
 
@@ -1005,57 +991,12 @@ export const reorderProjectRequestSchema = z.object({
 });
 export type ReorderProjectRequest = z.infer<typeof reorderProjectRequestSchema>;
 
-export const reorderManagerThreadRequestSchema = z.object({
-  previousThreadId: z.string().min(1).nullable(),
-  nextThreadId: z.string().min(1).nullable(),
-});
-export type ReorderManagerThreadRequest = z.infer<
-  typeof reorderManagerThreadRequestSchema
->;
-
 export const reorderPinnedThreadRequestSchema = z.object({
   previousThreadId: z.string().min(1).nullable(),
   nextThreadId: z.string().min(1).nullable(),
 });
 export type ReorderPinnedThreadRequest = z.infer<
   typeof reorderPinnedThreadRequestSchema
->;
-
-export const managerHostEnvironmentSchema = z.object({
-  type: z.literal("host"),
-  hostId: z.string().min(1),
-});
-
-export const managerEnvironmentArgsSchema = z.discriminatedUnion("type", [
-  managerHostEnvironmentSchema,
-]);
-export type ManagerEnvironmentArgs = z.infer<
-  typeof managerEnvironmentArgsSchema
->;
-
-export const createManagerThreadRequestSchema = z
-  .object({
-    name: z.string().min(1).optional(),
-    providerId: z.string().min(1).optional(),
-    origin: threadCreateOriginSchema,
-    model: z.string().min(1).optional(),
-    serviceTier: serviceTierSchema.optional(),
-    reasoningLevel: reasoningLevelSchema.optional(),
-    executionInputSources: createManagerExecutionInputSourcesSchema.optional(),
-    environment: managerEnvironmentArgsSchema,
-    /**
-     * Optional user-provided first message. When present and contains
-     * meaningful content (any non-text part, or text with non-whitespace
-     * content), replaces the default `systemMessageManagerWelcome` template
-     * as the manager's first message. Omit to use the welcome-message
-     * fallback — the schema rejects empty arrays. Whitespace-only text
-     * input is also treated as no-input at the route boundary.
-     */
-    input: z.array(promptInputSchema).min(1).optional(),
-  })
-  .strict();
-export type CreateManagerThreadRequest = z.infer<
-  typeof createManagerThreadRequestSchema
 >;
 
 export const projectListIncludeOptionSchema = z.enum(["threads"]);
@@ -1150,9 +1091,7 @@ export type ProjectAttachmentContentQuery = z.infer<
   typeof projectAttachmentContentQuerySchema
 >;
 
-export const projectDefaultExecutionOptionsQuerySchema = z.object({
-  threadType: threadTypeSchema,
-});
+export const projectDefaultExecutionOptionsQuerySchema = z.object({});
 export type ProjectDefaultExecutionOptionsQuery = z.infer<
   typeof projectDefaultExecutionOptionsQuerySchema
 >;
@@ -1318,21 +1257,20 @@ export type EnvironmentArchiveThreadsResponse = z.infer<
   typeof environmentArchiveThreadsResponseSchema
 >;
 
-export const managerArchiveThreadsResponseSchema = z.object({
+export const threadArchiveAllResponseSchema = z.object({
   ok: z.literal(true),
   archivedThreadIds: z.array(z.string().min(1)),
 });
-export type ManagerArchiveThreadsResponse = z.infer<
-  typeof managerArchiveThreadsResponseSchema
+export type ThreadArchiveAllResponse = z.infer<
+  typeof threadArchiveAllResponseSchema
 >;
 
 export const threadListQuerySchema = z.object({
   projectId: z.string().min(1).optional(),
-  type: threadTypeSchema.optional(),
   parentThreadId: z.string().min(1).optional(),
   archived: z.enum(["true", "false"]).optional(),
-  /** Filter by parent thread presence: "true" → managed (has parent), "false" → unmanaged. */
-  managed: z.enum(["true", "false"]).optional(),
+  /** Filter by parent thread presence: "true" means child threads; "false" means root threads. */
+  hasParent: z.enum(["true", "false"]).optional(),
   limit: z.string().regex(/^\d+$/).optional(),
   offset: z.string().regex(/^\d+$/).optional(),
 });

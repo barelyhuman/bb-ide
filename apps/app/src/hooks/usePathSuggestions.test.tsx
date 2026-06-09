@@ -108,7 +108,7 @@ describe("usePathSuggestions", () => {
     expect(api.listThreadStoragePaths).not.toHaveBeenCalled();
   });
 
-  it("merges workspace and manager thread-storage results deterministically", async () => {
+  it("merges workspace and thread-storage results deterministically", async () => {
     vi.mocked(api.searchProjectPaths).mockResolvedValue(
       makePathResponse([
         {
@@ -145,8 +145,7 @@ describe("usePathSuggestions", () => {
           query: "notes",
           limit: 2,
           environmentId: "env-1",
-          currentThreadId: "thr-manager",
-          currentThreadType: "manager",
+          currentThreadId: "thr-storage",
           includeDirectories: true,
         }),
       { wrapper },
@@ -168,7 +167,7 @@ describe("usePathSuggestions", () => {
       includeDirectories: true,
     });
     expect(api.listThreadStoragePaths).toHaveBeenCalledWith({
-      id: "thr-manager",
+      id: "thr-storage",
       options: {
         limit: 4,
         query: "notes",
@@ -179,7 +178,7 @@ describe("usePathSuggestions", () => {
     });
   });
 
-  it("does not query thread storage for non-manager threads", async () => {
+  it("does not query thread storage without a current thread", async () => {
     vi.mocked(api.searchProjectPaths).mockResolvedValue(
       makePathResponse([
         {
@@ -197,8 +196,6 @@ describe("usePathSuggestions", () => {
           projectId: "proj-1",
           query: "app",
           environmentId: "env-1",
-          currentThreadId: "thr-standard",
-          currentThreadType: "standard",
           includeDirectories: true,
         }),
       { wrapper },
@@ -219,8 +216,7 @@ describe("usePathSuggestions", () => {
           projectId: "proj-1",
           query: "",
           environmentId: "env-1",
-          currentThreadId: "thr-manager",
-          currentThreadType: "manager",
+          currentThreadId: "thr-storage",
           includeDirectories: false,
         }),
       { wrapper },
@@ -242,8 +238,7 @@ describe("usePathSuggestions", () => {
           projectId: "proj-1",
           query,
           environmentId: "env-1",
-          currentThreadId: "thr-standard",
-          currentThreadType: "standard",
+          currentThreadId: "thr-storage",
           includeDirectories: false,
         }),
       { wrapper, initialProps: { query: "src" } },

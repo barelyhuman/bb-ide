@@ -1,4 +1,3 @@
-import type { ThreadType } from "@bb/domain";
 import type { ThreadListFilters } from "@/lib/api";
 import type { EnvironmentFilePreviewSource } from "@/lib/file-preview";
 import {
@@ -60,17 +59,13 @@ export const LOCAL_PATH_EXISTENCE_QUERY_KEY = "localPathExistence";
 export const REPLAY_CAPTURES_QUERY_KEY = "internalReplayCaptures";
 export interface ThreadListQueryFilters {
   projectId?: string;
-  type?: ThreadListFilters["type"];
+  hasParent?: ThreadListFilters["hasParent"];
   parentThreadId?: string;
   archived: boolean;
   limit?: number;
 }
 
-export type ArchivedThreadsKindFilter =
-  | "all"
-  | "manager"
-  | "managed"
-  | "unmanaged";
+export type ArchivedThreadsKindFilter = "all" | "root" | "child";
 
 export interface ArchivedThreadsListFilters {
   projectId: string;
@@ -97,7 +92,6 @@ export type ProjectSourceBranchesQueryKeyPrefix = readonly [
 export type ProjectDefaultExecutionOptionsQueryKey = readonly [
   typeof PROJECT_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY,
   string,
-  ThreadType,
 ];
 export type ProjectDefaultExecutionOptionsQueryKeyPrefix = readonly [
   typeof PROJECT_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY,
@@ -398,7 +392,6 @@ export type ReplayCapturesQueryKey = readonly [
 
 export interface ProjectDefaultExecutionOptionsQueryKeyArgs {
   projectId: string;
-  threadType: ThreadType;
 }
 
 export interface ProjectDefaultExecutionOptionsQueryKeyPrefixArgs {
@@ -452,9 +445,8 @@ export function projectPromptHistoryQueryKey(
 
 export function projectDefaultExecutionOptionsQueryKey({
   projectId,
-  threadType,
 }: ProjectDefaultExecutionOptionsQueryKeyArgs): ProjectDefaultExecutionOptionsQueryKey {
-  return [PROJECT_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY, projectId, threadType];
+  return [PROJECT_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY, projectId];
 }
 
 export function projectDefaultExecutionOptionsQueryKeyPrefix({

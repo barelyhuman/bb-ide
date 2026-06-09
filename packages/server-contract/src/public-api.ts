@@ -36,7 +36,6 @@ import type {
   SyncAppSourceRequest,
   CreateAutomationRequest,
   CreateQueuedMessageRequest,
-  CreateManagerThreadRequest,
   CreateProjectRequest,
   CreateProjectSourceRequest,
   CreateThreadScheduleRequest,
@@ -56,7 +55,7 @@ import type {
   EnvironmentArchiveThreadsResponse,
   EnvironmentStatusQuery,
   EnvironmentStatusResponse,
-  ManagerArchiveThreadsResponse,
+  ThreadArchiveAllResponse,
   ThreadStorageContentQuery,
   ThreadHostFileContentQuery,
   ThreadStorageFilesQuery,
@@ -73,7 +72,6 @@ import type {
   ProjectResponse,
   ProjectWithThreadsResponse,
   SidebarBootstrapResponse,
-  ReorderManagerThreadRequest,
   ReorderPinnedThreadRequest,
   ReorderProjectRequest,
   ReorderQueuedMessageRequest,
@@ -81,7 +79,7 @@ import type {
   SendQueuedMessageResponse,
   SendMessageRequest,
   ResolvePendingInteractionRequest,
-  ThreadAssignedChildSummaryResponse,
+  ThreadChildSummaryResponse,
   ThreadComposerBootstrapResponse,
   ThreadQueuedMessageListResponse,
   SystemConfigReloadResponse,
@@ -128,7 +126,6 @@ import type {
 import type { ApiError } from "./errors.js";
 
 type PathProjectSourceId = { param: { id: string; sourceId: string } };
-type PathProjectManagerThreadId = { param: { id: string; threadId: string } };
 type PathApplicationApp = { param: { applicationId: string } };
 type PathAppSourceName = { param: { name: string } };
 
@@ -373,21 +370,6 @@ export type PublicApiSchema = {
       "binary"
     >;
   };
-  "/projects/:id/managers": {
-    /** Create a manager thread for the project. Same flow as POST /threads with type="manager". */
-    $post: Endpoint<
-      PathProjectId & { json: CreateManagerThreadRequest },
-      ThreadResponse,
-      201
-    >;
-  };
-  "/projects/:id/managers/:threadId/order": {
-    $patch: Endpoint<
-      PathProjectManagerThreadId & { json: ReorderManagerThreadRequest },
-      ThreadListResponse
-    >;
-  };
-
   // ─── Hosts ───────────────────────────────────────────────────────────
 
   /** Host `status` is derived at query time from the `host_daemon_sessions` table. */
@@ -470,7 +452,7 @@ export type PublicApiSchema = {
 
   "/threads": {
     /**
-     * List threads. Supports filters: projectId, type, parentThreadId, archived.
+     * List threads. Supports filters: projectId, parentThreadId, hasParent, archived.
      * Omitting archived intentionally returns both active and archived threads.
      */
     $get: Endpoint<{ query?: ThreadListQuery }, ThreadListResponse>;
@@ -494,14 +476,14 @@ export type PublicApiSchema = {
     /** Update thread metadata. If the title changes, also notifies providers that support `thread.rename`. */
     $patch: Endpoint<PathId & { json: UpdateThreadRequest }, ThreadResponse>;
     /**
-     * Delete a thread. Also destroys its environment if one exists. Manager
-     * threads with assigned child threads require explicit confirmation.
+     * Delete a thread. Also destroys its environment if one exists. Threads
+     * with child threads require explicit confirmation.
      */
     $delete: Endpoint<PathId & { json: DeleteThreadRequest }, { ok: true }>;
   };
-  "/threads/:id/assigned-child-summary": {
-    /** Count non-deleted threads assigned to a manager thread via parentThreadId. Archived child threads are included. */
-    $get: Endpoint<PathId, ThreadAssignedChildSummaryResponse>;
+  "/threads/:id/child-summary": {
+    /** Count non-deleted child threads via parentThreadId. Archived child threads are included. */
+    $get: Endpoint<PathId, ThreadChildSummaryResponse>;
   };
   "/threads/:id/schedules": {
     /** List schedules that wake this existing thread later. */
@@ -618,12 +600,12 @@ export type PublicApiSchema = {
   };
   "/threads/:id/archive-all": {
     /**
-     * Archive a manager thread and every live thread assigned to it. Child
-     * threads are archived before the manager so archived child ownership is
+     * Archive a thread and every live child thread assigned to it. Child
+     * threads are archived before the parent so archived child ownership is
      * preserved, and cleanup is requested for each affected managed environment
      * once it has no live threads.
      */
-    $post: Endpoint<PathId, ManagerArchiveThreadsResponse>;
+    $post: Endpoint<PathId, ThreadArchiveAllResponse>;
   };
   "/threads/:id/unarchive": {
     /** Unarchive a thread and cancel any still-pending cleanup for its environment. */

@@ -198,7 +198,6 @@ function resolveFallbackModel(deps: AppDeps, thread: Thread): string | null {
   }
   const projectDefaults = getProjectExecutionDefaults(deps.db, {
     projectId: thread.projectId,
-    threadType: thread.type,
   });
   return projectDefaults?.model ?? null;
 }

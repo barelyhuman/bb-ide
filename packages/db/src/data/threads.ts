@@ -16,7 +16,6 @@ import type {
   ReasoningLevel,
   ThreadChangeKind,
   ThreadStatus,
-  ThreadType,
   WorkspaceProvisionType,
 } from "@bb/domain";
 import { resolveEnvironmentWorkspaceDisplayKind } from "@bb/domain";
@@ -52,7 +51,6 @@ export interface CreateThreadInput {
   projectId: string;
   environmentId?: string | null;
   providerId: string;
-  type?: ThreadType;
   title?: string | null;
   titleFallback?: string | null;
   status?: ThreadStatus;
@@ -66,35 +64,25 @@ export function createThread(
 ) {
   const now = Date.now();
   const id = createThreadId();
-  const type = input.type ?? "standard";
-  const thread = db.transaction(
-    (tx) => {
-      const sortKey =
-        type === "manager" ? createNewManagerThreadSortKey(tx, input.projectId) : null;
-      return tx
-        .insert(threads)
-        .values({
-          id,
-          projectId: input.projectId,
-          environmentId: input.environmentId ?? null,
-          automationId: input.automationId ?? null,
-          providerId: input.providerId,
-          type,
-          sortKey,
-          title: input.title ?? null,
-          titleFallback: input.titleFallback ?? null,
-          status: input.status ?? "created",
-          parentThreadId: input.parentThreadId ?? null,
-          lastReadAt: now,
-          latestAttentionAt: now,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning()
-        .get();
-    },
-    { behavior: "immediate" },
-  );
+  const thread = db
+    .insert(threads)
+    .values({
+      id,
+      projectId: input.projectId,
+      environmentId: input.environmentId ?? null,
+      automationId: input.automationId ?? null,
+      providerId: input.providerId,
+      title: input.title ?? null,
+      titleFallback: input.titleFallback ?? null,
+      status: input.status ?? "created",
+      parentThreadId: input.parentThreadId ?? null,
+      lastReadAt: now,
+      latestAttentionAt: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning()
+    .get();
   notifier.notifyThread(id, ["thread-created"], {
     projectId: input.projectId,
   });
@@ -110,9 +98,8 @@ export interface ListThreadsOptions {
   projectId?: string;
   archived?: boolean;
   parentThreadId?: string;
-  type?: ThreadType;
-  /** When true, restrict to threads that have a parent (managed). When false, restrict to threads without a parent (unmanaged). */
-  managed?: boolean;
+  /** When true, restrict to child threads. When false, restrict to root threads. */
+  hasParent?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -122,15 +109,6 @@ type ThreadRow = typeof threads.$inferSelect;
 export interface ListThreadsForProjectsOptions {
   projectIds: readonly string[];
   archived?: boolean;
-}
-
-export interface ReorderManagerThreadArgs {
-  db: DbConnection;
-  nextThreadId: string | null;
-  notifier: DbNotifier;
-  previousThreadId: string | null;
-  projectId: string;
-  threadId: string;
 }
 
 export interface PinThreadArgs {
@@ -150,12 +128,6 @@ export interface ReorderPinnedThreadArgs {
   threadId: string;
 }
 
-interface ResolveManagerThreadNeighborArgs {
-  movedThreadId: string;
-  neighborThreadId: string | null;
-  projectId: string;
-}
-
 interface ResolvePinnedThreadNeighborArgs {
   movedThreadId: string;
   neighborThreadId: string | null;
@@ -169,7 +141,7 @@ interface PinThreadMutationResult {
 
 type PinnedThreadRootCandidate = Pick<
   ThreadRow,
-  "id" | "parentThreadId" | "type"
+  "id" | "parentThreadId"
 >;
 
 interface FilterVisiblePinnedThreadRootsArgs<
@@ -177,35 +149,6 @@ interface FilterVisiblePinnedThreadRootsArgs<
 > {
   pinnedThreads: readonly TThread[];
 }
-
-export interface ReorderManagerThreadSuccess {
-  kind: "reordered";
-  threads: ThreadRow[];
-}
-
-export interface ReorderManagerThreadUnchanged {
-  kind: "unchanged";
-  threads: ThreadRow[];
-}
-
-export interface ReorderManagerThreadNotFound {
-  kind: "not_found";
-}
-
-export interface ReorderManagerThreadStaleNeighbor {
-  kind: "stale_neighbor";
-}
-
-export interface ReorderManagerThreadInvalidNeighborOrder {
-  kind: "invalid_neighbor_order";
-}
-
-export type ReorderManagerThreadResult =
-  | ReorderManagerThreadSuccess
-  | ReorderManagerThreadUnchanged
-  | ReorderManagerThreadNotFound
-  | ReorderManagerThreadStaleNeighbor
-  | ReorderManagerThreadInvalidNeighborOrder;
 
 export interface ReorderPinnedThreadSuccess {
   kind: "reordered";
@@ -241,100 +184,6 @@ export type ReorderPinnedThreadResult =
   | ReorderPinnedThreadStaleNeighbor
   | ReorderPinnedThreadInvalidNeighborOrder;
 
-function listActiveManagerThreads(
-  db: DbQueryConnection,
-  projectId: string,
-): ThreadRow[] {
-  return db
-    .select()
-    .from(threads)
-    .where(
-      and(
-        eq(threads.projectId, projectId),
-        eq(threads.type, "manager"),
-        isNull(threads.archivedAt),
-        isNull(threads.deletedAt),
-      ),
-    )
-    .orderBy(asc(threads.sortKey), asc(threads.id))
-    .all();
-}
-
-function getFirstActiveManagerThread(
-  db: DbQueryConnection,
-  projectId: string,
-): ThreadRow | null {
-  return (
-    db
-      .select()
-      .from(threads)
-      .where(
-        and(
-          eq(threads.projectId, projectId),
-          eq(threads.type, "manager"),
-          isNull(threads.archivedAt),
-          isNull(threads.deletedAt),
-        ),
-      )
-      .orderBy(asc(threads.sortKey), asc(threads.id))
-      .limit(1)
-      .get() ?? null
-  );
-}
-
-function createNewManagerThreadSortKey(
-  db: DbQueryConnection,
-  projectId: string,
-): string {
-  const firstManagerThread = getFirstActiveManagerThread(db, projectId);
-  return createOrderKeyBetween({
-    previousKey: null,
-    nextKey: firstManagerThread?.sortKey ?? null,
-  });
-}
-
-function getActiveManagerThreadForMutation(
-  db: DbQueryConnection,
-  projectId: string,
-  threadId: string,
-): ThreadRow | null {
-  return (
-    db
-      .select()
-      .from(threads)
-      .where(
-        and(
-          eq(threads.id, threadId),
-          eq(threads.projectId, projectId),
-          eq(threads.type, "manager"),
-          isNull(threads.archivedAt),
-          isNull(threads.deletedAt),
-        ),
-      )
-      .get() ?? null
-  );
-}
-
-function resolveManagerThreadNeighbor(
-  db: DbQueryConnection,
-  args: ResolveManagerThreadNeighborArgs,
-): ThreadRow | null | false {
-  if (args.neighborThreadId === null) {
-    return null;
-  }
-  if (args.neighborThreadId === args.movedThreadId) {
-    return false;
-  }
-
-  return (
-    getActiveManagerThreadForMutation(
-      db,
-      args.projectId,
-      args.neighborThreadId,
-    ) ?? false
-  );
-}
-
 function pinnedThreadWhere() {
   return and(
     isNull(threads.deletedAt),
@@ -360,15 +209,11 @@ function filterVisiblePinnedThreadRoots<
 >({
   pinnedThreads,
 }: FilterVisiblePinnedThreadRootsArgs<TThread>): TThread[] {
-  const pinnedManagerThreadIds = new Set(
-    pinnedThreads
-      .filter((thread) => thread.type === "manager")
-      .map((thread) => thread.id),
-  );
+  const pinnedThreadIds = new Set(pinnedThreads.map((thread) => thread.id));
   return pinnedThreads.filter(
     (thread) =>
       thread.parentThreadId === null ||
-      !pinnedManagerThreadIds.has(thread.parentThreadId),
+      !pinnedThreadIds.has(thread.parentThreadId),
   );
 }
 
@@ -490,6 +335,10 @@ export interface ListUnarchivedAssignedChildThreadsArgs {
   parentThreadId: string;
 }
 
+export interface ListNonDeletedChildThreadsArgs {
+  parentThreadId: string;
+}
+
 export interface MarkThreadStopRequestedArgs {
   requestedAt?: number;
   threadId: string;
@@ -552,12 +401,12 @@ const NON_TERMINAL_THREAD_STATUSES: readonly ThreadStatus[] = [
 interface StatusTransition {
   currentStatus: ThreadStatus;
   newStatus: ThreadStatus;
-  threadType: ThreadType;
+  parentThreadId: string | null;
 }
 
 function statusTransitionNeedsAttention(args: StatusTransition): boolean {
   if (args.currentStatus === "active" && args.newStatus === "idle") {
-    return args.threadType !== "manager";
+    return args.parentThreadId === null;
   }
 
   if (args.newStatus !== "error") {
@@ -573,7 +422,6 @@ function buildListThreadsFilters(options: ListThreadsOptions) {
   return [
     options.projectId ? eq(threads.projectId, options.projectId) : undefined,
     isNull(threads.deletedAt),
-    options.type ? eq(threads.type, options.type) : undefined,
     options.parentThreadId
       ? eq(threads.parentThreadId, options.parentThreadId)
       : undefined,
@@ -582,9 +430,9 @@ function buildListThreadsFilters(options: ListThreadsOptions) {
       : options.archived === false
         ? isNull(threads.archivedAt)
         : undefined,
-    options.managed === true
+    options.hasParent === true
       ? isNotNull(threads.parentThreadId)
-      : options.managed === false
+      : options.hasParent === false
         ? isNull(threads.parentThreadId)
         : undefined,
   ].filter((value) => value !== undefined);
@@ -609,37 +457,9 @@ function buildListThreadsForProjectsFilters(
 function buildActiveProjectThreadOrderBy() {
   return [
     asc(threads.projectId),
-    asc(sql`CASE WHEN ${threads.type} = 'manager' THEN 0 ELSE 1 END`),
-    asc(
-      sql`CASE WHEN ${threads.type} = 'manager' AND ${threads.pinnedAt} IS NOT NULL THEN 0 WHEN ${threads.type} = 'manager' THEN 1 END`,
-    ),
-    asc(
-      sql`CASE WHEN ${threads.type} = 'manager' AND ${threads.pinnedAt} IS NOT NULL THEN ${threads.pinSortKey} END`,
-    ),
-    asc(
-      sql`CASE WHEN ${threads.type} = 'manager' AND ${threads.pinnedAt} IS NOT NULL THEN ${threads.id} END`,
-    ),
-    asc(
-      sql`CASE WHEN ${threads.type} = 'manager' AND ${threads.pinnedAt} IS NULL THEN ${threads.sortKey} END`,
-    ),
-    asc(
-      sql`CASE WHEN ${threads.type} = 'manager' AND ${threads.pinnedAt} IS NULL THEN ${threads.id} END`,
-    ),
-    asc(
-      sql`CASE WHEN ${threads.type} <> 'manager' AND ${threads.pinnedAt} IS NOT NULL THEN 0 WHEN ${threads.type} <> 'manager' THEN 1 END`,
-    ),
-    asc(
-      sql`CASE WHEN ${threads.type} <> 'manager' AND ${threads.pinnedAt} IS NOT NULL THEN ${threads.pinSortKey} END`,
-    ),
-    asc(
-      sql`CASE WHEN ${threads.type} <> 'manager' AND ${threads.pinnedAt} IS NOT NULL THEN ${threads.id} END`,
-    ),
-    desc(
-      sql`CASE WHEN ${threads.type} <> 'manager' AND ${threads.pinnedAt} IS NULL THEN ${threads.createdAt} END`,
-    ),
-    desc(
-      sql`CASE WHEN ${threads.type} <> 'manager' AND ${threads.pinnedAt} IS NULL THEN ${threads.id} END`,
-    ),
+    ...buildPinnedThreadOrderBy(),
+    desc(threads.createdAt),
+    desc(threads.id),
   ];
 }
 
@@ -655,17 +475,7 @@ function buildListThreadsOrderBy(options: ListThreadsOptions) {
   if (options.archived === true) {
     return [desc(threads.archivedAt), desc(threads.id)];
   }
-  if (options.type === "manager") {
-    return [
-      ...buildPinnedThreadOrderBy(),
-      asc(threads.sortKey),
-      asc(threads.id),
-    ];
-  }
-  if (options.type === undefined) {
-    return buildActiveProjectThreadOrderBy();
-  }
-  return [...buildPinnedThreadOrderBy(), desc(threads.createdAt), desc(threads.id)];
+  return buildActiveProjectThreadOrderBy();
 }
 
 function buildListThreadsForProjectsOrderBy(
@@ -866,6 +676,22 @@ export function listUnarchivedAssignedChildThreads(
     .all();
 }
 
+export function listNonDeletedChildThreads(
+  db: ThreadWriteConnection,
+  args: ListNonDeletedChildThreadsArgs,
+): ThreadRow[] {
+  return db
+    .select()
+    .from(threads)
+    .where(
+      and(
+        eq(threads.parentThreadId, args.parentThreadId),
+        isNull(threads.deletedAt),
+      ),
+    )
+    .all();
+}
+
 export function listThreadEnvironmentAssignmentsOnHost(
   db: DbConnection,
   args: ListThreadEnvironmentAssignmentsOnHostArgs,
@@ -985,108 +811,6 @@ export function hasNonTerminalThreadInEnvironment(
     .get();
 
   return row !== undefined;
-}
-
-export function reorderManagerThread({
-  db,
-  nextThreadId,
-  notifier,
-  previousThreadId,
-  projectId,
-  threadId,
-}: ReorderManagerThreadArgs): ReorderManagerThreadResult {
-  const result = db.transaction(
-    (tx): ReorderManagerThreadResult => {
-      const movedThread = getActiveManagerThreadForMutation(
-        tx,
-        projectId,
-        threadId,
-      );
-      if (!movedThread) {
-        return { kind: "not_found" };
-      }
-
-      const previousThread = resolveManagerThreadNeighbor(tx, {
-        movedThreadId: threadId,
-        neighborThreadId: previousThreadId,
-        projectId,
-      });
-      const nextThread = resolveManagerThreadNeighbor(tx, {
-        movedThreadId: threadId,
-        neighborThreadId: nextThreadId,
-        projectId,
-      });
-      if (previousThread === false || nextThread === false) {
-        return { kind: "stale_neighbor" };
-      }
-      if (
-        previousThread?.sortKey === null ||
-        nextThread?.sortKey === null
-      ) {
-        return { kind: "stale_neighbor" };
-      }
-      if (
-        previousThread !== null &&
-        nextThread !== null &&
-        previousThread.sortKey >= nextThread.sortKey
-      ) {
-        return { kind: "invalid_neighbor_order" };
-      }
-
-      const currentThreads = listActiveManagerThreads(tx, projectId);
-      const currentIndex = currentThreads.findIndex(
-        (thread) => thread.id === threadId,
-      );
-      if (currentIndex === -1) {
-        return { kind: "stale_neighbor" };
-      }
-      const currentPreviousThreadId =
-        currentThreads[currentIndex - 1]?.id ?? null;
-      const currentNextThreadId = currentThreads[currentIndex + 1]?.id ?? null;
-      if (
-        currentPreviousThreadId === previousThreadId &&
-        currentNextThreadId === nextThreadId
-      ) {
-        return {
-          kind: "unchanged",
-          threads: currentThreads,
-        };
-      }
-
-      const sortKey = createOrderKeyBetween({
-        previousKey: previousThread?.sortKey ?? null,
-        nextKey: nextThread?.sortKey ?? null,
-      });
-      const updated = tx
-        .update(threads)
-        .set({ sortKey, updatedAt: Date.now() })
-        .where(
-          and(
-            eq(threads.id, threadId),
-            eq(threads.projectId, projectId),
-            eq(threads.type, "manager"),
-            isNull(threads.archivedAt),
-            isNull(threads.deletedAt),
-          ),
-        )
-        .returning({ id: threads.id })
-        .get();
-      if (!updated) {
-        return { kind: "stale_neighbor" };
-      }
-
-      return {
-        kind: "reordered",
-        threads: listActiveManagerThreads(tx, projectId),
-      };
-    },
-    { behavior: "immediate" },
-  );
-
-  if (result.kind === "reordered") {
-    notifier.notifyThread(threadId, ["order-changed"], { projectId });
-  }
-  return result;
 }
 
 export function pinThread(
@@ -1301,7 +1025,7 @@ export function updateThread(
     "parentThreadId" in input &&
     input.parentThreadId !== existing.parentThreadId
   ) {
-    changes.push("manager-assignment-changed");
+    changes.push("parent-changed");
   }
 
   const set: Partial<typeof threads.$inferInsert> = { updatedAt: now };
@@ -1576,7 +1300,7 @@ function transitionThreadStatusRecord(
     statusTransitionNeedsAttention({
       currentStatus,
       newStatus,
-      threadType: thread.type,
+      parentThreadId: thread.parentThreadId,
     })
   ) {
     set.latestAttentionAt = now;

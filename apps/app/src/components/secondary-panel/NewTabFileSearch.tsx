@@ -8,7 +8,6 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import type { ThreadType } from "@bb/domain";
 import { directoryFromPath } from "@bb/thread-view";
 import { Icon, type IconName } from "@/components/ui/icon.js";
 import { EmptyStatePanel } from "@/components/ui/empty-state.js";
@@ -73,7 +72,6 @@ export interface NewTabFileSearchProps {
   projectId: string | undefined;
   environmentId: string | null;
   currentThreadId: string;
-  currentThreadType: ThreadType | undefined;
   focusRequest: number;
   initialQuery?: string;
   onSelect: (selection: FileSearchSelection) => void;
@@ -82,7 +80,6 @@ export interface NewTabFileSearchProps {
 export interface NewTabActionMenuProps {
   projectId: string | undefined;
   currentThreadId: string;
-  currentThreadType: ThreadType | undefined;
   onSelect: (selection: FileSearchSelection) => void;
   onOpenFileSearch: () => void;
   onCreateAppPromptPrefill?: CreateAppPromptPrefillHandler;
@@ -156,7 +153,6 @@ type LauncherTileVariant = "result" | "menu";
 interface GetAvailableFileSearchSourcesArgs {
   projectId: string | undefined;
   currentThreadId: string;
-  currentThreadType: ThreadType | undefined;
 }
 
 interface GroupFileSearchSectionsArgs {
@@ -243,7 +239,6 @@ const RECENT_ENTRY_ID_PREFIX = "file-search-result-recent";
 function getAvailableFileSearchSources({
   projectId,
   currentThreadId,
-  currentThreadType,
 }: GetAvailableFileSearchSourcesArgs): readonly FileSearchSource[] {
   const sources: FileSearchSource[] = [];
   if (currentThreadId.length > 0) {
@@ -252,7 +247,7 @@ function getAvailableFileSearchSources({
   if (projectId) {
     sources.push("workspace");
   }
-  if (currentThreadType === "manager" && currentThreadId.length > 0) {
+  if (currentThreadId.length > 0) {
     sources.push("thread-storage");
   }
   return sources;
@@ -651,7 +646,6 @@ export function NewTabFileSearch({
   projectId,
   environmentId,
   currentThreadId,
-  currentThreadType,
   focusRequest,
   initialQuery = "",
   onSelect,
@@ -676,16 +670,14 @@ export function NewTabFileSearch({
       limit: FILE_SEARCH_LIMIT,
       environmentId,
       currentThreadId,
-      currentThreadType,
     });
   const availableSources = useMemo(
     () =>
       getAvailableFileSearchSources({
         projectId,
         currentThreadId,
-        currentThreadType,
       }),
-    [currentThreadId, currentThreadType, projectId],
+    [currentThreadId, projectId],
   );
   const fileSearchSources = useMemo(
     () => availableSources.filter((source) => source !== "app"),
@@ -901,7 +893,6 @@ export function NewTabFileSearch({
 export function NewTabActionMenu({
   projectId,
   currentThreadId,
-  currentThreadType,
   onSelect,
   onOpenFileSearch,
   onCreateAppPromptPrefill,
@@ -917,9 +908,8 @@ export function NewTabActionMenu({
       getAvailableFileSearchSources({
         projectId,
         currentThreadId,
-        currentThreadType,
       }),
-    [currentThreadId, currentThreadType, projectId],
+    [currentThreadId, projectId],
   );
   const fileSearchSources = useMemo(
     () => availableSources.filter((source) => source !== "app"),

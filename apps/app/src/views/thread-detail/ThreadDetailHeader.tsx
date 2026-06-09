@@ -29,8 +29,7 @@ interface ThreadHeaderGitAction {
 interface ThreadDetailHeaderProps {
   actionsMenu: ReactNode;
   activeTerminalCount: number;
-  isManagedThread: boolean;
-  isManagerThread: boolean;
+  isChildThread: boolean;
   isSecondaryPanelOpen: boolean;
   isTerminalPanelOpen: boolean;
   isThreadGitActionPending: boolean;
@@ -45,8 +44,7 @@ interface ThreadDetailHeaderProps {
 export function ThreadDetailHeader({
   actionsMenu,
   activeTerminalCount,
-  isManagedThread,
-  isManagerThread,
+  isChildThread,
   isSecondaryPanelOpen,
   isTerminalPanelOpen,
   isThreadGitActionPending,
@@ -73,10 +71,7 @@ export function ThreadDetailHeader({
   const center = (
     <>
       <p className="min-w-0 truncate text-sm font-semibold">{threadTitle}</p>
-      {isManagerThread ? <Pill variant="outline">manager</Pill> : null}
-      {!isManagerThread && isManagedThread ? (
-        <Pill variant="outline">managed</Pill>
-      ) : null}
+      {isChildThread ? <Pill variant="outline">child</Pill> : null}
       {/*
         The header's center slot sits inside the macOS title-bar drag region
         (AppPageHeader only exempts the actions slot), so the interactive

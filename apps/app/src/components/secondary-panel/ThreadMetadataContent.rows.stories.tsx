@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import {
-  ManagerSelectorRow,
+  ParentSelectorRow,
   EnvironmentRow,
   WorkspacePathRow,
   BranchRow,
@@ -14,7 +14,7 @@ import {
 import {
   PanelStage,
   baseProps,
-  managerThreads,
+  parentThreads,
   makeEnvironment,
   makeThread,
   makeThreadSchedule,
@@ -37,65 +37,65 @@ function RowStage({ children }: { children: ReactNode }) {
 }
 
 // ---------------------------------------------------------------------------
-// Manager selector — the "Manager" row.
+// Parent selector row.
 // ---------------------------------------------------------------------------
 
-export function ManagerSelector() {
+export function ParentSelector() {
   return (
     <StoryCard>
       <StoryRow label="unassigned">
         <RowStage>
-          <ManagerSelectorRow
+          <ParentSelectorRow
             thread={makeThread()}
             projectId={baseProps.projectId}
             parentThreadDisplayName={null}
-            managerThreads={managerThreads}
-            canAssignToManager
+            parentThreads={parentThreads}
+            canAssignToParent
             canTakeOverThread={false}
             updateThreadPending={false}
-            onAssignManager={noop}
+            onAssignParent={noop}
           />
         </RowStage>
       </StoryRow>
       <StoryRow label="unassigned, no candidates">
         <RowStage>
-          <ManagerSelectorRow
+          <ParentSelectorRow
             thread={makeThread()}
             projectId={baseProps.projectId}
             parentThreadDisplayName={null}
-            managerThreads={[]}
-            canAssignToManager={false}
+            parentThreads={[]}
+            canAssignToParent={false}
             canTakeOverThread={false}
             updateThreadPending={false}
-            onAssignManager={noop}
+            onAssignParent={noop}
           />
         </RowStage>
       </StoryRow>
       <StoryRow label="assigned">
         <RowStage>
-          <ManagerSelectorRow
-            thread={makeThread({ parentThreadId: "thr_codex_manager" })}
+          <ParentSelectorRow
+            thread={makeThread({ parentThreadId: "thr_codex_parent" })}
             projectId={baseProps.projectId}
-            parentThreadDisplayName="Codex Manager"
-            managerThreads={managerThreads}
-            canAssignToManager={false}
+            parentThreadDisplayName="Codex Parent"
+            parentThreads={parentThreads}
+            canAssignToParent={false}
             canTakeOverThread
             updateThreadPending={false}
-            onAssignManager={noop}
+            onAssignParent={noop}
           />
         </RowStage>
       </StoryRow>
       <StoryRow label="dropdown open">
         <RowStage>
-          <ManagerSelectorRow
+          <ParentSelectorRow
             thread={makeThread()}
             projectId={baseProps.projectId}
             parentThreadDisplayName={null}
-            managerThreads={managerThreads}
-            canAssignToManager
+            parentThreads={parentThreads}
+            canAssignToParent
             canTakeOverThread={false}
             updateThreadPending={false}
-            onAssignManager={noop}
+            onAssignParent={noop}
             defaultOpen
           />
         </RowStage>

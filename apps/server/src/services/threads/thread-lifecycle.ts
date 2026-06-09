@@ -90,7 +90,7 @@ import {
 import { createAsyncDeduper } from "../lib/async-deduper.js";
 import { throwThreadNotWritable } from "../lib/lifecycle-api-errors.js";
 import { NotificationBuffer } from "../lib/notification-buffer.js";
-import { queueManagedThreadTurnNotificationBestEffort } from "./managed-thread-notifications.js";
+import { queueChildThreadTurnNotificationBestEffort } from "./child-thread-notifications.js";
 import {
   forgetActiveThreadProvisionContext,
   getActiveThreadProvisionContext,
@@ -658,16 +658,17 @@ function settleThreadCommandFailure(
   });
   tryTransitionInTransaction(args.deps.db, args.deps.hub, thread.id, "error");
   if (thread.parentThreadId !== null) {
-    const managerThreadId = thread.parentThreadId;
+    const parentThreadId = thread.parentThreadId;
     postCommitActions.push({
-      name: "Managed thread command failure notification",
+      name: "Child thread command failure notification",
       context: {
         threadId: thread.id,
       },
       run: (deps) =>
-        queueManagedThreadTurnNotificationBestEffort(deps, {
-          managedThread: thread,
-          managerThreadId,
+        queueChildThreadTurnNotificationBestEffort(deps, {
+          childThreadId: thread.id,
+          parentThreadId,
+          title: thread.title,
           turnStatus: "failed",
         }),
     });

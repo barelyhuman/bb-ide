@@ -1,17 +1,15 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type {
   ProjectExecutionDefaults,
   PermissionMode,
   ReasoningLevel,
   ServiceTier,
-  ThreadType,
 } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import { projectExecutionDefaults } from "../schema.js";
 
 export interface GetProjectExecutionDefaultsArgs {
   projectId: string;
-  threadType: ThreadType;
 }
 
 export interface UpsertProjectExecutionDefaultsArgs extends GetProjectExecutionDefaultsArgs {
@@ -36,12 +34,7 @@ export function getProjectExecutionDefaults(
       serviceTier: projectExecutionDefaults.serviceTier,
     })
     .from(projectExecutionDefaults)
-    .where(
-      and(
-        eq(projectExecutionDefaults.projectId, args.projectId),
-        eq(projectExecutionDefaults.threadType, args.threadType),
-      ),
-    )
+    .where(eq(projectExecutionDefaults.projectId, args.projectId))
     .get();
 
   return row ?? null;
@@ -57,7 +50,6 @@ export function upsertProjectExecutionDefaults(
     .values({
       projectId: args.projectId,
       providerId: args.providerId,
-      threadType: args.threadType,
       model: args.model,
       reasoningLevel: args.reasoningLevel,
       permissionMode: args.permissionMode,
@@ -65,10 +57,7 @@ export function upsertProjectExecutionDefaults(
       updatedAt,
     })
     .onConflictDoUpdate({
-      target: [
-        projectExecutionDefaults.projectId,
-        projectExecutionDefaults.threadType,
-      ],
+      target: [projectExecutionDefaults.projectId],
       set: {
         providerId: args.providerId,
         model: args.model,

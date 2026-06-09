@@ -196,7 +196,7 @@ describe("AppLayout desktop chrome", () => {
       ),
     ).toBe(true);
 
-    // They are no longer in the primary actions above New Thread / New Manager.
+    // They are no longer in the primary actions above New Thread.
     expect(
       within(primaryActions).queryByRole("button", { name: "Go back" }),
     ).toBeNull();
@@ -436,7 +436,7 @@ describe("AppLayout desktop chrome", () => {
 
     expect(screen.queryByTestId("bb-desktop-sidebar-trigger")).toBeNull();
     // The sidebar's top reserve stays mounted while collapsed so its content
-    // (New Thread / New Manager / Projects) holds the same vertical position
+    // (New Thread / Projects) holds the same vertical position
     // below the title-bar chrome as when expanded, instead of riding up under
     // the pinned trigger during the collapse animation. It remains a pure
     // window-drag spacer with no second toggle.

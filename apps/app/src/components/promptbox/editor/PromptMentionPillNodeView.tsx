@@ -23,7 +23,7 @@ const EDITOR_MENTION_PILL_CLASS = cn(
 
 /**
  * Renders an inserted prompt mention as a pill with a leading type icon (file,
- * folder, thread, or manager) matching the suggestion menu rows. A Tiptap React
+ * folder or thread) matching the suggestion menu rows. A Tiptap React
  * node view is used instead of `renderHTML` so the pill can mount the shared
  * `Icon` component; `renderHTML` remains the serialization fallback.
  *

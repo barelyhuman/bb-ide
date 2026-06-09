@@ -13,7 +13,7 @@ export function promptMentionIconLabel(
   resource: PromptMentionResource,
 ): string {
   if (resource.kind === "thread") {
-    return resource.threadType === "manager" ? "Manager" : "Thread";
+    return "Thread";
   }
   if (resource.source === "thread-storage") {
     return "Storage";
@@ -29,7 +29,7 @@ export function promptMentionIconName(
   resource: PromptMentionResource,
 ): IconName {
   if (resource.kind === "thread") {
-    return resource.threadType === "manager" ? "UserRound" : "MessageSquare";
+    return "MessageSquare";
   }
   return resource.entryKind === "directory" ? "Folder" : "File";
 }

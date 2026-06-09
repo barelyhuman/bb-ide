@@ -113,17 +113,16 @@ const mixedAttachments: TimelineConversationAttachments = {
 };
 
 const mentionedMessageText =
-  "Ask @thread:thr_manager and @apps/app/src/components/promptbox/PromptBoxInternal.tsx to review the prompt mention flow.";
+  "Ask @thread:thr_parent and @apps/app/src/components/promptbox/PromptBoxInternal.tsx to review the prompt mention flow.";
 const mentionedMessageMentions: PromptTextMention[] = [
   storyMention({
     text: mentionedMessageText,
-    token: "@thread:thr_manager",
+    token: "@thread:thr_parent",
     resource: {
       kind: "thread",
-      threadId: "thr_manager",
+      threadId: "thr_parent",
       projectId: "proj_bb",
-      threadType: "manager",
-      label: "Prompt UX manager",
+      label: "Prompt UX thread",
     },
   }),
   storyMention({
@@ -261,7 +260,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="agent-initiated"
-        hint="collapsed activity row: Message from Frontend manager"
+        hint="collapsed activity row: Message from Frontend thread"
       >
         <TimelineStage>
           <ConversationMessageContent
@@ -269,7 +268,7 @@ export function Overview() {
             initiator="agent"
             resolveSegmentLinkHref={resolveThreadLink}
             senderThreadId="thr_sender123"
-            senderThreadTitle="Frontend manager"
+            senderThreadTitle="Frontend thread"
             text={
               '[bb message from thread:thr_sender123; reply with `bb thread tell thr_sender123 "<your response>"`]\n\nHey — I finished the audit you asked for. Punch list is in `notes/audit-2026-05.md`; the highest-value trim is collapsing the picker-shape options into a discriminated union.'
             }
@@ -289,7 +288,7 @@ export function Overview() {
             initiator="agent"
             resolveSegmentLinkHref={resolveThreadLink}
             senderThreadId="thr_sender123"
-            senderThreadTitle="Frontend manager"
+            senderThreadTitle="Frontend thread"
             text={
               '[bb message from thread:thr_sender123; reply with `bb thread tell thr_sender123 "<your response>"`]\n\nOne more note from the frontend manager while the current turn is already running.'
             }

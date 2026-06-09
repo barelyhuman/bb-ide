@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { PermissionMode, PromptTextMention } from "@bb/domain";
 import {
   NewThreadPromptBoxUI,
@@ -7,7 +7,6 @@ import {
   type NewThreadModeConfig,
   type NewThreadProjectConfig,
   type NewThreadWorktreeConfig,
-  type ThreadCreationMode,
 } from "@/components/promptbox/NewThreadPromptBox";
 import type { HistoryConfig } from "@/components/promptbox/PromptBoxInternal";
 import type { PickerOption } from "@/components/pickers/OptionPicker";
@@ -98,32 +97,12 @@ function useControlledValue(initial: string) {
   return { value, mentionRanges, onChange };
 }
 
-interface ControlledMode {
-  modeConfig: NewThreadModeConfig;
-  onModeChange: (next: ThreadCreationMode) => void;
-}
-
-function useControlledMode(
-  initial: ThreadCreationMode = "thread",
-): ControlledMode {
-  const [current, setCurrent] = useState<ThreadCreationMode>(initial);
-  const modeConfig = useMemo<NewThreadModeConfig>(
-    () =>
-      current === "manager"
-        ? {
-            mode: "manager",
-          }
-        : {
-            mode: "thread",
-            environment: baseEnvironment,
-            branch: baseBranch,
-            worktree: baseWorktree,
-            permission: basePermission,
-          },
-    [current],
-  );
-  return { modeConfig, onModeChange: setCurrent };
-}
+const baseModeConfig: NewThreadModeConfig = {
+  environment: baseEnvironment,
+  branch: baseBranch,
+  worktree: baseWorktree,
+  permission: basePermission,
+};
 
 // Match production: RootComposeView wraps the prompt area in PageShell which
 // caps content at 760px. Without this constraint the env-permission strip's
@@ -137,7 +116,6 @@ function PromptStage({ children }: PromptStageProps) {
 }
 
 function DefaultRow() {
-  const { modeConfig, onModeChange } = useControlledMode();
   const { value, mentionRanges, onChange } = useControlledValue("");
   return (
     <PromptStage>
@@ -153,8 +131,7 @@ function DefaultRow() {
         history={baseHistory}
         mentions={makeMentions()}
         attachments={makeAttachments()}
-        modeConfig={modeConfig}
-        onModeChange={onModeChange}
+        modeConfig={baseModeConfig}
         project={baseProject}
         execution={baseExecution}
       />
@@ -163,7 +140,6 @@ function DefaultRow() {
 }
 
 function SubmittingRow() {
-  const { modeConfig, onModeChange } = useControlledMode();
   const { value, mentionRanges, onChange } = useControlledValue(
     "Investigate the timeline pagination flicker.",
   );
@@ -181,8 +157,7 @@ function SubmittingRow() {
         history={baseHistory}
         mentions={makeMentions()}
         attachments={makeAttachments()}
-        modeConfig={modeConfig}
-        onModeChange={onModeChange}
+        modeConfig={baseModeConfig}
         project={baseProject}
         execution={baseExecution}
       />
@@ -191,7 +166,6 @@ function SubmittingRow() {
 }
 
 function ClaudeProviderRow() {
-  const { modeConfig, onModeChange } = useControlledMode();
   const { value, mentionRanges, onChange } = useControlledValue("");
   return (
     <PromptStage>
@@ -207,8 +181,7 @@ function ClaudeProviderRow() {
         history={baseHistory}
         mentions={makeMentions()}
         attachments={makeAttachments()}
-        modeConfig={modeConfig}
-        onModeChange={onModeChange}
+        modeConfig={baseModeConfig}
         project={baseProject}
         execution={{
           ...baseExecution,
@@ -231,20 +204,7 @@ function ClaudeProviderRow() {
 }
 
 function FullAccessRow() {
-  const [current, setCurrent] = useState<ThreadCreationMode>("thread");
   const { value, mentionRanges, onChange } = useControlledValue("");
-  const modeConfig: NewThreadModeConfig =
-    current === "manager"
-      ? {
-          mode: "manager",
-        }
-      : {
-          mode: "thread",
-          environment: baseEnvironment,
-          branch: baseBranch,
-          worktree: baseWorktree,
-          permission: { ...basePermission, value: "full" },
-        };
   return (
     <PromptStage>
       <NewThreadPromptBoxUI
@@ -259,8 +219,10 @@ function FullAccessRow() {
         history={baseHistory}
         mentions={makeMentions()}
         attachments={makeAttachments()}
-        modeConfig={modeConfig}
-        onModeChange={setCurrent}
+        modeConfig={{
+          ...baseModeConfig,
+          permission: { ...basePermission, value: "full" },
+        }}
         project={baseProject}
         execution={baseExecution}
       />
@@ -284,14 +246,7 @@ function ProjectlessThreadRow() {
         history={baseHistory}
         mentions={makeMentions()}
         attachments={makeAttachments()}
-        modeConfig={{
-          mode: "thread",
-          environment: baseEnvironment,
-          branch: baseBranch,
-          worktree: baseWorktree,
-          permission: basePermission,
-        }}
-        onModeChange={noop}
+        modeConfig={baseModeConfig}
         project={{
           ...baseProject,
           value: null,

@@ -32,11 +32,6 @@ import {
   type ParsedEnvironmentValue,
   parseEnvironmentValue,
 } from "@/components/pickers/environment-picker-value";
-import {
-  OPTION_BASE_CLASS_NAME,
-  OPTION_CONTENT_CLASS_NAME,
-  OPTION_INTERACTIVE_CLASS_NAME,
-} from "@/components/pickers/OptionPicker";
 import { PermissionModePicker } from "@/components/pickers/PermissionModePicker";
 import {
   ProjectSelector,
@@ -47,20 +42,9 @@ import {
   WorktreePicker,
   type ReuseThreadOption,
 } from "@/components/pickers/WorktreePicker";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu.js";
-import { Button } from "@/components/ui/button.js";
-import { Icon } from "@/components/ui/icon.js";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
-import { cn } from "@/lib/utils";
 
 const NEW_THREAD_PROMPT_BOX_MIN_HEIGHT = 80;
-
-export type ThreadCreationMode = "thread" | "manager";
 
 export interface NewThreadEnvironmentConfig {
   value: string;
@@ -123,27 +107,15 @@ export interface NewThreadProjectConfig {
   createProject?: ProjectSelectorCreateProjectConfig;
 }
 
-/**
- * Mode-dependent block. Discriminated union — when mode is "thread" the
- * environment / branch / worktree / permission config is required and the
- * reuse-pill header slot is available; when mode is "manager" those controls
- * are absent. Invalid combinations (e.g. "manager" + reuse env) are
- * unrepresentable at the prop boundary.
- */
-export type NewThreadModeConfig =
-  | {
-      mode: "thread";
-      environment: NewThreadEnvironmentConfig;
-      branch: NewThreadBranchConfig;
-      worktree: NewThreadWorktreeConfig;
-      permission: ExecutionPermissionConfig;
-      /** Slot rendered inside the prompt box card, above the text area.
-       * Used by RootComposeView to surface the reuse-worktree pill. */
-      header?: ReactNode;
-    }
-  | {
-      mode: "manager";
-    };
+export interface NewThreadModeConfig {
+  environment: NewThreadEnvironmentConfig;
+  branch: NewThreadBranchConfig;
+  worktree: NewThreadWorktreeConfig;
+  permission: ExecutionPermissionConfig;
+  /** Slot rendered inside the prompt box card, above the text area.
+   * Used by RootComposeView to surface the reuse-worktree pill. */
+  header?: ReactNode;
+}
 
 export interface NewThreadPromptBoxUIProps {
   /** id forwarded to the underlying PromptBoxInternal (used for autofocus targeting). */
@@ -164,11 +136,8 @@ export interface NewThreadPromptBoxUIProps {
   mentions: MentionsConfig;
   attachments: AttachmentsConfig;
 
-  /** Mode-dependent config — see `NewThreadModeConfig`. The mode picker
-   * above the prompt-box reads `.mode` for its current value. */
+  /** Thread environment, branch/worktree, permission, and optional header config. */
   modeConfig: NewThreadModeConfig;
-  /** Called when the user switches modes from the picker. */
-  onModeChange: (next: ThreadCreationMode) => void;
 
   project?: NewThreadProjectConfig;
   execution: ExecutionControlsProps;
@@ -176,11 +145,6 @@ export interface NewThreadPromptBoxUIProps {
 
 interface GetBranchPickerMenuKindArgs {
   parsedEnvironment: ParsedEnvironmentValue;
-}
-
-interface GetNewThreadPromptPlaceholderArgs {
-  mode: ThreadCreationMode;
-  isProjectless: boolean;
 }
 
 function getBranchPickerMenuKind({
@@ -193,16 +157,7 @@ function getBranchPickerMenuKind({
   return parsedEnvironment.mode === "worktree" ? "base" : "checkout";
 }
 
-function getNewThreadPromptPlaceholder({
-  mode,
-  isProjectless,
-}: GetNewThreadPromptPlaceholderArgs): string {
-  if (mode === "manager") {
-    return isProjectless
-      ? "Optional — instructions for the manager: what to work on, or how you like things done."
-      : "Optional — instructions for the manager: what to work on, or how you like things done. @ to mention threads, files, or folders";
-  }
-
+function getNewThreadPromptPlaceholder(isProjectless: boolean): string {
   return isProjectless
     ? "Ask anything."
     : "Ask anything. @ to mention files or folders";
@@ -226,7 +181,6 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
   mentions,
   attachments,
   modeConfig,
-  onModeChange,
   project,
   execution,
 }: NewThreadPromptBoxUIProps) {
@@ -246,18 +200,9 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
   );
   const voice = usePromptVoice(promptBoxRef);
   const isProjectlessPrompt = project?.value === null;
-  const placeholder = getNewThreadPromptPlaceholder({
-    mode: modeConfig.mode,
-    isProjectless: isProjectlessPrompt,
-  });
+  const placeholder = getNewThreadPromptPlaceholder(isProjectlessPrompt);
   return (
     <div data-promptbox-shell="" className="w-full">
-      {/* Mode selector above the prompt-box: a quiet dropdown trigger that
-          shares the prompt-box option sizing used by the footer and project
-          strip controls, keeping their leading icons on the same left edge. */}
-      <div className="mb-2 flex items-center px-3.5">
-        <ModeSelector value={modeConfig.mode} onChange={onModeChange} />
-      </div>
       <PromptBoxInternal
         id={id}
         promptBoxRef={promptBoxRef}
@@ -275,9 +220,7 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
           isSubmitting,
           disabled,
           title: isSubmitting ? "Submitting..." : "Submit (Enter)",
-          // Manager mode allows empty submission — the server falls back
-          // to a welcome-message template when no input is provided.
-          allowEmptyInput: modeConfig.mode === "manager",
+          allowEmptyInput: false,
         }}
         zenMode={{
           layout: "root-compose",
@@ -285,14 +228,12 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
         }}
         minHeight={NEW_THREAD_PROMPT_BOX_MIN_HEIGHT}
         placeholder={placeholder}
-        header={modeConfig.mode === "thread" ? modeConfig.header : undefined}
+        header={modeConfig.header}
         footerStart={<ExecutionControls {...execution} />}
       />
       {/* Strip below the prompt-box card: optional project + env + branch (or
-          worktree) on the left, permission picker pinned to the right.
-          In manager mode, the env / branch / worktree / permission pickers
-          don't exist on the modeConfig — the discriminated union enforces
-          the invariant. `mt-1` reproduces the 4px gap main got from a
+          worktree) on the left, permission picker pinned to the right. `mt-1`
+          reproduces the 4px gap main got from a
           `space-y-1` wrapper in RootComposeView (now gone since the
           standalone project row was removed). */}
       <div className="mt-1 flex items-center justify-between gap-2 px-3.5">
@@ -306,7 +247,7 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
               createProject={project.createProject}
             />
           ) : null}
-          {modeConfig.mode === "thread" && project?.value !== null ? (
+          {project?.value !== null ? (
             <ThreadEnvSlot
               environment={modeConfig.environment}
               branch={modeConfig.branch}
@@ -315,14 +256,12 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {modeConfig.mode === "thread" ? (
-            <PermissionModePicker
-              value={modeConfig.permission.value}
-              options={modeConfig.permission.options}
-              onChange={modeConfig.permission.onChange}
-              supported={modeConfig.permission.supported}
-            />
-          ) : null}
+          <PermissionModePicker
+            value={modeConfig.permission.value}
+            options={modeConfig.permission.options}
+            onChange={modeConfig.permission.onChange}
+            supported={modeConfig.permission.supported}
+          />
         </div>
       </div>
     </div>
@@ -398,80 +337,6 @@ function ThreadEnvSlot({
   );
 }
 
-interface ModeSelectorProps {
-  value: ThreadCreationMode;
-  onChange: (mode: ThreadCreationMode) => void;
-}
-
-const MODE_OPTIONS: readonly {
-  value: ThreadCreationMode;
-  icon: "MessageSquarePlus" | "UserRoundPlus";
-  label: string;
-}[] = [
-  { value: "thread", icon: "MessageSquarePlus", label: "New thread" },
-  { value: "manager", icon: "UserRoundPlus", label: "New manager" },
-];
-
-function ModeSelector({ value, onChange }: ModeSelectorProps) {
-  const selected = MODE_OPTIONS.find((option) => option.value === value);
-  const TriggerIcon = selected?.icon ?? "MessageSquarePlus";
-  const triggerLabel = selected?.label ?? "New thread";
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-label="Thread creation mode"
-          className={cn(
-            OPTION_BASE_CLASS_NAME,
-            OPTION_INTERACTIVE_CLASS_NAME,
-            "text-sm font-medium text-foreground hover:text-foreground",
-          )}
-        >
-          <span className={OPTION_CONTENT_CLASS_NAME}>
-            <Icon
-              name={TriggerIcon}
-              className="size-3.5 shrink-0 text-muted-foreground"
-              aria-hidden
-            />
-            <span className="truncate">{triggerLabel}</span>
-          </span>
-          <Icon
-            name="ChevronDown"
-            className="size-3.5 text-muted-foreground"
-            aria-hidden
-          />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" side="bottom" className="w-44">
-        {MODE_OPTIONS.map((option) => (
-          <DropdownMenuItem
-            key={option.value}
-            onSelect={() => onChange(option.value)}
-          >
-            <Icon
-              name={option.icon}
-              className="size-4 text-muted-foreground"
-              aria-hidden
-            />
-            {option.label}
-            <Icon
-              name="Check"
-              className={cn(
-                "ml-auto size-4",
-                option.value === value ? "opacity-100" : "opacity-0",
-              )}
-              aria-hidden
-            />
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 export interface NewThreadConnectedEnvironmentConfig {
   value: string;
   onChange: (value: string) => void;
@@ -506,23 +371,13 @@ export interface NewThreadConnectedBranchConfig {
   onCreate: () => void;
 }
 
-/**
- * Connected variant of `NewThreadModeConfig`. In "thread" mode the env /
- * branch use the connected configs (without `hostId` / `onCreate` — the
- * wrapper supplies those).
- */
-export type NewThreadConnectedModeConfig =
-  | {
-      mode: "thread";
-      environment: NewThreadConnectedEnvironmentConfig;
-      branch: NewThreadConnectedBranchConfig;
-      worktree: NewThreadWorktreeConfig;
-      permission: ExecutionPermissionConfig;
-      header?: ReactNode;
-    }
-  | {
-      mode: "manager";
-    };
+export interface NewThreadConnectedModeConfig {
+  environment: NewThreadConnectedEnvironmentConfig;
+  branch: NewThreadConnectedBranchConfig;
+  worktree: NewThreadWorktreeConfig;
+  permission: ExecutionPermissionConfig;
+  header?: ReactNode;
+}
 
 export interface NewThreadPromptBoxProps extends Omit<
   NewThreadPromptBoxUIProps,
@@ -531,31 +386,18 @@ export interface NewThreadPromptBoxProps extends Omit<
   modeConfig: NewThreadConnectedModeConfig;
 }
 
-type ConnectedThreadModeConfig = Extract<
-  NewThreadConnectedModeConfig,
-  { mode: "thread" }
->;
+type ConnectedThreadModeConfig = NewThreadConnectedModeConfig;
 
 type NewThreadPromptBoxRest = Omit<NewThreadPromptBoxProps, "modeConfig">;
 
 /**
  * The composed prompt area for creating a new thread in a project — used by
- * RootComposeView. In "thread" mode it wires host queries through
- * `ConnectedThreadModeBranch`; in "manager" mode it passes the config
- * straight through with no extra wiring.
+ * RootComposeView. It wires host queries through `ConnectedThreadModeBranch`.
  */
 export function NewThreadPromptBox({
   modeConfig,
   ...rest
 }: NewThreadPromptBoxProps) {
-  if (modeConfig.mode === "manager") {
-    return (
-      <NewThreadPromptBoxUI
-        {...rest}
-        modeConfig={{ mode: "manager" }}
-      />
-    );
-  }
   return <ConnectedThreadModeBranch {...rest} threadConfig={modeConfig} />;
 }
 
@@ -615,7 +457,6 @@ function ConnectedThreadModeBranch({
     <NewThreadPromptBoxUI
       {...rest}
       modeConfig={{
-        mode: "thread",
         environment: uiEnvironment,
         branch: uiBranch,
         worktree: threadConfig.worktree,

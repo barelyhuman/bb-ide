@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from "react";
 import type { WorkspaceFile } from "@bb/server-contract";
 import { DetailCard } from "@/components/ui/detail-card.js";
-import { ManagerWorkspaceRow } from "./ThreadMetadataContent";
-import { useManagerStorageBrowser } from "./useManagerStorageBrowser";
+import { ThreadStorageRow } from "./ThreadMetadataContent";
+import { useThreadStorageBrowser } from "./useThreadStorageBrowser";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
@@ -29,7 +29,7 @@ function makeFile(path: string): WorkspaceFile {
 const FILES: WorkspaceFile[] = [
   makeFile("notes/current-work.md"),
   makeFile("plans/kickoff.md"),
-  makeFile("PREFERENCES.md"),
+  makeFile("reports/status.md"),
 ];
 
 function InteractiveRow({
@@ -42,13 +42,13 @@ function InteractiveRow({
   isFilesLoading: boolean;
 }) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  const controller = useManagerStorageBrowser({
+  const controller = useThreadStorageBrowser({
     files,
     onSelectPath: setSelectedPath,
     selectedPath,
   });
   return (
-    <ManagerWorkspaceRow
+    <ThreadStorageRow
       controller={controller}
       filesError={filesError ?? null}
       isFilesLoading={isFilesLoading}

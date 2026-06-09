@@ -69,20 +69,11 @@ export type PromptMentionPathEntryKind = z.infer<
   typeof promptMentionPathEntryKindSchema
 >;
 
-export const promptMentionThreadTypeValues = ["standard", "manager"] as const;
-export const promptMentionThreadTypeSchema = z.enum(
-  promptMentionThreadTypeValues,
-);
-export type PromptMentionThreadType = z.infer<
-  typeof promptMentionThreadTypeSchema
->;
-
 export const promptMentionResourceSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("thread"),
     threadId: z.string(),
     projectId: z.string().optional(),
-    threadType: promptMentionThreadTypeSchema,
     label: z.string(),
   }),
   z.object({

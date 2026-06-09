@@ -28,7 +28,6 @@ export const THREAD_CHANGE_KINDS = [
   "pin-state-changed",
   "parent-changed",
   "read-state-changed",
-  "manager-assignment-changed",
   "order-changed",
   "terminals-changed",
 ] as const;

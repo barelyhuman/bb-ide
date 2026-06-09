@@ -1,17 +1,14 @@
-import type { ThreadType } from "@bb/domain";
 import { capitalize } from "@bb/thread-view";
 import { useId, useState, type FormEvent, type RefObject } from "react";
 import { Button } from "@/components/ui/button.js";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
 import { Input } from "@/components/ui/input.js";
-import { threadTypeLabel } from "@/lib/thread-title";
 import { useNameValidation } from "./useNameValidation.js";
 import { useRenameDialogAutoFocus } from "./useRenameDialogAutoFocus.js";
 
 export interface ThreadRenameDialogTarget {
   id: string;
   currentTitle: string;
-  threadType?: ThreadType;
 }
 
 interface ThreadRenameDialogProps {
@@ -60,7 +57,7 @@ export function ThreadRenameDialogContent({
 }: ThreadRenameDialogContentProps) {
   const inputId = useId();
   const [nextTitle, setNextTitle] = useState(target.currentTitle);
-  const label = threadTypeLabel(target.threadType ?? "standard");
+  const label = "thread";
   const { validationMessage, validate, clearMessage } = useNameValidation({
     emptyMessage: `${capitalize(label)} name cannot be empty.`,
   });

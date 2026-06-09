@@ -6,7 +6,7 @@ import type {
   TimelineFileChange,
   TimelineFileChangeWorkRow,
   TimelineImageViewWorkRow,
-  TimelineManagerAssignmentSystemRow,
+  TimelineParentChangeSystemRow,
   TimelineRowStatus,
   TimelineToolWorkRow,
   TimelineWebFetchWorkRow,
@@ -1151,7 +1151,7 @@ function mapTurnTitle(row: TimelineViewTurnRow): TimelineTitle {
   });
 }
 
-function managerLinkSegment(
+function parentLinkSegment(
   threadId: string | null,
   title: string | null,
 ): TimelineTitleSegment | null {
@@ -1165,16 +1165,16 @@ function managerLinkSegment(
   });
 }
 
-interface ManagerAssignmentVerbs {
+interface ParentChangeVerbs {
   assign: string;
   release: string;
   transferFrom: string;
   transferTo: string;
 }
 
-function managerAssignmentVerbs(
+function parentChangeVerbs(
   status: TimelineRowStatus,
-): ManagerAssignmentVerbs {
+): ParentChangeVerbs {
   switch (status) {
     case "completed":
     case "error":
@@ -1199,20 +1199,20 @@ function managerAssignmentVerbs(
   }
 }
 
-function mapManagerAssignmentSystemTitle(
-  row: TimelineManagerAssignmentSystemRow,
+function mapParentChangeSystemTitle(
+  row: TimelineParentChangeSystemRow,
 ): TimelineTitle {
-  const assignment = row.managerAssignment;
-  const linkPrev = managerLinkSegment(
-    assignment.previousManagerThreadId,
-    assignment.previousManagerThreadTitle,
+  const assignment = row.parentChange;
+  const linkPrev = parentLinkSegment(
+    assignment.previousParentThreadId,
+    assignment.previousParentThreadTitle,
   );
-  const linkNext = managerLinkSegment(
-    assignment.nextManagerThreadId,
-    assignment.nextManagerThreadTitle,
+  const linkNext = parentLinkSegment(
+    assignment.nextParentThreadId,
+    assignment.nextParentThreadTitle,
   );
   const shimmer = row.status === "pending";
-  const verbs = managerAssignmentVerbs(row.status);
+  const verbs = parentChangeVerbs(row.status);
 
   const segments: TimelineTitleSegment[] = (() => {
     switch (assignment.action) {
@@ -1256,9 +1256,9 @@ function mapSystemTitle(row: TimelineSystemViewRow): TimelineTitle {
   const hasError = row.systemKind === "error" || row.status === "error";
   if (
     row.systemKind === "operation" &&
-    row.operationKind === "manager-assignment"
+    row.operationKind === "parent-change"
   ) {
-    return mapManagerAssignmentSystemTitle(row);
+    return mapParentChangeSystemTitle(row);
   }
   const isCompaction =
     row.systemKind === "operation" && row.operationKind === "compaction";

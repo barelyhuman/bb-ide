@@ -387,7 +387,7 @@ describe("injected skill source discovery", () => {
     ).toHaveLength(2);
   });
 
-  it("resolves the bundled built-in skills root with a valid building-bb-apps skill", async () => {
+  it("resolves the bundled built-in skills root with valid built-in skills", async () => {
     const dataDir = await makeTempDir();
     const builtinSkillsRootPath = resolveBuiltinSkillsRootPath();
     const { logger, warnings } = createCapturingLogger();
@@ -399,6 +399,7 @@ describe("injected skill source discovery", () => {
 
     const builtinNames = sources.map((source) => source.name);
     expect(builtinNames).toContain("building-bb-apps");
+    expect(builtinNames).toContain("bb-cli");
     for (const source of sources) {
       expect(source.sourceType).toBe("builtin");
       expect(source.applicationId).toBeNull();

@@ -32,7 +32,6 @@ import type {
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import { getThreadRoutePath } from "@/lib/app-route-paths";
-import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { QuickCreateProjectProvider } from "@/hooks/useQuickCreateProject";
 import { RootComposeRoute } from "./RootComposeView";
 
@@ -50,20 +49,17 @@ vi.mock("@/hooks/useHostDaemon", () => ({
   }),
 }));
 
-const ROOT_COMPOSE_MODE_STORAGE_KEY = "bb.promptbox.new-thread-mode";
 const STANDARD_PROJECT_ID = "proj_standard";
 
 interface RootComposeFetchRoutesOptions {
   createThreadShouldFail?: boolean;
   createdThread?: ThreadWithRuntime;
-  hiredManager?: ThreadWithRuntime;
   sidebarNavigation?: SidebarBootstrapResponse;
   threads?: readonly ThreadListEntry[];
 }
 
 interface RootComposeFetchRequests {
   createThread: Request[];
-  hireManager: Request[];
 }
 
 const localHost: Host = {
@@ -188,7 +184,6 @@ function makeThread(overrides: ThreadOverrides = {}): ThreadWithRuntime {
     stopRequestedAt: null,
     title: "Created thread",
     titleFallback: "Created thread",
-    type: "standard",
     updatedAt: 1,
     ...overrides,
   };
@@ -273,7 +268,6 @@ function installRootComposeFetchRoutes(
 ): RootComposeFetchRequests {
   const requests: RootComposeFetchRequests = {
     createThread: [],
-    hireManager: [],
   };
   const sidebarNavigation =
     options.sidebarNavigation ?? buildSidebarNavigationResponse();
@@ -351,23 +345,6 @@ function installRootComposeFetchRoutes(
     {
       pathname: "/api/v1/system/config",
       handler: () => jsonResponse(systemConfig),
-    },
-    {
-      method: "POST",
-      pathname: `/api/v1/projects/${PERSONAL_PROJECT_ID}/managers`,
-      handler: (request) => {
-        requests.hireManager.push(request);
-        return jsonResponse(
-          options.hiredManager ??
-            makeThread({
-              id: "thr_manager",
-              title: "Manager",
-              titleFallback: "Manager",
-              type: "manager",
-            }),
-          { status: 201 },
-        );
-      },
     },
   ]);
   return requests;
@@ -553,50 +530,6 @@ describe("RootComposeRoute", () => {
       type: "host",
       hostId: "host_local",
     });
-  });
-
-  it("navigates to a successfully hired manager thread", async () => {
-    const manager = makeThread({
-      id: "thr_new_manager",
-      title: "Manager",
-      titleFallback: "Manager",
-      type: "manager",
-    });
-    const requests = installRootComposeFetchRoutes({ hiredManager: manager });
-    window.localStorage.setItem(ROOT_COMPOSE_MODE_STORAGE_KEY, "manager");
-    window.localStorage.setItem(
-      getProjectScopedStorageKey(
-        "bb.promptbox.permission-mode",
-        PERSONAL_PROJECT_ID,
-      ),
-      "workspace-write",
-    );
-    renderRootComposeRoute();
-
-    await screen.findByRole("textbox");
-    const submitButton = screen.getByTitle("Submit (Enter)");
-    await waitFor(() => {
-      expect(isEnabledButton(submitButton)).toBe(true);
-    });
-
-    fireEvent.click(submitButton);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("pathname").textContent).toBe(
-        getThreadRoutePath({
-          projectId: manager.projectId,
-          threadId: manager.id,
-        }),
-      );
-    });
-    expect(requests.hireManager).toHaveLength(1);
-    const [hireRequest] = requests.hireManager;
-    if (!hireRequest) {
-      throw new Error("Expected manager hire request");
-    }
-    const hireBody = await hireRequest.json();
-    expect(hireBody).not.toHaveProperty("permissionMode");
-    expect(hireBody.executionInputSources).toEqual({});
   });
 
   it("does not navigate when new thread creation fails", async () => {

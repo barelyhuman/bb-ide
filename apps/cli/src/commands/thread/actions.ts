@@ -46,7 +46,7 @@ interface ThreadPinCommandOptions {
 }
 
 interface ThreadDeleteCommandOptions {
-  confirmAssignedChildThreads?: boolean;
+  confirmChildThreads?: boolean;
   yes?: boolean;
   json?: boolean;
 }
@@ -101,8 +101,8 @@ export function registerActionsCommands(
     .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
     .option("--title <title>", "Set the thread title")
-    .option("--parent-thread <id>", "Set the managing parent thread id")
-    .option("--clear-parent-thread", "Clear the managing parent thread id")
+    .option("--parent-thread <id>", "Set the parent thread id")
+    .option("--clear-parent-thread", "Clear the parent thread id")
     .option(
       "--model <model>",
       "Set the sticky model applied on the thread's next turn",
@@ -163,8 +163,8 @@ export function registerActionsCommands(
           if (opts.parentThread || opts.clearParentThread) {
             console.log(
               thread.parentThreadId
-                ? `Managed by ${thread.parentThreadId}`
-                : "No managing parent thread",
+                ? `Parent: ${thread.parentThreadId}`
+                : "No parent thread",
             );
           }
           if (opts.model) {
@@ -253,8 +253,8 @@ export function registerActionsCommands(
     .description("Delete a thread permanently")
     .option("--yes", "Skip the confirmation prompt")
     .option(
-      "--confirm-assigned-child-threads",
-      "Confirm deleting a manager with assigned child threads",
+      "--confirm-child-threads",
+      "Confirm deleting a thread with child threads",
     )
     .option("--json", "Print machine-readable JSON output")
     .action(
@@ -275,8 +275,7 @@ export function registerActionsCommands(
 
           await sdk.threads.delete({
             threadId: id,
-            managerChildThreadsConfirmed:
-              opts.confirmAssignedChildThreads === true,
+            childThreadsConfirmed: opts.confirmChildThreads === true,
           });
         } catch (err: unknown) {
           throw prependErrorContext(`Failed to delete thread ${id}`, err);

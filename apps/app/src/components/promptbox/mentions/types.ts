@@ -1,5 +1,3 @@
-import type { ThreadType } from "@bb/domain";
-
 export type PromptPathMentionSource = "workspace" | "thread-storage";
 export type PromptPathMentionEntryKind = "file" | "directory";
 
@@ -27,7 +25,6 @@ export type PromptMentionSuggestion =
       projectName?: string;
       threadId: string;
       title?: string;
-      threadType: ThreadType;
     };
 
 /**

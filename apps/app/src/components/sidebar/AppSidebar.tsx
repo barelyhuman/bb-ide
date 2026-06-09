@@ -28,7 +28,6 @@ import {
   getAutomationsRoutePath,
   getRootComposeRoutePath,
 } from "@/lib/app-route-paths";
-import { useSetRootComposeMode } from "@/lib/root-compose-selection";
 
 interface AppSidebarProps {
   onResizeMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
@@ -43,7 +42,6 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const quickCreateProject = useQuickCreateProjectController();
   const navigate = useNavigate();
-  const setRootComposeMode = useSetRootComposeMode();
   const { isCompactViewport, setOpenMobile } = useSidebar();
   const [desktopInfo] = useState(getBbDesktopInfo);
   const usesDesktopChrome = shouldUseMacosDesktopChrome(desktopInfo);
@@ -59,19 +57,10 @@ export function AppSidebar({
 
   const handleNewChat = useCallback(() => {
     closeOnMobile();
-    setRootComposeMode("thread");
     void navigate(getRootComposeRoutePath(), {
       state: { focusPrompt: true },
     });
-  }, [closeOnMobile, navigate, setRootComposeMode]);
-
-  const handleNewManager = useCallback(() => {
-    closeOnMobile();
-    setRootComposeMode("manager");
-    void navigate(getRootComposeRoutePath(), {
-      state: { focusPrompt: true },
-    });
-  }, [closeOnMobile, navigate, setRootComposeMode]);
+  }, [closeOnMobile, navigate]);
 
   const handleOpenAutomations = useCallback(() => {
     closeOnMobile();
@@ -83,7 +72,7 @@ export function AppSidebar({
       <Sidebar>
         {showTopReserve ? (
           /* Top reserve that keeps the sidebar's content (New Thread / New
-             Manager / Projects) anchored below the title-bar chrome, mirroring
+             Projects) anchored below the title-bar chrome, mirroring
              the page-header height on the content side. The sidebar toggle is
              pinned at the app's top-left for every chrome (see AppLayout's
              SidebarTriggerOverlay), so this row hosts no trigger of its own — it
@@ -119,7 +108,6 @@ export function AppSidebar({
         >
           <ProjectListActionButtons
             onNewChat={handleNewChat}
-            onNewManager={handleNewManager}
             onOpenAutomations={handleOpenAutomations}
           />
         </div>

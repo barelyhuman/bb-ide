@@ -136,7 +136,6 @@ function makeThreadListEntry(
     stopRequestedAt: null,
     title: `Thread ${index}`,
     titleFallback: `Thread ${index}`,
-    type: "standard",
     updatedAt: index,
     ...overrides,
   };
@@ -598,20 +597,19 @@ describe("ProjectList", () => {
     expect(threadRow?.querySelector('[data-icon="Edit"]')).toBeTruthy();
   });
 
-  it("lists global apps once in a top-level Apps section, not nested under managers", async () => {
+  it("lists global apps once in a top-level Apps section, not nested under parent threads", async () => {
     const project = makeProjectResponse({
       id: "project-1",
       name: "Project One",
     });
-    const managerThread = makeThreadListEntry(project.id, 10, {
-      id: "thread-manager-apps",
-      title: "Sidebar Manager",
-      titleFallback: "Sidebar Manager",
-      type: "manager",
+    const parentThread = makeThreadListEntry(project.id, 10, {
+      id: "thread-parent-apps",
+      title: "Sidebar Parent",
+      titleFallback: "Sidebar Parent",
     });
     const workerThread = makeThreadListEntry(project.id, 9, {
-      id: "thread-manager-worker",
-      parentThreadId: managerThread.id,
+      id: "thread-parent-worker",
+      parentThreadId: parentThread.id,
       title: "Worker Thread",
       titleFallback: "Worker Thread",
     });
@@ -630,7 +628,7 @@ describe("ProjectList", () => {
               personalProject,
               projects: [project],
               threadsByProjectId: new Map([
-                [project.id, [managerThread, workerThread]],
+                [project.id, [parentThread, workerThread]],
               ]),
             }),
           ),
@@ -665,23 +663,23 @@ describe("ProjectList", () => {
 
     const appRow = await findReviewBoardAppButton();
     const appsLabel = screen.getByText("Apps");
-    const managerLabel = screen.getByText("Sidebar Manager");
+    const parentLabel = screen.getByText("Sidebar Parent");
     expect(
       appsLabel.closest('[data-sidebar-sticky-tier="label"]')?.className,
     ).toContain(CHROME_SECTION_LABEL_CLASS);
 
-    // One global app → exactly one app row, regardless of the manager present.
+    // One global app -> exactly one app row, regardless of the parent thread present.
     expect(
       screen.getAllByRole("button", { name: "Open Review Board app" }),
     ).toHaveLength(1);
-    // Top-level indent (pl-2), not the manager-nested indent (pl-14).
+    // Top-level indent (pl-2), not the parent-nested indent (pl-14).
     expect(appRow.classList.contains("pl-2")).toBe(true);
     expect(appRow.classList.contains("pl-14")).toBe(false);
-    // The row lives in the standalone Apps section, after the manager that is
-    // listed under Projects — it is not a child of the manager group.
+    // The row lives in the standalone Apps section, after the parent thread that
+    // is listed under Projects; it is not a child of the parent group.
     expect(
       Boolean(
-        managerLabel.compareDocumentPosition(appsLabel) &
+        parentLabel.compareDocumentPosition(appsLabel) &
         Node.DOCUMENT_POSITION_FOLLOWING,
       ),
     ).toBe(true);
@@ -698,11 +696,10 @@ describe("ProjectList", () => {
       id: "project-1",
       name: "Project One",
     });
-    const managerThread = makeThreadListEntry(project.id, 10, {
-      id: "thread-manager-open-app",
-      title: "Sidebar Manager",
-      titleFallback: "Sidebar Manager",
-      type: "manager",
+    const parentThread = makeThreadListEntry(project.id, 10, {
+      id: "thread-parent-open-app",
+      title: "Sidebar Parent",
+      titleFallback: "Sidebar Parent",
     });
     const personalProject = makeProjectWithThreadsResponse({
       id: PERSONAL_PROJECT_ID,
@@ -718,7 +715,7 @@ describe("ProjectList", () => {
             buildSidebarNavigationResponse({
               personalProject,
               projects: [project],
-              threadsByProjectId: new Map([[project.id, [managerThread]]]),
+              threadsByProjectId: new Map([[project.id, [parentThread]]]),
             }),
           ),
       },
@@ -752,7 +749,7 @@ describe("ProjectList", () => {
     window.history.pushState(
       null,
       "",
-      `/projects/${project.id}/threads/${managerThread.id}`,
+      `/projects/${project.id}/threads/${parentThread.id}`,
     );
 
     await renderProjectList();
@@ -828,20 +825,19 @@ describe("ProjectList", () => {
     });
   });
 
-  it("keeps the Apps section visible when a manager is collapsed", async () => {
+  it("keeps the Apps section visible when a parent thread is collapsed", async () => {
     const project = makeProjectResponse({
       id: "project-1",
       name: "Project One",
     });
-    const managerThread = makeThreadListEntry(project.id, 10, {
-      id: "thread-manager-collapse-apps",
-      title: "Sidebar Manager",
-      titleFallback: "Sidebar Manager",
-      type: "manager",
+    const parentThread = makeThreadListEntry(project.id, 10, {
+      id: "thread-parent-collapse-apps",
+      title: "Sidebar Parent",
+      titleFallback: "Sidebar Parent",
     });
     const workerThread = makeThreadListEntry(project.id, 9, {
-      id: "thread-manager-collapse-worker",
-      parentThreadId: managerThread.id,
+      id: "thread-parent-collapse-worker",
+      parentThreadId: parentThread.id,
       title: "Worker Thread",
       titleFallback: "Worker Thread",
     });
@@ -860,7 +856,7 @@ describe("ProjectList", () => {
               personalProject,
               projects: [project],
               threadsByProjectId: new Map([
-                [project.id, [managerThread, workerThread]],
+                [project.id, [parentThread, workerThread]],
               ]),
             }),
           ),
@@ -896,11 +892,11 @@ describe("ProjectList", () => {
     expect(await findReviewBoardAppButton()).toBeTruthy();
     expect(screen.getByText("Worker Thread")).toBeTruthy();
 
-    // Apps are no longer nested under managers, so collapsing the manager hides
-    // its worker thread but leaves the global Apps section untouched.
+    // Apps are no longer nested under parent threads, so collapsing the parent
+    // hides its worker thread but leaves the global Apps section untouched.
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Collapse Sidebar Manager threads",
+        name: "Collapse Sidebar Parent threads",
       }),
     );
 
@@ -910,7 +906,7 @@ describe("ProjectList", () => {
     ).toBeTruthy();
   });
 
-  it("orders project hover actions as menu, new manager, then new thread", async () => {
+  it("orders project hover actions as menu, then new thread", async () => {
     window.history.pushState(null, "", "/settings");
     const project = makeProjectResponse({
       id: "project-1",
@@ -971,10 +967,7 @@ describe("ProjectList", () => {
       },
     );
 
-    const managerButton = await screen.findByRole("button", {
-      name: "New manager in Project One",
-    });
-    const threadButton = screen.getByRole("button", {
+    const threadButton = await screen.findByRole("button", {
       name: "New thread in Project One",
     });
     const menuButton = screen.getByRole("button", {
@@ -983,33 +976,17 @@ describe("ProjectList", () => {
 
     expect(
       Boolean(
-        menuButton.compareDocumentPosition(managerButton) &
+        menuButton.compareDocumentPosition(threadButton) &
         Node.DOCUMENT_POSITION_FOLLOWING,
       ),
     ).toBe(true);
     expect(
-      Boolean(
-        managerButton.compareDocumentPosition(threadButton) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-      ),
-    ).toBe(true);
+      screen.queryByRole("button", { name: "New manager in Project One" }),
+    ).toBeNull();
 
     await waitFor(() => {
       expect(reuseValues.at(-1)).toBe(staleReuseValue);
     });
-
-    fireEvent.click(managerButton);
-
-    expect(window.localStorage.getItem("bb.root-compose.project-id")).toBe(
-      "project-1",
-    );
-    expect(window.localStorage.getItem("bb.promptbox.new-thread-mode")).toBe(
-      "manager",
-    );
-    await waitFor(() => {
-      expect(reuseValues.at(-1)).toBeNull();
-    });
-    expect(window.location.pathname).toBe("/");
 
     fireEvent.click(threadButton);
 
@@ -1017,8 +994,9 @@ describe("ProjectList", () => {
       "project-1",
     );
     expect(window.localStorage.getItem("bb.promptbox.new-thread-mode")).toBe(
-      "thread",
+      null,
     );
+    expect(window.location.pathname).toBe("/");
   });
 
   it("renders direct section header create actions", async () => {
@@ -1075,13 +1053,10 @@ describe("ProjectList", () => {
     const newThreadButton = screen.getByRole("button", {
       name: "New thread",
     });
-    const newManagerButton = screen.getByRole("button", {
-      name: "New manager",
-    });
-
     expect(
       screen.queryByRole("button", { name: "Project options" }),
     ).toBeNull();
+    expect(screen.queryByRole("button", { name: "New manager" })).toBeNull();
     expect(
       newProjectButton.querySelector("[data-icon='FolderPlus']"),
     ).toBeTruthy();
@@ -1096,18 +1071,10 @@ describe("ProjectList", () => {
       PERSONAL_PROJECT_ID,
     );
     expect(window.localStorage.getItem("bb.promptbox.new-thread-mode")).toBe(
-      "thread",
+      null,
     );
     expect(window.location.pathname).toBe("/");
 
-    fireEvent.click(newManagerButton);
-
-    expect(window.localStorage.getItem("bb.root-compose.project-id")).toBe(
-      PERSONAL_PROJECT_ID,
-    );
-    expect(window.localStorage.getItem("bb.promptbox.new-thread-mode")).toBe(
-      "manager",
-    );
   });
 
   it("shows projects unavailable when the project request fails after the websocket connects", async () => {
@@ -1494,24 +1461,23 @@ describe("ProjectList", () => {
     expect(screen.getByText("Project Thread")).toBeTruthy();
   });
 
-  it("moves pinned manager children with the manager", async () => {
+  it("moves pinned parent children with the parent", async () => {
     const project = makeProjectResponse({
       id: "project-1",
       name: "Project One",
     });
-    const pinnedManager = makeThreadListEntry(project.id, 20, {
-      id: "thread-pinned-manager",
-      title: "Pinned Manager",
-      titleFallback: "Pinned Manager",
-      type: "manager",
+    const pinnedParent = makeThreadListEntry(project.id, 20, {
+      id: "thread-pinned-parent",
+      title: "Pinned Parent",
+      titleFallback: "Pinned Parent",
       pinnedAt: 1_000,
       pinSortKey: "a",
     });
-    const managedChild = makeThreadListEntry(project.id, 21, {
-      id: "thread-managed-child",
-      parentThreadId: pinnedManager.id,
-      title: "Managed Child",
-      titleFallback: "Managed Child",
+    const childThread = makeThreadListEntry(project.id, 21, {
+      id: "thread-child",
+      parentThreadId: pinnedParent.id,
+      title: "Child Thread",
+      titleFallback: "Child Thread",
     });
     const personalProject = makeProjectWithThreadsResponse({
       id: PERSONAL_PROJECT_ID,
@@ -1528,7 +1494,7 @@ describe("ProjectList", () => {
               personalProject,
               projects: [project],
               threadsByProjectId: new Map([
-                [project.id, [pinnedManager, managedChild]],
+                [project.id, [pinnedParent, childThread]],
               ]),
             }),
           ),
@@ -1558,22 +1524,21 @@ describe("ProjectList", () => {
     await renderProjectList();
 
     expect(await screen.findByText("Pinned")).toBeTruthy();
-    expect(screen.getAllByText("Pinned Manager")).toHaveLength(1);
-    expect(screen.getAllByText("Managed Child")).toHaveLength(1);
+    expect(screen.getAllByText("Pinned Parent")).toHaveLength(1);
+    expect(screen.getAllByText("Child Thread")).toHaveLength(1);
   });
 
   it("does not indent top-level rows in the projectless Threads section", async () => {
-    const projectlessManager = makeThreadListEntry(PERSONAL_PROJECT_ID, 12, {
-      id: "thread-projectless-manager",
-      title: "Projectless Manager",
-      titleFallback: "Projectless Manager",
-      type: "manager",
+    const projectlessParent = makeThreadListEntry(PERSONAL_PROJECT_ID, 12, {
+      id: "thread-projectless-parent",
+      title: "Projectless Parent",
+      titleFallback: "Projectless Parent",
     });
     const projectlessChild = makeThreadListEntry(PERSONAL_PROJECT_ID, 13, {
       id: "thread-projectless-child",
-      parentThreadId: projectlessManager.id,
-      title: "Projectless Managed Child",
-      titleFallback: "Projectless Managed Child",
+      parentThreadId: projectlessParent.id,
+      title: "Projectless Child",
+      titleFallback: "Projectless Child",
     });
     const projectlessThread = makeThreadListEntry(PERSONAL_PROJECT_ID, 14, {
       title: "Projectless Top Level Thread",
@@ -1583,7 +1548,7 @@ describe("ProjectList", () => {
       id: PERSONAL_PROJECT_ID,
       kind: "personal",
       name: "Personal",
-      threads: [projectlessManager, projectlessChild, projectlessThread],
+      threads: [projectlessParent, projectlessChild, projectlessThread],
     });
     installProjectListFetchRoutes([
       {
@@ -1627,18 +1592,18 @@ describe("ProjectList", () => {
     const standardRow = (
       await screen.findByText("Projectless Top Level Thread")
     ).closest("div");
-    const managerRow = screen
-      .getByText("Projectless Manager")
+    const parentRow = screen
+      .getByText("Projectless Parent")
       .closest("[data-sidebar-sticky-tier='parent']");
     const childRow = screen
-      .getByText("Projectless Managed Child")
+      .getByText("Projectless Child")
       .closest("div");
 
     expect(
       standardRow instanceof HTMLElement ? standardRow.style.paddingLeft : null,
     ).toBe("8px");
     expect(
-      managerRow instanceof HTMLElement ? managerRow.style.paddingLeft : null,
+      parentRow instanceof HTMLElement ? parentRow.style.paddingLeft : null,
     ).toBe("8px");
     expect(
       childRow instanceof HTMLElement ? childRow.style.paddingLeft : null,

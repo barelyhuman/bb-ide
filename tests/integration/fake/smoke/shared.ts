@@ -24,6 +24,7 @@ export interface RuntimeConfigCommand {
   commandType: string;
   dynamicToolNames: string[];
   instructions: string | undefined;
+  skillRootPaths: string[];
   threadId: string;
 }
 

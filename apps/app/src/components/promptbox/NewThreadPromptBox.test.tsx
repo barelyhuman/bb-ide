@@ -44,7 +44,6 @@ function TestProviderIcon({ className }: TestProviderIconProps) {
 
 function buildThreadModeConfig(): NewThreadModeConfig {
   return {
-    mode: "thread",
     environment: {
       value: `host:${localHostId}:local`,
       onChange: noop,
@@ -73,12 +72,6 @@ function buildThreadModeConfig(): NewThreadModeConfig {
   };
 }
 
-function buildManagerModeConfig(): NewThreadModeConfig {
-  return {
-    mode: "manager",
-  };
-}
-
 function renderNewThreadPrompt(modeConfig: NewThreadModeConfig): void {
   const { wrapper } = createQueryClientTestHarness();
 
@@ -104,7 +97,6 @@ function renderNewThreadPrompt(modeConfig: NewThreadModeConfig): void {
       }}
       attachments={{ items: [] }}
       modeConfig={modeConfig}
-      onModeChange={noop}
       project={{
         projects: [{ id: "proj_bb", name: "bb" }],
         value: null,
@@ -143,22 +135,6 @@ describe("NewThreadPromptBoxUI", () => {
     );
   });
 
-  it("omits file mention copy from the projectless manager placeholder", () => {
-    renderNewThreadPrompt(buildManagerModeConfig());
-
-    expect(screen.getByRole("textbox").getAttribute("data-placeholder")).toBe(
-      "Optional — instructions for the manager: what to work on, or how you like things done.",
-    );
-  });
-
-  it("does not render permission controls in manager mode", () => {
-    renderNewThreadPrompt(buildManagerModeConfig());
-
-    expect(
-      screen.queryByRole("button", { name: /Permission mode/ }),
-    ).toBeNull();
-  });
-
   it("hides environment controls for projectless threads", () => {
     renderNewThreadPrompt(buildThreadModeConfig());
 
@@ -166,11 +142,10 @@ describe("NewThreadPromptBoxUI", () => {
     expect(screen.queryByRole("button", { name: "Environment" })).toBeNull();
   });
 
-  it("uses shared promptbox selector dimensions for mode, model, and project controls", () => {
+  it("uses shared promptbox selector dimensions for model and project controls", () => {
     renderNewThreadPrompt(buildThreadModeConfig());
 
     const selectorButtons = [
-      screen.getByRole("button", { name: "Thread creation mode" }),
       screen.getByRole("button", { name: "Provider, model and reasoning" }),
       screen.getByRole("button", { name: "Project" }),
     ];

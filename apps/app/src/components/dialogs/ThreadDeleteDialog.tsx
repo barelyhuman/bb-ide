@@ -1,5 +1,4 @@
 import type { Thread } from "@bb/domain";
-import { threadTypeLabel } from "@/lib/thread-title";
 import {
   ConfirmDeleteDialog,
   ConfirmDeleteDialogContent,
@@ -7,8 +6,8 @@ import {
 
 export interface ThreadDeleteDialogTarget {
   thread: Thread;
-  /** Present iff manager thread with one or more assigned children. */
-  assignedChildCount?: number;
+  /** Present iff the thread has one or more non-deleted children. */
+  childThreadCount?: number;
 }
 
 interface ThreadDeleteDialogProps {
@@ -51,9 +50,9 @@ export function ThreadDeleteDialogContent({
   onOpenChange,
   onDelete,
 }: ThreadDeleteDialogContentProps) {
-  const label = threadTypeLabel(target.thread.type);
+  const label = "thread";
   const sentences = [
-    target.assignedChildCount ? "Assigned threads will be unassigned." : null,
+    target.childThreadCount ? "Child threads will be deleted." : null,
     "This action cannot be undone.",
   ].filter((part): part is string => part !== null);
 

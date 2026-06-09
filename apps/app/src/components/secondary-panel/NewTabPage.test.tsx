@@ -45,7 +45,6 @@ interface PathListFixtureResponse {
 interface RenderNewTabPageArgs {
   projectId?: string;
   currentThreadId?: string;
-  currentThreadType?: "manager" | "standard";
   onSelect?: (selection: FileSearchSelection) => void;
 }
 
@@ -102,7 +101,6 @@ function renderNewTabPage(args: RenderNewTabPageArgs = {}) {
         projectId={args.projectId}
         environmentId="env-1"
         currentThreadId={args.currentThreadId ?? "thr-standard"}
-        currentThreadType={args.currentThreadType ?? "standard"}
         focusRequest={0}
         onSelect={onSelect}
       />,
@@ -167,7 +165,7 @@ describe("NewTabPage", () => {
     expect(CREATE_APP_PROMPT_TEMPLATE.endsWith("What I want:\n\n")).toBe(true);
   });
 
-  it("selects a manager thread-storage result with the keyboard", async () => {
+  it("selects a thread-storage result with the keyboard", async () => {
     vi.mocked(api.listApps).mockResolvedValue([]);
     vi.mocked(api.searchProjectPaths).mockResolvedValue(
       makePathResponse([
@@ -190,8 +188,7 @@ describe("NewTabPage", () => {
     });
     const { onSelect } = renderNewTabPage({
       projectId: "proj-1",
-      currentThreadId: "thr-manager",
-      currentThreadType: "manager",
+      currentThreadId: "thr-storage",
     });
 
     const input = screen.getByRole("combobox", {
@@ -256,7 +253,6 @@ describe("NewTabPage recent section", () => {
     renderNewTabPage({
       projectId: "proj-1",
       currentThreadId: threadId,
-      currentThreadType: "manager",
     });
 
     // Recent is a labelled option group inside the single combobox listbox.
@@ -292,7 +288,6 @@ describe("NewTabPage recent section", () => {
     const { onSelect } = renderNewTabPage({
       projectId: "proj-1",
       currentThreadId: threadId,
-      currentThreadType: "manager",
     });
 
     fireEvent.click(
@@ -323,7 +318,6 @@ describe("NewTabPage recent section", () => {
     renderNewTabPage({
       projectId: "proj-1",
       currentThreadId: threadId,
-      currentThreadType: "manager",
     });
 
     await screen.findByText("swap-model.md");
@@ -347,7 +341,6 @@ describe("NewTabPage recent section", () => {
     renderNewTabPage({
       projectId: "proj-1",
       currentThreadId: threadId,
-      currentThreadType: "manager",
     });
 
     const input = screen.getByRole("combobox", { name: "Search files" });
@@ -366,7 +359,6 @@ describe("NewTabPage recent section", () => {
     renderNewTabPage({
       projectId: "proj-1",
       currentThreadId: "thr-recent-empty",
-      currentThreadType: "manager",
     });
 
     const hint = await screen.findByText(/Nothing referenced yet/u);

@@ -121,7 +121,7 @@ describe("generated managed branch names", () => {
     });
   });
 
-  it("shows managed thread provisioning before metadata inference completes", async () => {
+  it("shows child thread provisioning before metadata inference completes", async () => {
     let resolveMetadata: (metadata: MockThreadMetadata) => void = () => {
       throw new Error("Metadata inference was not started");
     };

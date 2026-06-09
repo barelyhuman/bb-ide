@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useSetAtom } from "jotai";
-import type { ThreadType } from "@bb/domain";
 import {
   useFixedPanelTabsState,
   useUpdateFixedPanelTabsState,
@@ -39,7 +38,6 @@ interface UseThreadFileTabsParams {
   apps?: readonly AppTabDescriptor[] | undefined;
   threadId: string | null | undefined;
   environmentId: string | null | undefined;
-  threadType: ThreadType | undefined;
   storageFiles: readonly { path: string }[] | undefined;
 }
 
@@ -178,13 +176,6 @@ function removeWorkspaceTabsForOtherEnvironments(
     (tab) =>
       !isWorkspaceFilePreviewTab(tab) || tab.environmentId === environmentId,
   );
-  return nextTabs.length === tabs.length ? tabs : nextTabs;
-}
-
-function removeStorageTabs(
-  tabs: readonly FixedPanelTab[],
-): readonly FixedPanelTab[] {
-  const nextTabs = tabs.filter((tab) => !isStorageFilePreviewTab(tab));
   return nextTabs.length === tabs.length ? tabs : nextTabs;
 }
 
@@ -338,7 +329,6 @@ function replaceNewTab({
 interface BuildOrderedSecondaryFileTabsArgs {
   tabs: readonly FixedPanelTab[];
   resolvedEnvironmentId: string | null | undefined;
-  isManagerThread: boolean;
 }
 
 /**
@@ -349,7 +339,6 @@ interface BuildOrderedSecondaryFileTabsArgs {
 function buildOrderedSecondaryFileTabs({
   tabs,
   resolvedEnvironmentId,
-  isManagerThread,
 }: BuildOrderedSecondaryFileTabsArgs): readonly SecondaryFileFixedPanelTab[] {
   const displayable: SecondaryFileFixedPanelTab[] = [];
   for (const tab of tabs) {
@@ -369,9 +358,7 @@ function buildOrderedSecondaryFileTabs({
         displayable.push(tab);
         break;
       case "thread-storage-file-preview":
-        if (isManagerThread) {
-          displayable.push(tab);
-        }
+        displayable.push(tab);
         break;
       case "thread-info":
       case "git-diff":
@@ -425,7 +412,6 @@ export function useThreadFileTabs({
   apps,
   threadId,
   environmentId,
-  threadType,
   storageFiles,
 }: UseThreadFileTabsParams) {
   const fixedPanelTabsState = useFixedPanelTabsState(threadId);
@@ -434,11 +420,8 @@ export function useThreadFileTabs({
     getThreadSecondaryPanelOpenAtom(threadId),
   );
   const recordRecentItem = useRecordThreadRecentItem(threadId);
-  const isThreadResolved = threadType !== undefined;
-  const isManagerThread = threadType === "manager";
-  const resolvedEnvironmentId = isThreadResolved
-    ? (environmentId ?? null)
-    : undefined;
+  const isThreadResolved = threadId !== null && threadId !== undefined;
+  const resolvedEnvironmentId = isThreadResolved ? environmentId : undefined;
   const applicationIds = useMemo(
     () => (apps ? new Set(apps.map((app) => app.applicationId)) : null),
     [apps],
@@ -467,30 +450,7 @@ export function useThreadFileTabs({
   }, [resolvedEnvironmentId, updateFixedPanelTabsState]);
 
   useEffect(() => {
-    if (!isThreadResolved) return;
-    if (isManagerThread) {
-      return;
-    }
-    updateFixedPanelTabsState((state) => {
-      const tabs = removeStorageTabs(state.secondary.tabs);
-      const activeTabId = isActiveTabStillOpen(
-        tabs,
-        state.secondary.activeTabId,
-      )
-        ? state.secondary.activeTabId
-        : null;
-      return setSecondaryTabs({
-        activeTabId,
-        isOpen: state.secondary.isOpen,
-        state,
-        tabs,
-      });
-    });
-  }, [isManagerThread, isThreadResolved, updateFixedPanelTabsState]);
-
-  useEffect(() => {
     if (!isThreadResolved || !storageFiles) return;
-    if (!isManagerThread) return;
     updateFixedPanelTabsState((state) => {
       const knownPaths = new Set(storageFiles.map((file) => file.path));
       const tabs = pruneStorageTabs(state.secondary.tabs, knownPaths);
@@ -508,7 +468,6 @@ export function useThreadFileTabs({
       });
     });
   }, [
-    isManagerThread,
     isThreadResolved,
     storageFiles,
     updateFixedPanelTabsState,
@@ -635,7 +594,6 @@ export function useThreadFileTabs({
 
   const openStorageFile = useCallback(
     (path: string) => {
-      if (!isManagerThread) return;
       setThreadSecondaryPanelOpen(true);
       recordRecentItem({ source: "thread-storage", path });
       const nextTab = createStorageTab(path);
@@ -657,7 +615,6 @@ export function useThreadFileTabs({
       });
     },
     [
-      isManagerThread,
       recordRecentItem,
       setThreadSecondaryPanelOpen,
       updateFixedPanelTabsState,
@@ -896,7 +853,6 @@ export function useThreadFileTabs({
 
   const closeStorageFileTab = useCallback(
     (path: string) => {
-      if (!isManagerThread) return;
       updateFixedPanelTabsState((state) => {
         const tab = findStorageFileTab(state.secondary.tabs, path);
         if (!tab) {
@@ -914,12 +870,11 @@ export function useThreadFileTabs({
         });
       });
     },
-    [isManagerThread, updateFixedPanelTabsState],
+    [updateFixedPanelTabsState],
   );
 
   const activateStorageFileTab = useCallback(
     (path: string) => {
-      if (!isManagerThread) return;
       if (findStorageFileTab(fixedPanelTabsState.secondary.tabs, path) === null) {
         return;
       }
@@ -942,7 +897,6 @@ export function useThreadFileTabs({
     },
     [
       fixedPanelTabsState.secondary.tabs,
-      isManagerThread,
       setThreadSecondaryPanelOpen,
       updateFixedPanelTabsState,
     ],
@@ -1041,14 +995,12 @@ export function useThreadFileTabs({
         return;
       }
 
-      if (!isManagerThread) return;
       setThreadSecondaryPanelOpen(true);
       recordRecentItem({ source: "thread-storage", path: selection.path });
       const nextTab = createStorageTab(selection.path);
       updateFixedPanelTabsState((state) => replaceNewTab({ nextTab, state }));
     },
     [
-      isManagerThread,
       recordRecentItem,
       resolvedEnvironmentId,
       setThreadSecondaryPanelOpen,
@@ -1082,7 +1034,6 @@ export function useThreadFileTabs({
   const orderedSecondaryFileTabs = buildOrderedSecondaryFileTabs({
     tabs: fixedPanelTabsState.secondary.tabs,
     resolvedEnvironmentId,
-    isManagerThread,
   });
   // Every open browser tab in insertion order. The secondary panel keeps a live
   // native view mounted for each one (only the active tab is shown), so the deck
@@ -1098,7 +1049,7 @@ export function useThreadFileTabs({
       ? activeTab
       : null;
   const activeStorageFileTab =
-    isManagerThread && activeTab?.kind === "thread-storage-file-preview"
+    activeTab?.kind === "thread-storage-file-preview"
       ? activeTab
       : null;
   const activeHostFileTab =

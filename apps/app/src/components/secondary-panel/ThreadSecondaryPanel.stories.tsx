@@ -170,14 +170,14 @@ export function Overview() {
   return (
     <StoryCard>
       <StoryRow
-        label="standard thread"
+        label="thread"
         hint="tab strip shows Info + Diff (Diff is exercised in the secondary-panel/Diff story)"
       >
         <ShellRow initialPanel="thread-info" />
       </StoryRow>
       <StoryRow
-        label="manager thread, info tab"
-        hint="no Diff for managers; workspace tree is rendered inside the info tab body"
+        label="parent thread, info tab"
+        hint="no Diff for this parent thread; workspace tree is rendered inside the info tab body"
       >
         <ShellRow initialPanel="thread-info" showGitDiffTab={false} />
       </StoryRow>
@@ -229,9 +229,9 @@ export function Overview() {
             "useGitDiffPanelState.ts",
             "api.ts",
             "ThreadDetailHeader.tsx",
-            "ManagerThreadStorageBrowser.tsx",
+            "ThreadStorageBrowser.tsx",
           ]}
-          initialActiveFilename="ManagerThreadStorageBrowser.tsx"
+          initialActiveFilename="ThreadStorageBrowser.tsx"
         />
       </StoryRow>
     </StoryCard>

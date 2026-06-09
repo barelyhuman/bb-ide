@@ -44,7 +44,6 @@ const PROJECT_PROMPT_HISTORY_THREAD_CHANGES = [
   "archived-changed",
 ] as const;
 const NON_PROJECT_PROMPT_HISTORY_THREAD_CHANGES = [
-  "manager-assignment-changed",
   "parent-changed",
   "read-state-changed",
   "title-changed",
@@ -222,15 +221,14 @@ describe("createRealtimeCacheEffects", () => {
     const globalActiveThreadListKey = threadListQueryKey({
       archived: false,
     });
-    const globalManagerThreadListKey = threadListQueryKey({
+    const globalRootThreadListKey = threadListQueryKey({
       archived: false,
-      type: "manager",
     });
     queryClient.setQueryData(firstProjectThreadListKey, []);
     queryClient.setQueryData(firstProjectArchivedThreadListKey, []);
     queryClient.setQueryData(secondProjectThreadListKey, []);
     queryClient.setQueryData(globalActiveThreadListKey, []);
-    queryClient.setQueryData(globalManagerThreadListKey, []);
+    queryClient.setQueryData(globalRootThreadListKey, []);
 
     effects.handleChanged({
       type: "changed",
@@ -253,7 +251,7 @@ describe("createRealtimeCacheEffects", () => {
       queryClient.getQueryState(globalActiveThreadListKey)?.isInvalidated,
     ).toBe(true);
     expect(
-      queryClient.getQueryState(globalManagerThreadListKey)?.isInvalidated,
+      queryClient.getQueryState(globalRootThreadListKey)?.isInvalidated,
     ).toBe(true);
     expect(
       queryClient.getQueryState(secondProjectThreadListKey)?.isInvalidated,
@@ -290,19 +288,19 @@ describe("createRealtimeCacheEffects", () => {
     effects.dispose();
   });
 
-  it("refetches active manager order lists without refetching managed child lists for order changes", async () => {
+  it("refetches active root thread lists without refetching child lists for order changes", async () => {
     vi.useFakeTimers();
     const { effects, queryClient } = createRealtimeEffectsTestContext();
     const activeProjectThreadListKey = threadListQueryKey({
       projectId: "project-1",
       archived: false,
     });
-    const managerThreadListKey = threadListQueryKey({
+    const rootThreadListKey = threadListQueryKey({
       projectId: "project-1",
+      hasParent: false,
       archived: false,
-      type: "manager",
     });
-    const managedChildThreadListKey = threadListQueryKey({
+    const childThreadListKey = threadListQueryKey({
       projectId: "project-1",
       parentThreadId: "thr_1",
       archived: false,
@@ -310,38 +308,38 @@ describe("createRealtimeCacheEffects", () => {
     const globalActiveThreadListKey = threadListQueryKey({
       archived: false,
     });
-    const globalManagerThreadListKey = threadListQueryKey({
+    const globalRootThreadListKey = threadListQueryKey({
       archived: false,
-      type: "manager",
+      hasParent: false,
     });
     const archivedThreadListKey = archivedThreadsListQueryKey({
       kind: "all",
       projectId: "project-1",
     });
     queryClient.setQueryData(activeProjectThreadListKey, []);
-    queryClient.setQueryData(managerThreadListKey, []);
-    queryClient.setQueryData(managedChildThreadListKey, []);
+    queryClient.setQueryData(rootThreadListKey, []);
+    queryClient.setQueryData(childThreadListKey, []);
     queryClient.setQueryData(globalActiveThreadListKey, []);
-    queryClient.setQueryData(globalManagerThreadListKey, []);
+    queryClient.setQueryData(globalRootThreadListKey, []);
     queryClient.setQueryData(archivedThreadListKey, []);
     const activeProjectThreadListQueryFn = vi.fn(async () => []);
-    const managerThreadListQueryFn = vi.fn(async () => []);
-    const managedChildThreadListQueryFn = vi.fn(async () => []);
+    const rootThreadListQueryFn = vi.fn(async () => []);
+    const childThreadListQueryFn = vi.fn(async () => []);
     const globalActiveThreadListQueryFn = vi.fn(async () => []);
-    const globalManagerThreadListQueryFn = vi.fn(async () => []);
+    const globalRootThreadListQueryFn = vi.fn(async () => []);
     const activeProjectThreadListObserver = new QueryObserver(queryClient, {
       queryKey: activeProjectThreadListKey,
       queryFn: activeProjectThreadListQueryFn,
       staleTime: Infinity,
     });
-    const managerThreadListObserver = new QueryObserver(queryClient, {
-      queryKey: managerThreadListKey,
-      queryFn: managerThreadListQueryFn,
+    const rootThreadListObserver = new QueryObserver(queryClient, {
+      queryKey: rootThreadListKey,
+      queryFn: rootThreadListQueryFn,
       staleTime: Infinity,
     });
-    const managedChildThreadListObserver = new QueryObserver(queryClient, {
-      queryKey: managedChildThreadListKey,
-      queryFn: managedChildThreadListQueryFn,
+    const childThreadListObserver = new QueryObserver(queryClient, {
+      queryKey: childThreadListKey,
+      queryFn: childThreadListQueryFn,
       staleTime: Infinity,
     });
     const globalActiveThreadListObserver = new QueryObserver(queryClient, {
@@ -349,27 +347,27 @@ describe("createRealtimeCacheEffects", () => {
       queryFn: globalActiveThreadListQueryFn,
       staleTime: Infinity,
     });
-    const globalManagerThreadListObserver = new QueryObserver(queryClient, {
-      queryKey: globalManagerThreadListKey,
-      queryFn: globalManagerThreadListQueryFn,
+    const globalRootThreadListObserver = new QueryObserver(queryClient, {
+      queryKey: globalRootThreadListKey,
+      queryFn: globalRootThreadListQueryFn,
       staleTime: Infinity,
     });
     const unsubscribeActiveProjectThreadList =
       activeProjectThreadListObserver.subscribe(() => {});
-    const unsubscribeManagerThreadList = managerThreadListObserver.subscribe(
+    const unsubscribeRootThreadList = rootThreadListObserver.subscribe(
       () => {},
     );
-    const unsubscribeManagedChildThreadList =
-      managedChildThreadListObserver.subscribe(() => {});
+    const unsubscribeChildThreadList =
+      childThreadListObserver.subscribe(() => {});
     const unsubscribeGlobalActiveThreadList =
       globalActiveThreadListObserver.subscribe(() => {});
-    const unsubscribeGlobalManagerThreadList =
-      globalManagerThreadListObserver.subscribe(() => {});
+    const unsubscribeGlobalRootThreadList =
+      globalRootThreadListObserver.subscribe(() => {});
     activeProjectThreadListQueryFn.mockClear();
-    managerThreadListQueryFn.mockClear();
-    managedChildThreadListQueryFn.mockClear();
+    rootThreadListQueryFn.mockClear();
+    childThreadListQueryFn.mockClear();
     globalActiveThreadListQueryFn.mockClear();
-    globalManagerThreadListQueryFn.mockClear();
+    globalRootThreadListQueryFn.mockClear();
 
     effects.handleChanged({
       type: "changed",
@@ -381,19 +379,19 @@ describe("createRealtimeCacheEffects", () => {
     await vi.advanceTimersByTimeAsync(50);
 
     expect(activeProjectThreadListQueryFn).toHaveBeenCalledTimes(1);
-    expect(managerThreadListQueryFn).toHaveBeenCalledTimes(1);
+    expect(rootThreadListQueryFn).toHaveBeenCalledTimes(1);
     expect(globalActiveThreadListQueryFn).toHaveBeenCalledTimes(1);
-    expect(globalManagerThreadListQueryFn).toHaveBeenCalledTimes(1);
-    expect(managedChildThreadListQueryFn).not.toHaveBeenCalled();
+    expect(globalRootThreadListQueryFn).toHaveBeenCalledTimes(1);
+    expect(childThreadListQueryFn).not.toHaveBeenCalled();
     expect(
       queryClient.getQueryState(archivedThreadListKey)?.isInvalidated,
     ).not.toBe(true);
 
     unsubscribeActiveProjectThreadList();
-    unsubscribeManagerThreadList();
-    unsubscribeManagedChildThreadList();
+    unsubscribeRootThreadList();
+    unsubscribeChildThreadList();
     unsubscribeGlobalActiveThreadList();
-    unsubscribeGlobalManagerThreadList();
+    unsubscribeGlobalRootThreadList();
     effects.dispose();
   });
 
@@ -881,7 +879,7 @@ describe("createRealtimeCacheEffects", () => {
     effects.dispose();
   });
 
-  it("invalidates thread list and detail but not timeline for manager assignment changes", () => {
+  it("invalidates thread list and detail but not timeline for parent changes", () => {
     vi.useFakeTimers();
     const { effects, queryClient } = createRealtimeEffectsTestContext();
     const threadKey = threadQueryKey("thr_1");
@@ -913,7 +911,7 @@ describe("createRealtimeCacheEffects", () => {
       entity: "thread",
       id: "thr_1",
       metadata: { projectId: "project-1" },
-      changes: ["manager-assignment-changed"],
+      changes: ["parent-changed"],
     });
     vi.advanceTimersByTime(50);
 

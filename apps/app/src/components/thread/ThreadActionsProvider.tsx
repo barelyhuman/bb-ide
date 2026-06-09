@@ -12,7 +12,7 @@ import { appToast } from "@/components/ui/app-toast";
 import type { Thread } from "@bb/domain";
 import {
   useArchiveThread,
-  useArchiveManagerThreads,
+  useArchiveThreadAndChildren,
   useDeleteThread,
   useMarkThreadRead,
   useMarkThreadUnread,
@@ -21,14 +21,14 @@ import {
   useUnpinThread,
   useUpdateThread,
 } from "@/hooks/mutations/thread-state-mutations";
-import { getThreadAssignedChildSummary } from "@/lib/api";
+import { getThreadChildSummary } from "@/lib/api";
 import { useAppRoute } from "@/hooks/useAppRoute";
 import { useDialogState } from "@/hooks/useDialogState";
 import {
   getMutationErrorMessage,
   shouldShowMutationErrorToast,
 } from "@/lib/mutation-errors";
-import { getThreadDisplayTitle, threadTypeLabel } from "@/lib/thread-title";
+import { getThreadDisplayTitle } from "@/lib/thread-title";
 import {
   ThreadRenameDialog,
   type ThreadRenameDialogTarget,
@@ -44,7 +44,7 @@ import { getDesktopBrowserApi } from "@/lib/bb-desktop";
 import { useSetRootComposeProjectId } from "@/lib/root-compose-selection";
 
 export interface ThreadActionsContextValue {
-  archiveAllAssigned: (thread: Thread) => void;
+  archiveAllChildren: (thread: Thread) => void;
   requestRename: (thread: Thread) => void;
   requestDelete: (thread: Thread) => void;
   toggleArchive: (thread: Thread) => void;
@@ -71,23 +71,23 @@ interface ThreadActionsProviderProps {
 }
 
 interface DeleteThreadActionRequest {
+  childThreadsConfirmed: boolean;
   closeDialog: () => void;
-  managerChildThreadsConfirmed: boolean;
   thread: Thread;
 }
 
 interface ThreadActionContext {
-  assignedChildCount: number;
+  childThreadCount: number;
 }
 
 function formatArchiveAllSuccessMessage(archivedThreadCount: number): string {
   if (archivedThreadCount <= 1) {
-    return "Archived manager";
+    return "Archived thread";
   }
-  const assignedThreadCount = archivedThreadCount - 1;
-  return assignedThreadCount === 1
-    ? "Archived manager and 1 assigned thread"
-    : `Archived manager and ${assignedThreadCount} assigned threads`;
+  const childThreadCount = archivedThreadCount - 1;
+  return childThreadCount === 1
+    ? "Archived thread and 1 child thread"
+    : `Archived thread and ${childThreadCount} child threads`;
 }
 
 export function ThreadActionsProvider({
@@ -97,7 +97,7 @@ export function ThreadActionsProvider({
   const setRootComposeProjectId = useSetRootComposeProjectId();
   const { threadId: viewedThreadId } = useAppRoute();
   const archiveThread = useArchiveThread();
-  const archiveManagerThreads = useArchiveManagerThreads();
+  const archiveThreadAndChildren = useArchiveThreadAndChildren();
   const unarchiveThread = useUnarchiveThread();
   const markThreadRead = useMarkThreadRead();
   const markThreadUnread = useMarkThreadUnread();
@@ -111,7 +111,7 @@ export function ThreadActionsProvider({
   // identities on every isPending flip and force every useThreadActions()
   // consumer to re-render whenever any mutation fires.
   const { mutate: archiveMutate } = archiveThread;
-  const { mutate: archiveManagerThreadsMutate } = archiveManagerThreads;
+  const { mutate: archiveThreadAndChildrenMutate } = archiveThreadAndChildren;
   const { mutate: unarchiveMutate } = unarchiveThread;
   const { mutate: markReadMutate } = markThreadRead;
   const { mutate: markUnreadMutate } = markThreadUnread;
@@ -150,7 +150,6 @@ export function ThreadActionsProvider({
       openRenameDialog({
         id: thread.id,
         currentTitle: getThreadDisplayTitle(thread),
-        threadType: thread.type,
       });
     },
     [openRenameDialog],
@@ -179,14 +178,11 @@ export function ThreadActionsProvider({
       signal: AbortSignal,
     ): Promise<ThreadActionContext | null> => {
       try {
-        const childSummary =
-          thread.type === "manager"
-            ? await getThreadAssignedChildSummary(thread.id, signal)
-            : null;
+        const childSummary = await getThreadChildSummary(thread.id, signal);
         if (signal.aborted) return null;
 
         return {
-          assignedChildCount: childSummary?.nonDeletedAssignedChildCount ?? 0,
+          childThreadCount: childSummary?.nonDeletedChildCount ?? 0,
         };
       } catch (error) {
         if (signal.aborted) return null;
@@ -215,23 +211,23 @@ export function ThreadActionsProvider({
   function buildDialogTargetFromContext<T extends { thread: Thread }>(
     base: T,
     context: ThreadActionContext,
-  ): T & { assignedChildCount?: number } {
+  ): T & { childThreadCount?: number } {
     return {
       ...base,
-      ...(context.assignedChildCount > 0
-        ? { assignedChildCount: context.assignedChildCount }
+      ...(context.childThreadCount > 0
+        ? { childThreadCount: context.childThreadCount }
         : {}),
     };
   }
 
   const performDelete = useCallback(
     ({
+      childThreadsConfirmed,
       closeDialog,
-      managerChildThreadsConfirmed,
       thread,
     }: DeleteThreadActionRequest) => {
       deleteMutate(
-        { id: thread.id, managerChildThreadsConfirmed },
+        { id: thread.id, childThreadsConfirmed },
         {
           onSuccess: () => {
             destroyPersistedBrowserViewsForThread({
@@ -267,8 +263,8 @@ export function ThreadActionsProvider({
   const confirmDelete = useCallback(
     (target: ThreadDeleteDialogTarget) => {
       performDelete({
+        childThreadsConfirmed: target.childThreadCount !== undefined,
         closeDialog: closeDeleteDialog,
-        managerChildThreadsConfirmed: target.assignedChildCount !== undefined,
         thread: target.thread,
       });
     },
@@ -279,7 +275,7 @@ export function ThreadActionsProvider({
     appToast.error(
       getMutationErrorMessage({
         error,
-        fallbackMessage: `Failed to archive ${threadTypeLabel(thread.type)}`,
+        fallbackMessage: "Failed to archive thread",
         lifecycleOperation: "archive_thread",
       }),
     );
@@ -321,9 +317,9 @@ export function ThreadActionsProvider({
     [archiveWithUndoToast, unarchiveMutate],
   );
 
-  const archiveAllAssigned = useCallback(
+  const archiveAllChildren = useCallback(
     (thread: Thread) => {
-      archiveManagerThreadsMutate(
+      archiveThreadAndChildrenMutate(
         { id: thread.id },
         {
           onSuccess: (response) => {
@@ -342,7 +338,7 @@ export function ThreadActionsProvider({
             appToast.error(
               getMutationErrorMessage({
                 error,
-                fallbackMessage: "Failed to archive manager threads",
+                fallbackMessage: "Failed to archive thread and children",
                 lifecycleOperation: "archive_thread",
               }),
             );
@@ -351,7 +347,7 @@ export function ThreadActionsProvider({
       );
     },
     [
-      archiveManagerThreadsMutate,
+      archiveThreadAndChildrenMutate,
       navigate,
       setRootComposeProjectId,
       viewedThreadId,
@@ -402,13 +398,13 @@ export function ThreadActionsProvider({
     () => ({
       requestRename,
       requestDelete,
-      archiveAllAssigned,
+      archiveAllChildren,
       toggleArchive,
       togglePin,
       toggleRead,
     }),
     [
-      archiveAllAssigned,
+      archiveAllChildren,
       requestRename,
       requestDelete,
       toggleArchive,

@@ -207,7 +207,7 @@ vi.mock("./ThreadTimelinePane", () => ({
 
 const noop = () => {};
 
-function noopAssignManager(_parentThreadId: string | null): void {}
+function noopAssignParent(_parentThreadId: string | null): void {}
 
 function noopBranchChange(_branch: string): void {}
 
@@ -222,7 +222,6 @@ function makeThread(): Thread {
     environmentId: "env_test",
     automationId: null,
     providerId: "openai",
-    type: "standard",
     title: "Test thread",
     titleFallback: null,
     status: "idle",
@@ -264,8 +263,8 @@ function buildSecondaryContentProps({
       thread: makeThread(),
       projectId: "proj_test",
       parentThreadDisplayName: null,
-      managerThreads: [],
-      canAssignToManager: false,
+      parentThreads: [],
+      canAssignToParent: false,
       canTakeOverThread: false,
       environment: null,
       workspaceStatus: undefined,
@@ -275,7 +274,7 @@ function buildSecondaryContentProps({
       isLoadingMergeBaseBranchOptions: false,
       threadSchedules: [],
       updateThreadPending: false,
-      onAssignManager: noopAssignManager,
+      onAssignParent: noopAssignParent,
       onMergeBaseBranchChange: noopBranchChange,
     },
     secondaryPanel: {

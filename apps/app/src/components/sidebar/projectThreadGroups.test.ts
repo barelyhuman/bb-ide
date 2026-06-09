@@ -21,7 +21,6 @@ function createThread(
     environmentId: null,
     automationId: null,
     providerId: "codex",
-    type: "standard",
     title: "Thread",
     titleFallback: "Thread",
     status: "idle",
@@ -95,7 +94,6 @@ describe("buildProjectThreadGroups", () => {
     const rootItems = buildProjectThreadGroups([
       createThread({
         id: "manager-root",
-        type: "manager",
         createdAt: 10,
       }),
       createThread({
@@ -110,7 +108,6 @@ describe("buildProjectThreadGroups", () => {
       }),
       createThread({
         id: "manager-grandchild",
-        type: "manager",
         parentThreadId: "standard-grandchild",
         createdAt: 40,
       }),
@@ -308,7 +305,7 @@ describe("buildProjectThreadGroups", () => {
     });
   });
 
-  it("preserves top-level manager roots in server order before other roots", () => {
+  it("sorts top-level manager roots with the regular root ordering", () => {
     const rootItems = buildProjectThreadGroups([
       createThread({
         id: "root-thread",
@@ -317,22 +314,20 @@ describe("buildProjectThreadGroups", () => {
       }),
       createThread({
         id: "manager-old",
-        type: "manager",
         createdAt: 10,
         latestAttentionAt: 10,
       }),
       createThread({
         id: "manager-new",
-        type: "manager",
         createdAt: 20,
         latestAttentionAt: 20,
       }),
     ]);
 
     expect(summarizeItems(rootItems)).toEqual([
-      "manager-old",
-      "manager-new",
       "root-thread",
+      "manager-new",
+      "manager-old",
     ]);
   });
 });

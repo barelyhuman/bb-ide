@@ -52,7 +52,6 @@ function makeThread(overrides: ThreadOverrides = {}): ThreadWithRuntime {
     stopRequestedAt: null,
     title: "Thread title",
     titleFallback: "Thread title",
-    type: "standard",
     updatedAt: 1,
     ...overrides,
   };

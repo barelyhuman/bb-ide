@@ -34,7 +34,7 @@ type EnvironmentMap = Record<string, string>;
 // pair must not inherit it: BB_THREAD_STORAGE in particular points at the parent
 // thread's own storage subdirectory, which the daemon would otherwise adopt as
 // its storage root and diverge from the server's data-dir-derived path, breaking
-// manager thread.start with "Thread storage path escapes the storage root".
+// thread.start with "Thread storage path escapes the storage root".
 const STANDALONE_THREAD_CONTEXT_ENV = [
   "BB_THREAD_ID",
   "BB_ENVIRONMENT_ID",

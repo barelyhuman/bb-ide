@@ -145,7 +145,7 @@ function PromptMentionPill({
   }
 
   // Timeline path mentions are workspace/thread-storage-relative resources.
-  // Opening them needs the same environment and manager-thread storage context
+  // Opening them needs the same environment and thread-storage context
   // the composer resolver owns, so they are intentionally display-only here.
   // Thread mentions without project context are also display-only; linking
   // through the current page project can misroute cross-project mentions.

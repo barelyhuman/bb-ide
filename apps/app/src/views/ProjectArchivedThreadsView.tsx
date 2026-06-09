@@ -20,18 +20,16 @@ interface FilterOption {
 
 const FILTER_OPTIONS: readonly FilterOption[] = [
   { value: "all", label: "All" },
-  { value: "manager", label: "Managers" },
-  { value: "managed", label: "Managed" },
-  { value: "unmanaged", label: "Unmanaged" },
+  { value: "root", label: "Root" },
+  { value: "child", label: "Children" },
 ];
 
-type ArchivedThreadPillLabel = "managed" | "manager";
+type ArchivedThreadPillLabel = "child";
 
 function getArchivedThreadPillLabel(
   thread: ThreadListEntry,
 ): ArchivedThreadPillLabel | null {
-  if (thread.type === "manager") return "manager";
-  if (thread.parentThreadId !== null) return "managed";
+  if (thread.parentThreadId !== null) return "child";
   return null;
 }
 
@@ -140,7 +138,6 @@ export function ProjectArchivedThreadsView() {
                       onUnarchive={() => {
                         unarchiveThread.mutate({ id: thread.id });
                       }}
-                      threadType={thread.type}
                       className="hover:bg-accent-foreground/15"
                     />
                   </div>

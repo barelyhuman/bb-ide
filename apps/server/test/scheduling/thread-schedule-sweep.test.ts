@@ -3,6 +3,7 @@ import {
   createThreadSchedule,
   events,
   getThreadSchedule,
+  setThreadExecutionOverride,
   threads,
   threadSchedules,
 } from "@bb/db";
@@ -33,7 +34,6 @@ interface SeedRunnableThreadArgs {
   projectId: string;
   status?: "active" | "idle";
   turnId?: string;
-  type?: "manager" | "standard";
 }
 
 function seedRunnableThread(args: SeedRunnableThreadArgs) {
@@ -43,7 +43,6 @@ function seedRunnableThread(args: SeedRunnableThreadArgs) {
     environmentId: args.environmentId,
     providerId: args.providerId,
     status,
-    type: args.type ?? "standard",
   });
   seedEvent(args.harness.deps, {
     threadId: thread.id,
@@ -94,7 +93,6 @@ interface SeedDueThreadScheduleFixtureArgs {
   hostId: string;
   providerId?: string;
   status?: "active" | "idle";
-  threadType?: "manager" | "standard";
 }
 
 function seedDueThreadScheduleFixture(args: SeedDueThreadScheduleFixtureArgs) {
@@ -115,7 +113,6 @@ function seedDueThreadScheduleFixture(args: SeedDueThreadScheduleFixtureArgs) {
     projectId: project.id,
     providerId: args.providerId,
     status: args.status,
-    type: args.threadType,
   });
   const now = Date.now();
   const schedule = createThreadSchedule(args.harness.db, args.harness.hub, {
@@ -449,14 +446,17 @@ describe("thread schedule sweep", () => {
     });
   });
 
-  it("skip-advances without firing when runtime preparation fails", async () => {
+  it("skip-advances without firing when execution options are invalid", async () => {
     await withTestHarness(async (harness) => {
       const { now, schedule, thread } = seedDueThreadScheduleFixture({
         harness,
-        hostId: "host-thread-schedule-runtime-failure",
-        environmentPath: "/tmp/thread-schedule-runtime-failure-environment",
-        providerId: "unsupported-provider",
-        threadType: "manager",
+        hostId: "host-thread-schedule-invalid-execution",
+        environmentPath: "/tmp/thread-schedule-invalid-execution-environment",
+      });
+      setThreadExecutionOverride(harness.db, {
+        threadId: thread.id,
+        modelOverride: "gpt-5",
+        reasoningLevelOverride: "max",
       });
 
       await sweepDueThreadSchedules(harness.deps, { now });

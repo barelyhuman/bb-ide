@@ -14,10 +14,10 @@ vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
   return {
     ...actual,
-    archiveManagerThreads: vi.fn(),
+    archiveThreadAndChildren: vi.fn(),
     archiveThread: vi.fn(),
     deleteThread: vi.fn(),
-    getThreadAssignedChildSummary: vi.fn(),
+    getThreadChildSummary: vi.fn(),
     markThreadRead: vi.fn(),
     markThreadUnread: vi.fn(),
     pinThread: vi.fn(),
@@ -47,7 +47,6 @@ function makeThread(
     status: "idle",
     title: "Thread title",
     titleFallback: "Thread title",
-    type: "standard",
     updatedAt: 10,
     runtime: {
       displayStatus: "idle",
@@ -70,7 +69,7 @@ function renderMenu(thread: ThreadWithRuntime) {
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
           <ThreadActionsProvider>
-            <ThreadActionsMenu thread={thread} showManagerArchiveAll />
+            <ThreadActionsMenu thread={thread} showArchiveAll />
           </ThreadActionsProvider>
         </MemoryRouter>
       </QueryClientProvider>
@@ -79,18 +78,18 @@ function renderMenu(thread: ThreadWithRuntime) {
 }
 
 describe("ThreadActionsMenu", () => {
-  it("shows manager-specific archive actions when requested", async () => {
-    renderMenu(makeThread({ type: "manager" }));
+  it("shows archive-all actions when requested", async () => {
+    renderMenu(makeThread());
 
     fireEvent.pointerDown(
-      screen.getByRole("button", { name: "Manager actions" }),
+      screen.getByRole("button", { name: "Thread actions" }),
       {
         button: 0,
         ctrlKey: false,
       },
     );
 
-    expect(await screen.findByText("Archive Manager")).toBeTruthy();
-    expect(screen.getByText("Archive All")).toBeTruthy();
+    expect(await screen.findByText("Archive thread")).toBeTruthy();
+    expect(screen.getByText("Archive all")).toBeTruthy();
   });
 });

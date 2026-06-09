@@ -92,7 +92,6 @@ interface ThreadRowProps {
 interface ThreadParentChevronProps {
   isCollapsed: boolean;
   onToggle: () => void;
-  showManagerIcon: boolean;
   threadTitle: string;
 }
 
@@ -110,7 +109,6 @@ interface ThreadRowContainerArgs {
 function ThreadParentChevron({
   isCollapsed,
   onToggle,
-  showManagerIcon,
   threadTitle,
 }: ThreadParentChevronProps) {
   const chevronClassName = cn(
@@ -146,64 +144,15 @@ function ThreadParentChevron({
           COARSE_POINTER_ICON_SIZE_CLASS,
         )}
       >
-        {showManagerIcon ? (
-          <>
-            <span
-              data-manager-leading-icon=""
-              className={cn(
-                "absolute inline-flex items-center justify-center opacity-100 transition-opacity duration-150 group-hover/thread-row:opacity-0 group-has-[:focus-visible]/thread-row:opacity-0",
-                COARSE_POINTER_ICON_SIZE_CLASS,
-              )}
-              aria-hidden="true"
-            >
-              <Icon
-                name="UserRound"
-                className={COARSE_POINTER_ICON_SIZE_CLASS}
-                aria-hidden="true"
-              />
-            </span>
-            <span
-              data-thread-collapse-indicator=""
-              className={cn(
-                "absolute opacity-0 group-hover/thread-row:opacity-100 group-has-[:focus-visible]/thread-row:opacity-100",
-                chevronClassName,
-              )}
-              aria-hidden="true"
-            >
-              <Icon
-                name="ChevronRight"
-                className={COARSE_POINTER_ICON_SIZE_CLASS}
-                aria-hidden="true"
-              />
-            </span>
-          </>
-        ) : (
-          <span className={chevronClassName} aria-hidden="true">
-            <Icon
-              name="ChevronRight"
-              className={COARSE_POINTER_ICON_SIZE_CLASS}
-              aria-hidden="true"
-            />
-          </span>
-        )}
+        <span className={chevronClassName} aria-hidden="true">
+          <Icon
+            name="ChevronRight"
+            className={COARSE_POINTER_ICON_SIZE_CLASS}
+            aria-hidden="true"
+          />
+        </span>
       </span>
     </button>
-  );
-}
-
-function ManagerLeadingIcon() {
-  return (
-    <span
-      data-manager-leading-icon=""
-      className={cn(SIDEBAR_ROW_GLYPH_SLOT_CLASS, COARSE_POINTER_GLYPH_BOX_CLASS)}
-      aria-hidden="true"
-    >
-      <Icon
-        name="UserRound"
-        className={COARSE_POINTER_ICON_SIZE_CLASS}
-        aria-hidden="true"
-      />
-    </span>
   );
 }
 
@@ -395,7 +344,6 @@ function ThreadRowComponent({
   const showUnreadBadge = !hasPendingInteraction && isUnreadDoneThread(thread);
   const threadTitle = getThreadDisplayTitle(thread);
   const parentOptions = options.kind === "parent" ? options : null;
-  const isManager = thread.type === "manager";
   const isParentRow = parentOptions !== null;
   const isParentCollapsed = parentOptions?.isCollapsed ?? false;
   const childCount = parentOptions?.childCount ?? 0;
@@ -484,11 +432,8 @@ function ThreadRowComponent({
           onToggle={() => {
             parentOptions.onToggleCollapsed(thread.id);
           }}
-          showManagerIcon={isManager}
           threadTitle={threadTitle}
         />
-      ) : isManager ? (
-        <ManagerLeadingIcon />
       ) : null}
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="min-w-0 truncate">{threadTitle}</span>
@@ -530,7 +475,7 @@ function ThreadRowComponent({
           >
             <ThreadActionsMenu
               thread={thread}
-              showManagerArchiveAll={isManager && hasChildren}
+              showArchiveAll={hasChildren}
               triggerClassName={cn(
                 "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
                 COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
@@ -555,7 +500,7 @@ function ThreadRowComponent({
   return (
     <ThreadActionsContextMenu
       thread={thread}
-      showManagerArchiveAll={isManager && hasChildren}
+      showArchiveAll={hasChildren}
       onOpenChange={setIsContextActionsOpen}
     >
       {row}

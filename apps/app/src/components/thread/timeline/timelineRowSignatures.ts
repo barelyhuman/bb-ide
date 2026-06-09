@@ -280,20 +280,20 @@ function computeTimelineRowRenderSignature(row: ThreadTimelineViewRow): string {
           row.status,
           row.systemKind,
           row.operationKind,
-          row.operationKind === "manager-assignment"
-            ? row.managerAssignment.action
+          row.operationKind === "parent-change"
+            ? row.parentChange.action
             : null,
-          row.operationKind === "manager-assignment"
-            ? row.managerAssignment.previousManagerThreadId
+          row.operationKind === "parent-change"
+            ? row.parentChange.previousParentThreadId
             : null,
-          row.operationKind === "manager-assignment"
-            ? row.managerAssignment.previousManagerThreadTitle
+          row.operationKind === "parent-change"
+            ? row.parentChange.previousParentThreadTitle
             : null,
-          row.operationKind === "manager-assignment"
-            ? row.managerAssignment.nextManagerThreadId
+          row.operationKind === "parent-change"
+            ? row.parentChange.nextParentThreadId
             : null,
-          row.operationKind === "manager-assignment"
-            ? row.managerAssignment.nextManagerThreadTitle
+          row.operationKind === "parent-change"
+            ? row.parentChange.nextParentThreadTitle
             : null,
           row.title,
           row.detail,

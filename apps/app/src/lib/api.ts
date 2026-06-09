@@ -6,13 +6,11 @@ import type {
   ProjectExecutionDefaults,
   ProjectSource,
   ResolvedThreadExecutionOptions,
-  ThreadType,
   ThreadQueuedMessage,
   WorkspaceDiffTarget,
 } from "@bb/domain";
 import type {
   AutomationsOverviewResponse,
-  CreateManagerThreadRequest,
   CreateProjectSourceRequest,
   CreateProjectRequest,
   CreateQueuedMessageRequest,
@@ -25,14 +23,12 @@ import type {
   EnvironmentDiffFileQuery,
   EnvironmentDiffFileResponse,
   EnvironmentStatusResponse,
-  ManagerArchiveThreadsResponse,
   CreateThreadRequest,
   CreateThreadTerminalRequest,
   ProjectBranchesResponse,
   ProjectResponse,
   SidebarBootstrapResponse,
   PromptHistoryResponse,
-  ReorderManagerThreadRequest,
   ReorderPinnedThreadRequest,
   ReorderProjectRequest,
   ReorderQueuedMessageRequest,
@@ -45,7 +41,8 @@ import type {
   SystemVersionResponse,
   TimelinePaginationCursor,
   SystemVoiceTranscriptionResponse,
-  ThreadAssignedChildSummaryResponse,
+  ThreadArchiveAllResponse,
+  ThreadChildSummaryResponse,
   ThreadComposerBootstrapResponse,
   ThreadPendingInteractionsResponse,
   ThreadQueuedMessageListResponse,
@@ -129,15 +126,10 @@ export interface EnvironmentBranchListRequest extends BranchListRequest {
 
 export type ProjectBranchListRequest = EnvironmentBranchListRequest;
 
-export type AppCreateManagerThreadRequest = Omit<
-  CreateManagerThreadRequest,
-  "origin"
->;
 export type AppCreateThreadRequest = Omit<CreateThreadRequest, "origin">;
 
 export interface GetProjectDefaultExecutionOptionsRequest {
   projectId: string;
-  threadType: ThreadType;
 }
 
 const HTML_DOCUMENT_PATTERN = /<!doctype html|<html[\s>]/i;
@@ -499,34 +491,6 @@ export async function createProject(
   return request<Project>(apiClient.projects.$post({ json: req }));
 }
 
-export async function hireProjectManager(
-  projectId: string,
-  options: AppCreateManagerThreadRequest,
-): Promise<ThreadResponse> {
-  return request<ThreadResponse>(
-    apiClient.projects[":id"].managers.$post({
-      param: { id: projectId },
-      json: {
-        ...options,
-        origin: "app",
-      },
-    }),
-  );
-}
-
-export async function reorderProjectManager(
-  projectId: string,
-  threadId: string,
-  req: ReorderManagerThreadRequest,
-): Promise<ThreadListResponse> {
-  return request<ThreadListResponse>(
-    apiClient.projects[":id"].managers[":threadId"].order.$patch({
-      param: { id: projectId, threadId },
-      json: req,
-    }),
-  );
-}
-
 export async function updateProject(
   id: string,
   req: UpdateProjectRequest,
@@ -579,7 +543,7 @@ export async function getProjectDefaultExecutionOptions(
   return request<ProjectExecutionDefaults | null>(
     apiClient.projects[":id"]["default-execution-options"].$get({
       param: { id: args.projectId },
-      query: { threadType: args.threadType },
+      query: {},
     }),
   );
 }
@@ -710,12 +674,10 @@ export async function createThread(
 
 export interface ThreadListFilters {
   projectId?: string;
-  type?: ThreadType;
   parentThreadId?: string;
+  hasParent?: boolean;
   /** App callers must choose active or archived; server omission intentionally means both. */
   archived: boolean;
-  /** When set, restrict to managed (true) or unmanaged (false) threads. */
-  managed?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -733,14 +695,13 @@ export async function listThreads(
       {
         query: {
           ...(filters.projectId ? { projectId: filters.projectId } : {}),
-          ...(filters.type ? { type: filters.type } : {}),
           ...(filters.parentThreadId
             ? { parentThreadId: filters.parentThreadId }
             : {}),
-          archived: toBooleanQueryValue(filters.archived),
-          ...(filters.managed !== undefined
-            ? { managed: toBooleanQueryValue(filters.managed) }
+          ...(filters.hasParent !== undefined
+            ? { hasParent: toBooleanQueryValue(filters.hasParent) }
             : {}),
+          archived: toBooleanQueryValue(filters.archived),
           ...(filters.limit !== undefined
             ? { limit: String(filters.limit) }
             : {}),
@@ -799,12 +760,12 @@ export async function getThreadWithEnvironmentHost(
   );
 }
 
-export async function getThreadAssignedChildSummary(
+export async function getThreadChildSummary(
   id: string,
   signal?: AbortSignal,
-): Promise<ThreadAssignedChildSummaryResponse> {
-  return request<ThreadAssignedChildSummaryResponse>(
-    apiClient.threads[":id"]["assigned-child-summary"].$get(
+): Promise<ThreadChildSummaryResponse> {
+  return request<ThreadChildSummaryResponse>(
+    apiClient.threads[":id"]["child-summary"].$get(
       { param: { id } },
       requestOptions(signal),
     ),
@@ -1175,10 +1136,10 @@ export async function archiveThread(id: string): Promise<void> {
   );
 }
 
-export async function archiveManagerThreads(
+export async function archiveThreadAndChildren(
   id: string,
-): Promise<ManagerArchiveThreadsResponse> {
-  return request<ManagerArchiveThreadsResponse>(
+): Promise<ThreadArchiveAllResponse> {
+  return request<ThreadArchiveAllResponse>(
     apiClient.threads[":id"]["archive-all"].$post({ param: { id } }),
   );
 }

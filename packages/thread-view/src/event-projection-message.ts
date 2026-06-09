@@ -108,8 +108,8 @@ export interface EventProjectionAssistantTextMessage extends EventProjectionMess
   kind: "assistant-text";
   text: string;
   status: Extract<EventProjectionMessageStatus, "streaming" | "completed">;
-  /** True when this message was delivered via the manager's `message_user` tool. */
-  isManagerUserMessage?: boolean;
+  /** True when this message came from a legacy persisted user-visible system event. */
+  isLegacyUserMessage?: boolean;
 }
 
 export type EventProjectionToolParsedIntent =
@@ -420,5 +420,4 @@ export interface BuildEventProjectionMessagesOptions {
   includeProviderUnhandledOperations?: boolean;
   systemClientRequestVisibility: SystemClientRequestVisibility;
   threadStatus?: Thread["status"];
-  threadType?: Thread["type"];
 }

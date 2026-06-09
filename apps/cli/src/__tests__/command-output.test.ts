@@ -193,7 +193,6 @@ function makeThread(
   },
 ): Thread {
   return {
-    type: "standard",
     status: "idle",
     title: null,
     titleFallback: null,
@@ -534,7 +533,7 @@ describe("CLI command output contracts", () => {
     const errorOutput = collectLogLines(vi.mocked(console.error)).join("\n");
     expect(errorOutput).toContain("Unknown guide chapter 'missing'");
     expect(errorOutput).toContain(
-      "Available: threads, environments, managers, app, providers, projects, styling, schedules, async.",
+      "Available: threads, environments, app, providers, projects, styling, schedules, async.",
     );
   });
 
@@ -761,461 +760,32 @@ describe("CLI command output contracts", () => {
     );
   });
 
-  it("bb manager hire posts to the project manager route", async () => {
-    const post = vi.fn(async () => ({
-      id: "thread-manager-1",
-      projectId: "project-123",
-      title: "Manager",
-      type: "manager",
-      status: "active",
-      createdAt: 1,
-      updatedAt: 2,
-    }));
-    createClientMock.mockReturnValue(
-      asServerClient({
-        api: {
-          v1: {
-            projects: {
-              ":id": {
-                managers: {
-                  $post: post,
-                },
-              },
-            },
-          },
-        },
-      }),
-    );
-
-    await runCommand(
-      [
-        "manager",
-        "hire",
-        "project-123",
-        "--name",
-        "Manager",
-        "--provider",
-        "claude-code",
-        "--model",
-        "claude-opus-4-7",
-        "--service-tier",
-        "fast",
-        "--reasoning-level",
-        "high",
-      ],
-      (program) => registerManagerCommands(program, () => "http://server"),
-    );
-
-    expect(post).toHaveBeenCalledWith({
-      param: { id: "project-123" },
-      json: {
-        environment: { type: "host", hostId: "host-test-001" },
-        origin: "cli",
-        model: "claude-opus-4-7",
-        name: "Manager",
-        providerId: "claude-code",
-        reasoningLevel: "high",
-        serviceTier: "fast",
-      },
-    });
-    expect(collectLogLines(vi.mocked(console.log))).toContain(
-      "Manager hired: thread-manager-1",
-    );
-  });
-
-  it("bb manager hire defaults to projectless when no project context is set", async () => {
-    const post = vi.fn(async () => ({
-      id: "thread-personal-manager",
-      projectId: PERSONAL_PROJECT_ID,
-      title: "Manager",
-      type: "manager",
-      status: "active",
-      createdAt: 1,
-      updatedAt: 2,
-    }));
-    createClientMock.mockReturnValue(
-      asServerClient({
-        api: {
-          v1: {
-            projects: {
-              ":id": {
-                managers: {
-                  $post: post,
-                },
-              },
-            },
-          },
-        },
-      }),
-    );
-
-    await runCommand(["manager", "hire", "--name", "Manager"], (program) =>
-      registerManagerCommands(program, () => "http://server"),
-    );
-
-    expect(post).toHaveBeenCalledWith({
-      param: { id: PERSONAL_PROJECT_ID },
-      json: {
-        environment: { type: "host", hostId: "host-test-001" },
-        name: "Manager",
-        origin: "cli",
-      },
-    });
-    expect(collectLogLines(vi.mocked(console.log))).toContain("  Project:  -");
-  });
-
-  it("bb manager hire prints the personal project as projectless when explicitly selected", async () => {
-    const post = vi.fn(async () => ({
-      id: "thread-personal-manager",
-      projectId: PERSONAL_PROJECT_ID,
-      title: "Manager",
-      type: "manager",
-      status: "active",
-      createdAt: 1,
-      updatedAt: 2,
-    }));
-    createClientMock.mockReturnValue(
-      asServerClient({
-        api: {
-          v1: {
-            projects: {
-              ":id": {
-                managers: {
-                  $post: post,
-                },
-              },
-            },
-          },
-        },
-      }),
-    );
-
-    await runCommand(
-      [
-        "manager",
-        "hire",
-        "--project",
-        PERSONAL_PROJECT_ID,
-        "--name",
-        "Manager",
-      ],
-      (program) => registerManagerCommands(program, () => "http://server"),
-    );
-
-    expect(post).toHaveBeenCalledWith({
-      param: { id: PERSONAL_PROJECT_ID },
-      json: {
-        environment: { type: "host", hostId: "host-test-001" },
-        name: "Manager",
-        origin: "cli",
-      },
-    });
-    expect(collectLogLines(vi.mocked(console.log))).toContain("  Project:  -");
-    expect(collectLogLines(vi.mocked(console.error)).join("\n")).not.toContain(
-      PERSONAL_PROJECT_ID,
-    );
-  });
-
-  it("bb manager hire prints a projectless context label when BB_PROJECT_ID is personal", async () => {
-    vi.stubEnv("BB_PROJECT_ID", PERSONAL_PROJECT_ID);
-    const post = vi.fn(async () => ({
-      id: "thread-personal-manager",
-      projectId: PERSONAL_PROJECT_ID,
-      title: "Manager",
-      type: "manager",
-      status: "active",
-      createdAt: 1,
-      updatedAt: 2,
-    }));
-    createClientMock.mockReturnValue(
-      asServerClient({
-        api: {
-          v1: {
-            projects: {
-              ":id": {
-                managers: {
-                  $post: post,
-                },
-              },
-            },
-          },
-        },
-      }),
-    );
-
-    await runCommand(["manager", "hire", "--name", "Manager"], (program) =>
-      registerManagerCommands(program, () => "http://server"),
-    );
-
-    expect(post).toHaveBeenCalledWith({
-      param: { id: PERSONAL_PROJECT_ID },
-      json: {
-        environment: { type: "host", hostId: "host-test-001" },
-        name: "Manager",
-        origin: "cli",
-      },
-    });
-    expect(collectLogLines(vi.mocked(console.log))).toContain("  Project:  -");
-    expect(collectLogLines(vi.mocked(console.error))).toEqual([
-      "Project - (from BB_PROJECT_ID)",
-    ]);
-  });
-
-  it("bb manager hire omits reasoning level when not provided", async () => {
-    const post = vi.fn(async () => ({
-      id: "thread-manager-2",
-      projectId: "project-123",
-      title: "Manager",
-      type: "manager",
-      status: "active",
-      createdAt: 1,
-      updatedAt: 2,
-    }));
-    createClientMock.mockReturnValue(
-      asServerClient({
-        api: {
-          v1: {
-            projects: {
-              ":id": {
-                managers: {
-                  $post: post,
-                },
-              },
-            },
-          },
-        },
-      }),
-    );
-
-    await runCommand(
-      [
-        "manager",
-        "hire",
-        "project-123",
-        "--name",
-        "Manager",
-        "--provider",
-        "claude-code",
-        "--model",
-        "claude-opus-4-7",
-      ],
-      (program) => registerManagerCommands(program, () => "http://server"),
-    );
-
-    expect(post).toHaveBeenCalledWith({
-      param: { id: "project-123" },
-      json: {
-        environment: { type: "host", hostId: "host-test-001" },
-        origin: "cli",
-        model: "claude-opus-4-7",
-        name: "Manager",
-        providerId: "claude-code",
-      },
-    });
-    expect(collectLogLines(vi.mocked(console.log))).toContain(
-      "Manager hired: thread-manager-2",
-    );
-  });
-
-  it("bb manager hire omits provider and model when the user relies on remembered manager defaults", async () => {
-    const post = vi.fn(async () => ({
-      id: "thread-manager-3",
-      projectId: "project-123",
-      title: "Manager",
-      type: "manager",
-      status: "active",
-      createdAt: 1,
-      updatedAt: 2,
-    }));
-    createClientMock.mockReturnValue(
-      asServerClient({
-        api: {
-          v1: {
-            projects: {
-              ":id": {
-                managers: {
-                  $post: post,
-                },
-              },
-            },
-          },
-        },
-      }),
-    );
-
-    await runCommand(
-      ["manager", "hire", "project-123", "--name", "Manager"],
-      (program) => registerManagerCommands(program, () => "http://server"),
-    );
-
-    expect(post).toHaveBeenCalledWith({
-      param: { id: "project-123" },
-      json: {
-        environment: { type: "host", hostId: "host-test-001" },
-        name: "Manager",
-        origin: "cli",
-      },
-    });
-    expect(collectLogLines(vi.mocked(console.log))).toContain(
-      "Manager hired: thread-manager-3",
-    );
-  });
-
-  it("bb manager hire help lists server-defaulted execution options", async () => {
-    const helpOutput = await getHelpOutput(["manager", "hire"], (program) =>
-      registerManagerCommands(program, () => "http://server"),
-    );
-
-    expect(helpOutput).not.toContain("--permission-mode <mode>");
-    expect(helpOutput).toContain("--service-tier <tier>");
-    expect(helpOutput).toMatch(
-      /remembered manager defaults or the server\s+manager policy/,
-    );
-  });
-
-  it("bb manager hire rejects permission mode options", async () => {
-    const program = new Command();
-    const writeErr = vi.fn();
-    program.exitOverride();
-    program.configureOutput({
-      writeOut: vi.fn(),
-      writeErr,
-    });
-    registerManagerCommands(program, () => "http://server");
-
+  it("bb manager exits with a parent-thread replacement message", async () => {
     await expect(
-      program.parseAsync([
-        "node",
-        "bb",
-        "manager",
-        "hire",
-        "project-123",
-        "--permission-mode",
-        "workspace-write",
-      ]),
-    ).rejects.toMatchObject({
-      code: "commander.unknownOption",
-    });
-    expect(
-      writeErr.mock.calls.map((callArgs) => String(callArgs[0] ?? "")).join(""),
-    ).toContain("error: unknown option '--permission-mode'");
+      runCommand(["manager"], (program) =>
+        registerManagerCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    const error = collectLogLines(vi.mocked(console.error)).join("\n");
+    expect(error).toContain(
+      "Manager threads were replaced by parent threads.",
+    );
+    expect(error).toContain("bb thread spawn --parent-thread <id>");
   });
 
-  it("bb manager list reports when no managers are hired", async () => {
-    const list = vi.fn(async () => []);
-    createClientMock.mockReturnValue(
-      asServerClient({
-        api: {
-          v1: {
-            threads: {
-              $get: list,
-            },
-          },
-        },
-      }),
+  it("bb manager subcommands exit with the same replacement message", async () => {
+    await expect(
+      runCommand(["manager", "list", "project-123"], (program) =>
+        registerManagerCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    const error = collectLogLines(vi.mocked(console.error)).join("\n");
+    expect(error).toContain(
+      "Manager threads were replaced by parent threads.",
     );
-
-    await runCommand(["manager", "list", "project-123"], (program) =>
-      registerManagerCommands(program, () => "http://server"),
-    );
-
-    expect(list).toHaveBeenCalledWith({
-      query: { projectId: "project-123", type: "manager" },
-    });
-    expect(collectLogLines(vi.mocked(console.log))).toContain(
-      "No managers hired",
-    );
-  });
-
-  it("bb manager list renders the shared borderless table", async () => {
-    const list = vi.fn(async () => [
-      makeThread({
-        id: "thread-manager-1",
-        projectId: "project-123",
-        providerId: "codex",
-        title: "Manager",
-        type: "manager",
-        status: "active",
-        createdAt: 1,
-        updatedAt: 2,
-      }),
-    ]);
-    createClientMock.mockReturnValue(
-      asServerClient({
-        api: {
-          v1: {
-            threads: {
-              $get: list,
-            },
-          },
-        },
-      }),
-    );
-
-    await runCommand(["manager", "list", "project-123"], (program) =>
-      registerManagerCommands(program, () => "http://server"),
-    );
-
-    expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
-      "",
-      "ID                Status  Title  \n----------------  ------  -------\nthread-manager-1  active  Manager",
-      "",
-    ]);
-  });
-
-  it("bb manager list lists managers across all projects without project context", async () => {
-    const list = vi.fn(async () => [
-      makeThread({
-        id: "thread-personal-manager",
-        projectId: PERSONAL_PROJECT_ID,
-        providerId: "codex",
-        title: "Personal Manager",
-        type: "manager",
-        status: "idle",
-        createdAt: 1,
-        updatedAt: 2,
-      }),
-      makeThread({
-        id: "thread-project-manager",
-        projectId: "project-123",
-        providerId: "codex",
-        title: "Project Manager",
-        type: "manager",
-        status: "active",
-        createdAt: 3,
-        updatedAt: 4,
-      }),
-    ]);
-    createClientMock.mockReturnValue(
-      asServerClient({
-        api: {
-          v1: {
-            threads: {
-              $get: list,
-            },
-          },
-        },
-      }),
-    );
-
-    await runCommand(["manager", "list"], (program) =>
-      registerManagerCommands(program, () => "http://server"),
-    );
-
-    expect(list).toHaveBeenCalledWith({
-      query: { type: "manager" },
-    });
-    expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
-      "",
-      [
-        "ID                       Project      Status  Title           ",
-        "-----------------------  -----------  ------  ----------------",
-        "thread-personal-manager  -            idle    Personal Manager",
-        "-----------------------  -----------  ------  ----------------",
-        "thread-project-manager   project-123  active  Project Manager ",
-      ].join("\n"),
-      "",
-    ]);
+    expect(error).toContain("bb thread list --parent-thread <id>");
   });
 
   it("bb app list renders resolved app summaries", async () => {
@@ -1558,149 +1128,6 @@ describe("CLI command output contracts", () => {
     );
   });
 
-  it("bb manager status includes managed child threads", async () => {
-    const managerThread: Thread = makeThread({
-      id: "thread-manager-1",
-      projectId: "project-123",
-      providerId: "codex",
-      title: "Manager",
-      type: "manager",
-      status: "idle",
-      createdAt: 1,
-      updatedAt: 2,
-    });
-    const managedThread: Thread = makeThread({
-      id: "thread-worker-1",
-      projectId: "project-123",
-      providerId: "codex",
-      title: "Worker",
-      type: "standard",
-      status: "active",
-      parentThreadId: "thread-manager-1",
-      createdAt: 3,
-      updatedAt: 4,
-    });
-    const get = vi.fn(async ({ param }: { param: { id: string } }) => {
-      expect(param.id).toBe("thread-manager-1");
-      return managerThread;
-    });
-    const list = vi.fn(
-      async ({ query }: { query: { parentThreadId?: string } }) => {
-        expect(query.parentThreadId).toBe("thread-manager-1");
-        return [managedThread];
-      },
-    );
-    createClientMock.mockReturnValue(
-      asServerClient({
-        api: {
-          v1: {
-            threads: {
-              $get: list,
-              ":id": {
-                $get: get,
-              },
-            },
-          },
-        },
-      }),
-    );
-
-    await runCommand(["manager", "status", "thread-manager-1"], (program) =>
-      registerManagerCommands(program, () => "http://server"),
-    );
-
-    const lines = collectLogLines(vi.mocked(console.log));
-    expect(lines).toContain("Managed threads:");
-    expect(lines.some((line) => line.includes("thread-worker-1"))).toBe(true);
-  });
-
-  it("bb manager delete deletes the manager thread", async () => {
-    const managerThread: Thread = makeThread({
-      id: "thread-manager-1",
-      projectId: "project-123",
-      providerId: "codex",
-      title: "Manager",
-      type: "manager",
-      status: "idle",
-      createdAt: 1,
-      updatedAt: 2,
-    });
-    const get = vi.fn(async () => managerThread);
-    const deleteFn = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(
-      asServerClient({
-        api: {
-          v1: {
-            threads: {
-              ":id": {
-                $get: get,
-                $delete: deleteFn,
-              },
-            },
-          },
-        },
-      }),
-    );
-
-    await runCommand(
-      ["manager", "delete", "thread-manager-1", "--yes"],
-      (program) => registerManagerCommands(program, () => "http://server"),
-    );
-
-    expect(deleteFn).toHaveBeenCalledWith({
-      param: { id: "thread-manager-1" },
-      json: { managerChildThreadsConfirmed: false },
-    });
-    expect(collectLogLines(vi.mocked(console.log))).toContain(
-      "Manager thread-manager-1 deleted",
-    );
-  });
-
-  it("bb manager delete forwards explicit assigned-child confirmation", async () => {
-    const managerThread: Thread = makeThread({
-      id: "thread-manager-children",
-      projectId: "project-123",
-      providerId: "codex",
-      title: "Manager",
-      type: "manager",
-      status: "idle",
-      createdAt: 1,
-      updatedAt: 2,
-    });
-    const get = vi.fn(async () => managerThread);
-    const deleteFn = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(
-      asServerClient({
-        api: {
-          v1: {
-            threads: {
-              ":id": {
-                $get: get,
-                $delete: deleteFn,
-              },
-            },
-          },
-        },
-      }),
-    );
-
-    await runCommand(
-      [
-        "manager",
-        "delete",
-        "thread-manager-children",
-        "--yes",
-        "--confirm-assigned-child-threads",
-      ],
-      (program) => registerManagerCommands(program, () => "http://server"),
-    );
-
-    expect(deleteFn).toHaveBeenCalledWith({
-      param: { id: "thread-manager-children" },
-      json: { managerChildThreadsConfirmed: true },
-    });
-  });
-
   it("bb status prints project/thread context", async () => {
     vi.stubEnv("BB_PROJECT_ID", "proj-1");
     vi.stubEnv("BB_THREAD_ID", "thread-1");
@@ -1819,7 +1246,6 @@ describe("CLI command output contracts", () => {
       id: "thread-1",
       projectId: "proj-1",
       providerId: "codex",
-      type: "standard",
       status: "created",
       createdAt: 1,
       updatedAt: 1,
@@ -1862,7 +1288,6 @@ describe("CLI command output contracts", () => {
       id: "thread-personal",
       projectId: PERSONAL_PROJECT_ID,
       providerId: "codex",
-      type: "standard",
       status: "created",
       createdAt: 1,
       updatedAt: 1,
@@ -1905,7 +1330,6 @@ describe("CLI command output contracts", () => {
       id: "thread-env-project",
       projectId: "proj-env",
       providerId: "codex",
-      type: "standard",
       status: "created",
       createdAt: 1,
       updatedAt: 1,
@@ -1948,7 +1372,6 @@ describe("CLI command output contracts", () => {
       id: "thread-overrides",
       projectId: "proj-1",
       providerId: "codex",
-      type: "standard",
       status: "created",
       createdAt: 1,
       updatedAt: 1,
@@ -2124,7 +1547,6 @@ describe("CLI command output contracts", () => {
         id: "thread-archived-1",
         projectId: "proj-1",
         providerId: "codex",
-        type: "standard",
         status: "idle",
         archivedAt: 1,
         createdAt: 1,
@@ -2163,7 +1585,6 @@ describe("CLI command output contracts", () => {
         id: "thread-pinned-1",
         projectId: "proj-1",
         providerId: "codex",
-        type: "standard",
         status: "idle",
         pinnedAt: 1,
         createdAt: 1,
@@ -2197,7 +1618,6 @@ describe("CLI command output contracts", () => {
         id: "thread-personal-1",
         projectId: PERSONAL_PROJECT_ID,
         providerId: "codex",
-        type: "standard",
         status: "idle",
         createdAt: 1,
         updatedAt: 1,
@@ -2774,7 +2194,6 @@ describe("CLI command output contracts", () => {
       id: "thread-json-spawn",
       projectId: "proj-1",
       providerId: "codex",
-      type: "standard",
       status: "created",
       createdAt: 1,
       updatedAt: 1,
@@ -2851,7 +2270,6 @@ describe("CLI command output contracts", () => {
       id: "thread-2",
       projectId: "proj-1",
       providerId: "codex",
-      type: "standard",
       status: "created",
       parentThreadId: "thread-parent",
       createdAt: 1,
@@ -2912,7 +2330,6 @@ describe("CLI command output contracts", () => {
       id: "thread-2",
       projectId: "proj-1",
       providerId: "codex",
-      type: "standard",
       status: "created",
       parentThreadId: "thread-context-parent",
       createdAt: 1,
@@ -3006,7 +2423,6 @@ describe("CLI command output contracts", () => {
       id: "thread-env-1",
       projectId: "proj-1",
       providerId: "codex",
-      type: "standard",
       status: "created",
       environmentId: "env-worktree-001",
       createdAt: 1,
@@ -3062,7 +2478,6 @@ describe("CLI command output contracts", () => {
       id: "thread-env-path-1",
       projectId: "proj-1",
       providerId: "codex",
-      type: "standard",
       status: "created",
       environmentId: "env-unmanaged-001",
       createdAt: 1,
@@ -3163,7 +2578,6 @@ describe("CLI command output contracts", () => {
       id: "thread-env-1",
       projectId: "proj-1",
       providerId: "codex",
-      type: "standard",
       status: "created",
       environmentId: "env-worktree-001",
       createdAt: 1,
@@ -3420,7 +2834,6 @@ describe("CLI command output contracts", () => {
       id: "thread-delete-1",
       projectId: "proj-1",
       providerId: "codex",
-      type: "standard",
       status: "idle",
       title: "Delete me",
       createdAt: 1,
@@ -3453,7 +2866,7 @@ describe("CLI command output contracts", () => {
     });
     expect(deleteFn).toHaveBeenCalledWith({
       param: { id: "thread-delete-1" },
-      json: { managerChildThreadsConfirmed: false },
+      json: { childThreadsConfirmed: false },
     });
     expect(readlineState.question).toHaveBeenCalled();
     expect(collectLogLines(vi.mocked(console.log))).toContain(
@@ -3466,7 +2879,6 @@ describe("CLI command output contracts", () => {
       id: "thread-delete-2",
       projectId: "proj-1",
       providerId: "codex",
-      type: "standard",
       status: "idle",
       createdAt: 1,
       updatedAt: 1,
@@ -3504,7 +2916,6 @@ describe("CLI command output contracts", () => {
       id: "thread-delete-3",
       projectId: "proj-1",
       providerId: "codex",
-      type: "standard",
       status: "idle",
       createdAt: 1,
       updatedAt: 1,
@@ -3534,16 +2945,15 @@ describe("CLI command output contracts", () => {
     expect(readlineState.question).not.toHaveBeenCalled();
     expect(deleteFn).toHaveBeenCalledWith({
       param: { id: "thread-delete-3" },
-      json: { managerChildThreadsConfirmed: false },
+      json: { childThreadsConfirmed: false },
     });
   });
 
-  it("bb thread delete forwards explicit assigned-child confirmation", async () => {
+  it("bb thread delete forwards explicit child-thread confirmation", async () => {
     const thread: Thread = makeThread({
       id: "thread-delete-children",
       projectId: "proj-1",
       providerId: "codex",
-      type: "manager",
       status: "idle",
       createdAt: 1,
       updatedAt: 1,
@@ -3571,14 +2981,14 @@ describe("CLI command output contracts", () => {
         "delete",
         "thread-delete-children",
         "--yes",
-        "--confirm-assigned-child-threads",
+        "--confirm-child-threads",
       ],
       (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(deleteFn).toHaveBeenCalledWith({
       param: { id: "thread-delete-children" },
-      json: { managerChildThreadsConfirmed: true },
+      json: { childThreadsConfirmed: true },
     });
   });
 
@@ -3937,7 +3347,6 @@ describe("CLI command output contracts", () => {
       id: "thread-archived-1",
       projectId: "proj-1",
       providerId: "codex",
-      type: "standard",
       status: "idle",
       archivedAt: 1_700_000_000_000,
       createdAt: 1,
@@ -3980,7 +3389,6 @@ describe("CLI command output contracts", () => {
       id: "thread-pinned-1",
       projectId: "proj-1",
       providerId: "codex",
-      type: "standard",
       status: "idle",
       pinnedAt: 1_700_000_000_000,
       createdAt: 1,
@@ -4017,7 +3425,6 @@ describe("CLI command output contracts", () => {
       id: "thread-show-self",
       projectId: "proj-1",
       providerId: "codex",
-      type: "standard",
       status: "idle",
       createdAt: 1,
       updatedAt: 2,
@@ -4055,7 +3462,6 @@ describe("CLI command output contracts", () => {
       projectId: "proj-1",
       providerId: "codex",
       environmentId: "env-work-status",
-      type: "standard",
       status: "idle",
       createdAt: 1,
       updatedAt: 2,
@@ -4132,7 +3538,6 @@ describe("CLI command output contracts", () => {
       projectId: "proj-1",
       providerId: "codex",
       environmentId: "env-diff-base",
-      type: "standard",
       status: "idle",
       createdAt: 1,
       updatedAt: 2,
@@ -4203,7 +3608,6 @@ describe("CLI command output contracts", () => {
       projectId: "proj-1",
       providerId: "codex",
       environmentId: "env-uncommitted-diff",
-      type: "standard",
       status: "idle",
       createdAt: 1,
       updatedAt: 2,
@@ -4304,7 +3708,6 @@ describe("CLI JSON output contracts", () => {
       id: "thread-json-show",
       projectId: "proj-1",
       providerId: "codex",
-      type: "standard",
       status: "idle",
       createdAt: 1,
       updatedAt: 2,
@@ -4341,7 +3744,6 @@ describe("CLI JSON output contracts", () => {
       id: "thread-update-1",
       projectId: "proj-1",
       providerId: "codex",
-      type: "standard",
       status: "idle",
       parentThreadId: "thread-manager-1",
       createdAt: 1,
@@ -4380,7 +3782,7 @@ describe("CLI JSON output contracts", () => {
       json: { parentThreadId: "thread-manager-1" },
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain(
-      "Managed by thread-manager-1",
+      "Parent: thread-manager-1",
     );
   });
 
@@ -4431,7 +3833,6 @@ describe("CLI JSON output contracts", () => {
       id: "thread-update-2",
       projectId: "proj-1",
       providerId: "codex",
-      type: "standard",
       status: "idle",
       createdAt: 1,
       updatedAt: 1,
@@ -4463,7 +3864,7 @@ describe("CLI JSON output contracts", () => {
       json: { parentThreadId: null },
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain(
-      "No managing parent thread",
+      "No parent thread",
     );
   });
 
@@ -4472,7 +3873,6 @@ describe("CLI JSON output contracts", () => {
       id: "thread-update-3",
       projectId: "proj-1",
       providerId: "claude-code",
-      type: "standard",
       status: "idle",
       createdAt: 1,
       updatedAt: 1,
@@ -4521,7 +3921,6 @@ describe("CLI JSON output contracts", () => {
       id: "thread-update-4",
       projectId: "proj-1",
       providerId: "claude-code",
-      type: "standard",
       status: "idle",
       createdAt: 1,
       updatedAt: 1,
@@ -4809,7 +4208,6 @@ describe("CLI JSON output contracts", () => {
         id: "thread-wait",
         projectId: "proj-1",
         providerId: "codex",
-        type: "standard",
         status: "idle",
         createdAt: 1,
         updatedAt: 2,
@@ -4845,7 +4243,6 @@ describe("CLI JSON output contracts", () => {
         id: "thread-wait-timeout",
         projectId: "proj-1",
         providerId: "codex",
-        type: "standard",
         status: "active",
         createdAt: 1,
         updatedAt: 2,
@@ -4887,7 +4284,6 @@ describe("CLI JSON output contracts", () => {
         id: "thread-wait-error",
         projectId: "proj-1",
         providerId: "codex",
-        type: "standard",
         status: "error",
         createdAt: 1,
         updatedAt: 2,
@@ -5040,7 +4436,6 @@ describe("CLI JSON output contracts", () => {
         id: "thread-stop-idle",
         projectId: "proj-1",
         providerId: "codex",
-        type: "standard",
         status: "idle",
         createdAt: 1,
         updatedAt: 2,
@@ -5081,7 +4476,6 @@ describe("CLI JSON output contracts", () => {
         id: "thread-stop-error",
         projectId: "proj-1",
         providerId: "codex",
-        type: "standard",
         status: "error",
         createdAt: 1,
         updatedAt: 2,
@@ -5122,7 +4516,6 @@ describe("CLI JSON output contracts", () => {
         id: "thread-stop-active",
         projectId: "proj-1",
         providerId: "codex",
-        type: "standard",
         status: "active",
         createdAt: 1,
         updatedAt: 2,

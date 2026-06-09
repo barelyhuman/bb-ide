@@ -78,7 +78,7 @@ afterEach(() => {
 });
 
 describe("useFileSearchSuggestions", () => {
-  it("merges workspace and manager thread-storage file results", async () => {
+  it("merges workspace and thread-storage file results", async () => {
     vi.mocked(api.listApps).mockResolvedValue([]);
     vi.mocked(api.searchProjectPaths).mockResolvedValue(
       makePathResponse([
@@ -110,8 +110,7 @@ describe("useFileSearchSuggestions", () => {
           query: "status",
           limit: 2,
           environmentId: "env-1",
-          currentThreadId: "thr-manager",
-          currentThreadType: "manager",
+          currentThreadId: "thr-storage",
         }),
       { wrapper },
     );
@@ -134,7 +133,7 @@ describe("useFileSearchSuggestions", () => {
       includeDirectories: false,
     });
     expect(api.listThreadStoragePaths).toHaveBeenCalledWith({
-      id: "thr-manager",
+      id: "thr-storage",
       options: {
         limit: 4,
         query: "status",
@@ -168,8 +167,7 @@ describe("useFileSearchSuggestions", () => {
           projectId: "proj-1",
           query: "status",
           environmentId: "env-1",
-          currentThreadId: "thr-manager",
-          currentThreadType: "manager",
+          currentThreadId: "thr-storage",
         }),
       { wrapper },
     );

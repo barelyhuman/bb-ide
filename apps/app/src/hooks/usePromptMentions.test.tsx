@@ -58,7 +58,6 @@ function makeThreadListEntry(
     stopRequestedAt: null,
     title: "Default thread",
     titleFallback: "Default thread",
-    type: "standard",
     updatedAt: 1,
     ...overrides,
   };
@@ -115,25 +114,22 @@ describe("usePromptMentions", () => {
     const projectId = "proj_code";
     const threads: ThreadListResponse = [
       makeThreadListEntry({
-        id: "thr_frontend_manager",
+        id: "thr_frontend_parent",
         projectId,
-        title: "Frontend Manager",
-        titleFallback: "Frontend Manager",
-        type: "manager",
+        title: "Frontend Parent",
+        titleFallback: "Frontend Parent",
       }),
       makeThreadListEntry({
         id: "thr_other_project_frontend",
         projectId: "proj_other",
         title: "Frontend notes",
         titleFallback: "Frontend notes",
-        type: "standard",
       }),
       makeThreadListEntry({
         id: "thr_parser_refactor",
         projectId,
         title: "Parser refactor",
         titleFallback: "Parser refactor",
-        type: "standard",
       }),
     ];
     installFetchRoutes([
@@ -187,9 +183,9 @@ describe("usePromptMentions", () => {
         "Expected first prompt mention suggestion to be a thread",
       );
     }
-    expect(firstSuggestion.threadId).toBe("thr_frontend_manager");
-    expect(firstSuggestion.title).toBe("Frontend Manager");
-    expect(firstSuggestion.replacement).toBe("thread:thr_frontend_manager");
+    expect(firstSuggestion.threadId).toBe("thr_frontend_parent");
+    expect(firstSuggestion.title).toBe("Frontend Parent");
+    expect(firstSuggestion.replacement).toBe("thread:thr_frontend_parent");
 
     await waitFor(() => {
       const crossProjectSuggestion = result.current.suggestions.find(
@@ -212,14 +208,12 @@ describe("usePromptMentions", () => {
         projectId: "proj_other",
         title: "Shared context",
         titleFallback: "Shared context",
-        type: "manager",
       }),
       makeThreadListEntry({
         id: "thr_current_project_shared",
         projectId,
         title: "Shared context",
         titleFallback: "Shared context",
-        type: "standard",
       }),
     ];
     installFetchRoutes([
@@ -284,7 +278,6 @@ describe("usePromptMentions", () => {
         projectId,
         title: "Cached frontend notes",
         titleFallback: "Cached frontend notes",
-        type: "standard",
       }),
     ];
     let resolveThreadRequest: (response: Response) => void = () => {};

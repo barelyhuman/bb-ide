@@ -28,8 +28,7 @@ function renderHeader(overrides: RenderHeaderOverrides = {}) {
   const props = {
     actionsMenu: overrides.actionsMenu ?? null,
     activeTerminalCount: 0,
-    isManagedThread: false,
-    isManagerThread: false,
+    isChildThread: false,
     isSecondaryPanelOpen: overrides.isSecondaryPanelOpen ?? false,
     isTerminalPanelOpen: false,
     isThreadGitActionPending: false,

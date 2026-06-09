@@ -13,6 +13,7 @@ import {
   getCachedEnvironmentRefWorkspaceStateInvalidationQueryKeys,
   getCachedGlobalThreadListInvalidationQueryKeys,
   getCachedProjectThreadListInvalidationQueryKeys,
+  getCachedRootOrderThreadListInvalidationQueryKeys,
   getCachedSidebarNavigationThreads,
   getEnvironmentBranchListInvalidationQueryKeys,
   getEnvironmentRecordInvalidationQueryKeys,
@@ -42,7 +43,6 @@ import {
   hostsQueryKey,
   sidebarNavigationQueryKey,
   systemProvidersQueryKey,
-  threadListQueryKey,
   threadQueryKey,
   threadTerminalsQueryKey,
   threadsQueryKey,
@@ -141,8 +141,8 @@ export const REALTIME_THREAD_CHANGE_REGISTRY = {
   "parent-changed": {
     flush: "debounced",
     dirty: [
-      dirtyThreadListQueries, // Sidebar grouping and manager-child filters depend on parentThreadId.
-      dirtyThreadDetailQueries, // Detail metadata and managed-by UI render parentThreadId.
+      dirtyThreadListQueries, // Sidebar grouping and child filters depend on parentThreadId.
+      dirtyThreadDetailQueries, // Detail metadata and parent UI render parentThreadId.
     ],
   },
   "read-state-changed": {
@@ -152,17 +152,10 @@ export const REALTIME_THREAD_CHANGE_REGISTRY = {
       markThreadListQueriesStale, // Unread badges should go stale without active refetch.
     ],
   },
-  "manager-assignment-changed": {
-    flush: "debounced",
-    dirty: [
-      dirtyThreadListQueries, // Sidebar grouping and manager-child filters depend on parentThreadId.
-      dirtyThreadDetailQueries, // Detail metadata and managed-by UI render parentThreadId.
-    ],
-  },
   "order-changed": {
     flush: "debounced",
     dirty: [
-      dirtyManagerOrderThreadListQueries, // Manager reorder affects manager lists and global mention candidates.
+      dirtyRootOrderThreadListQueries, // Root thread order affects root lists and global mention candidates.
     ],
   },
   "terminals-changed": {
@@ -446,29 +439,19 @@ function dirtyThreadListQueries({
   return getThreadListInvalidationQueryKeys({ projectId, queryClient });
 }
 
-function dirtyManagerOrderThreadListQueries({
+function dirtyRootOrderThreadListQueries({
   projectId,
   queryClient,
 }: ThreadRealtimeDirtyContext): void {
   queryClient.invalidateQueries({ queryKey: sidebarNavigationQueryKey() });
-  if (!projectId) {
-    queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-    return;
+  for (const queryKey of getCachedRootOrderThreadListInvalidationQueryKeys({
+    projectId,
+    queryClient,
+  })) {
+    queryClient.invalidateQueries({ exact: true, queryKey });
   }
-
-  queryClient.invalidateQueries({
-    exact: true,
-    queryKey: threadListQueryKey({ projectId, archived: false }),
-  });
-  queryClient.invalidateQueries({
-    exact: true,
-    queryKey: threadListQueryKey({
-      projectId,
-      archived: false,
-      type: "manager",
-    }),
-  });
-  for (const queryKey of getCachedGlobalThreadListInvalidationQueryKeys({
+  if (!projectId) return;
+  for (const queryKey of getCachedRootOrderThreadListInvalidationQueryKeys({
     queryClient,
   })) {
     queryClient.invalidateQueries({ exact: true, queryKey });

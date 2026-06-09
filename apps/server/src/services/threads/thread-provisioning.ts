@@ -141,7 +141,7 @@ async function startThreadIfEnvironmentReady(
     execution: args.context.request.execution,
     permissionEscalation: resolvePermissionEscalation({
       thread: args.thread,
-      initiator: args.thread.type === "manager" ? "system" : "user",
+      initiator: "user",
     }),
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
@@ -153,8 +153,7 @@ export function requestThreadProvision(
   deps: Pick<AppDeps, "db" | "hub">,
   args: RequestThreadProvisionArgs,
 ): ThreadProvisionContext {
-  const initiator: ThreadTurnInitiator =
-    args.thread.type === "manager" ? "system" : "user";
+  const initiator: ThreadTurnInitiator = "user";
   const target: TurnRequestTarget = { kind: "thread-start" };
   const request = appendClientTurnEvent(deps, {
     threadId: args.thread.id,

@@ -132,7 +132,6 @@ function makeThreadWithRuntime(
     projectId: "project-1",
     automationId: null,
     providerId: "codex",
-    type: "standard",
     createdAt: 1,
     status: "active",
     updatedAt: 1,

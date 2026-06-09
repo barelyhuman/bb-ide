@@ -14,8 +14,8 @@ import {
   ThreadPromptContextBanner,
   type ContextBannerMergeBaseConfig,
   type ThreadPromptContextBannerExpandedSection,
-  type ThreadPromptManagedBySection,
-  type ThreadPromptManagerChildrenSection,
+  type ThreadPromptParentThreadSection,
+  type ThreadPromptChildThreadsSection,
 } from "@/components/promptbox/banner/ThreadPromptContextBanner";
 import type {
   WorkspaceChangedFileSelection,
@@ -87,7 +87,7 @@ interface ThreadDetailPromptAreaProps {
   resolveMentionLink: PromptMentionLinkResolver;
   /**
    * Resolved changed-files section for the thread's workspace. Null hides the
-   * banner. Production passes null when the thread is a manager
+   * banner. Production passes null when git UI is unavailable
    * (canUseGitUi === false) or the workspace has no changes; otherwise the
    * value is selectWorkspaceChangedFilesSection(workspaceStatus).
    */
@@ -105,10 +105,10 @@ interface ThreadDetailPromptAreaProps {
   contextBannerMergeBase: ContextBannerMergeBaseConfig | null;
   /** Latest TODO snapshot from the timeline projection. Null on older pages or when no candidate observed. */
   pendingTodos: ThreadTimelinePendingTodos | null;
-  /** Manager reference for managed threads. Null for unmanaged or manager threads. */
-  managedBySection: ThreadPromptManagedBySection | null;
-  /** Active managed children for manager threads. Null otherwise. */
-  managerChildrenSection: ThreadPromptManagerChildrenSection | null;
+  /** Parent reference for child threads. Null for root threads. */
+  parentThreadSection: ThreadPromptParentThreadSection | null;
+  /** Active child threads for parent threads. Null otherwise. */
+  childThreadsSection: ThreadPromptChildThreadsSection | null;
   sendMessage: SendMessageMutationLike;
   thread: ThreadWithRuntime;
 }
@@ -140,8 +140,8 @@ export function ThreadDetailPromptArea({
   workspaceStatusPending,
   contextBannerMergeBase,
   pendingTodos,
-  managedBySection,
-  managerChildrenSection,
+  parentThreadSection,
+  childThreadsSection,
   sendMessage,
   thread,
 }: ThreadDetailPromptAreaProps) {
@@ -205,7 +205,6 @@ export function ThreadDetailPromptArea({
   });
   const promptMentions = usePromptMentions(projectId, {
     currentThreadId: thread.id,
-    currentThreadType: thread.type,
     environmentId: thread.environmentId ?? null,
   });
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -292,10 +291,7 @@ export function ThreadDetailPromptArea({
   ]);
   const promptPlaceholder = isStopRequested
     ? "Stopping thread..."
-    : getFollowUpPromptPlaceholder(
-        runtimeDisplayStatus,
-        thread.type === "manager",
-      );
+    : getFollowUpPromptPlaceholder(runtimeDisplayStatus);
   const currentPromptDraft = useMemo(
     () => ({
       text: promptDraft.text,
@@ -789,16 +785,14 @@ export function ThreadDetailPromptArea({
     () => (
       <>
         <ThreadPromptContextBanner
-          todoSection={
-            thread.type === "manager" || !pendingTodos ? null : { pendingTodos }
-          }
+          todoSection={!pendingTodos ? null : { pendingTodos }}
           archivedSection={
             thread.archivedAt !== null
               ? { archivedAt: thread.archivedAt }
               : null
           }
-          managedBySection={managedBySection}
-          managerChildrenSection={managerChildrenSection}
+          parentThreadSection={parentThreadSection}
+          childThreadsSection={childThreadsSection}
           gitSection={
             workspaceChangedFilesSection
               ? {
@@ -842,14 +836,13 @@ export function ThreadDetailPromptArea({
       handleToggleBannerSection,
       isFollowUpSubmitting,
       isQueueMutationPending,
-      managedBySection,
-      managerChildrenSection,
+      parentThreadSection,
+      childThreadsSection,
       pendingTodos,
       processingQueuedMessageId,
       queuedMessages,
       submitMode.kind,
       thread.archivedAt,
-      thread.type,
       workspaceChangedFilesSection,
       workspaceStatusPending,
     ],

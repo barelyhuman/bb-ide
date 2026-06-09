@@ -63,7 +63,7 @@ const PROJECT_ROW_STYLE: CSSProperties = {
 };
 
 interface ProjectThreadGroup {
-  managerId: string | null;
+  parentId: string | null;
   threadIds: readonly string[];
 }
 
@@ -72,10 +72,10 @@ function buildProjectThreadGroups(
   parentByThreadId: Record<string, string | null>,
 ): ProjectThreadGroup[] {
   const groups: ProjectThreadGroup[] = [];
-  const indexByManagerId = new Map<string | null, number>();
+  const indexByParentId = new Map<string | null, number>();
   for (const threadId of threadIds) {
-    const managerId = parentByThreadId[threadId] ?? null;
-    const existing = indexByManagerId.get(managerId);
+    const parentId = parentByThreadId[threadId] ?? null;
+    const existing = indexByParentId.get(parentId);
     if (existing !== undefined) {
       groups[existing] = {
         ...groups[existing]!,
@@ -83,8 +83,8 @@ function buildProjectThreadGroups(
       };
       continue;
     }
-    indexByManagerId.set(managerId, groups.length);
-    groups.push({ managerId, threadIds: [threadId] });
+    indexByParentId.set(parentId, groups.length);
+    groups.push({ parentId, threadIds: [threadId] });
   }
   return groups;
 }
@@ -152,14 +152,14 @@ import type { ThreadListEntry } from "@bb/server-contract";
 export interface ThreadRowProps {
   thread: ThreadListEntry;
   isActive: boolean;
-  managerOptions?: ThreadRowManagerOptions;
+  parentOptions?: ThreadRowParentOptions;
   onSelect: () => void;
 }
 
-export interface ThreadRowManagerOptions {
+export interface ThreadRowParentOptions {
   isCollapsed: boolean;
-  managedChildCount: number;
-  managedChildBusyCount: number;
+  childCount: number;
+  childBusyCount: number;
   onToggleCollapsed: () => void;
 }
 
@@ -178,17 +178,17 @@ function isThreadBusy(thread: ThreadListEntry): boolean {
 function ThreadRowComponent({
   thread,
   isActive,
-  managerOptions,
+  parentOptions,
   onSelect,
 }: ThreadRowProps) {
   const threadIsBusy = isThreadBusy(thread);
-  const isManager = thread.type === "manager";
-  const isManagerCollapsed = managerOptions?.isCollapsed ?? false;
-  const managedChildCount = managerOptions?.managedChildCount ?? 0;
-  const hasManagedChildren = managedChildCount > 0;
-  const managedChildBusyCount = managerOptions?.managedChildBusyCount ?? 0;
-  const isManagerBusy =
-    isManager && (threadIsBusy || managedChildBusyCount > 0);
+  const childCount = parentOptions?.childCount ?? 0;
+  const hasChildren = childCount > 0;
+  const isParent = hasChildren;
+  const isParentCollapsed = parentOptions?.isCollapsed ?? false;
+  const childBusyCount = parentOptions?.childBusyCount ?? 0;
+  const isParentBusy =
+    isParent && (threadIsBusy || childBusyCount > 0);
   const environmentIcon = getEnvironmentWorkspaceDisplayIconName(
     thread.environmentWorkspaceDisplayKind,
   );
@@ -204,7 +204,7 @@ function ThreadRowComponent({
         isActive={isActive}
         className="text-sm text-sidebar-foreground"
       >
-        {isManagerBusy ? (
+        {isParentBusy ? (
           <Icon name="Spinner" className="size-3 shrink-0 animate-spin text-muted-foreground" />
         ) : (
           environmentIcon ? (
@@ -216,29 +216,27 @@ function ThreadRowComponent({
         )}
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
           <span className="truncate">{titleText}</span>
-          {isManager && hasManagedChildren ? (
+          {isParent && hasChildren ? (
             <span className="text-xs text-muted-foreground">
-              {managedChildCount}
+              {childCount}
             </span>
           ) : null}
         </span>
-        {isManager ? (
-          <Pill variant="outline" className="shrink-0">
-            manager
-          </Pill>
+        {isParent ? (
+          <Pill variant="outline" className="shrink-0">parent</Pill>
         ) : null}
       </SidebarMenuButton>
       <span
         className={cn(
           "flex shrink-0 items-center justify-end",
-          managerOptions?.isCollapsed ? "opacity-50" : undefined,
+          parentOptions?.isCollapsed ? "opacity-50" : undefined,
         )}
       >
-        {isManager ? (
+        {isParent ? (
           <button
             type="button"
-            onClick={managerOptions?.onToggleCollapsed}
-            aria-label={isManagerCollapsed ? "Expand children" : "Collapse children"}
+            onClick={parentOptions?.onToggleCollapsed}
+            aria-label={isParentCollapsed ? "Expand children" : "Collapse children"}
           >
             chevron
           </button>
@@ -480,12 +478,12 @@ const LARGER = buildAlignedDiff({
     {
       line: 47,
       newText:
-        "  const isManagerCollapsed = managerOptions?.isCollapsed ?? !hasManagedChildren;",
+        "  const isParentCollapsed = parentOptions?.isCollapsed ?? !hasChildren;",
     },
     {
       line: 52,
       newText:
-        "    isManager && (threadIsBusy || (isManagerCollapsed && managedChildBusyCount > 0));",
+        "    isParent && (threadIsBusy || (isParentCollapsed && childBusyCount > 0));",
     },
     {
       line: 89,

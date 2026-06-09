@@ -146,7 +146,6 @@ function PanelClosedThreadStorageMarkdownLinkHarness({
       fileListEnabled: true,
       filePreviewEnabled: false,
       threadId: THREAD_ID,
-      threadType: "manager",
     });
   const openResolvedLink = useCallback(
     (

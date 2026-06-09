@@ -3,51 +3,37 @@ import {
   listUnarchivedAssignedChildThreads,
   updateThread,
 } from "@bb/db";
-import type { PromptInput, Thread } from "@bb/domain";
+import type { Thread } from "@bb/domain";
 import { renderTemplate } from "@bb/templates";
 import type { LoggedPendingInteractionWorkSessionDeps } from "../../types.js";
 import type { DbNotifier, DbTransaction } from "@bb/db";
 import { NotificationBuffer } from "../lib/notification-buffer.js";
-import {
-  buildManagerSystemInputFromTemplateSlot,
-  buildManagerSystemThreadMention,
-  queueManagerSystemMessage,
-} from "./manager-system-messages.js";
+import { queueParentSystemMessage } from "./parent-system-messages.js";
 import {
   appendThreadOwnershipChangeEvent,
   appendThreadOwnershipChangeEventInTransaction,
 } from "./thread-events.js";
 
-interface ThreadTitleSource {
+interface ThreadLabelSource {
+  id: string;
   title: string | null;
 }
 
-interface QueueManagerSystemMessageBestEffortArgs {
-  input: PromptInput[];
-  managedThreadId: string;
-  managerThreadId: string;
+interface QueueParentSystemMessageBestEffortArgs {
+  childThreadId: string;
+  parentThreadId: string;
+  messageText: string;
   reason: "assigned" | "removed";
-}
-
-type ThreadOwnershipSystemMessageTemplateId =
-  | "systemMessageThreadOwnershipAssigned"
-  | "systemMessageThreadOwnershipRemoved";
-
-const THREAD_OWNERSHIP_THREAD_LABEL_SLOT = "__BB_THREAD_OWNERSHIP_LABEL__";
-
-interface BuildThreadOwnershipSystemInputArgs {
-  templateId: ThreadOwnershipSystemMessageTemplateId;
-  thread: Thread;
 }
 
 interface HandleThreadOwnershipChangeArgs {
   previousThread: Thread;
-  queueManagerMessages: boolean;
+  queueParentMessages: boolean;
   updatedThread: Thread;
 }
 
-interface ReleaseUnarchivedChildrenFromArchivedManagerArgs {
-  managerThreadId: string;
+interface ReleaseUnarchivedChildrenFromArchivedThreadArgs {
+  parentThreadId: string;
 }
 
 interface ArchiveThreadAndReleaseChildrenArgs {
@@ -59,48 +45,28 @@ interface ThreadOwnershipTransactionDeps {
   hub: DbNotifier;
 }
 
-function formatThreadTitleSuffixForManager(thread: ThreadTitleSource): string {
-  return thread.title ? ` (${thread.title})` : "";
+function formatThreadLabelForParent(thread: ThreadLabelSource): string {
+  return thread.title ? `${thread.id}: ${thread.title}` : thread.id;
 }
 
-function buildThreadOwnershipSystemInput(
-  args: BuildThreadOwnershipSystemInputArgs,
-): PromptInput[] {
-  const mention = buildManagerSystemThreadMention({ thread: args.thread });
-  const renderedText = renderTemplate(args.templateId, {
-    threadLabel: THREAD_OWNERSHIP_THREAD_LABEL_SLOT,
-  });
-  return buildManagerSystemInputFromTemplateSlot({
-    renderedText,
-    slot: THREAD_OWNERSHIP_THREAD_LABEL_SLOT,
-    segments: [
-      { kind: "mention", mention },
-      {
-        kind: "text",
-        text: formatThreadTitleSuffixForManager(args.thread),
-      },
-    ],
-  });
-}
-
-async function queueManagerSystemMessageBestEffort(
+async function queueParentSystemMessageBestEffort(
   deps: LoggedPendingInteractionWorkSessionDeps,
-  args: QueueManagerSystemMessageBestEffortArgs,
+  args: QueueParentSystemMessageBestEffortArgs,
 ): Promise<void> {
   try {
-    await queueManagerSystemMessage(deps, {
-      input: args.input,
-      managerThreadId: args.managerThreadId,
+    await queueParentSystemMessage(deps, {
+      parentThreadId: args.parentThreadId,
+      messageText: args.messageText,
     });
   } catch (error) {
     deps.logger.error(
       {
-        managedThreadId: args.managedThreadId,
-        managerThreadId: args.managerThreadId,
+        childThreadId: args.childThreadId,
+        parentThreadId: args.parentThreadId,
         reason: args.reason,
         err: error,
       },
-      "Failed to queue manager ownership system message",
+      "Failed to queue parent ownership system message",
     );
   }
 }
@@ -122,40 +88,39 @@ export async function handleThreadOwnershipChange(
     nextParentThreadId: args.updatedThread.parentThreadId,
   });
 
-  if (!args.queueManagerMessages) {
+  if (!args.queueParentMessages) {
     return;
   }
 
+  const threadLabel = formatThreadLabelForParent(args.updatedThread);
   if (args.updatedThread.parentThreadId) {
-    await queueManagerSystemMessageBestEffort(deps, {
-      input: buildThreadOwnershipSystemInput({
-        templateId: "systemMessageThreadOwnershipAssigned",
-        thread: args.updatedThread,
+    await queueParentSystemMessageBestEffort(deps, {
+      childThreadId: args.updatedThread.id,
+      parentThreadId: args.updatedThread.parentThreadId,
+      messageText: renderTemplate("systemMessageThreadOwnershipAssigned", {
+        threadLabel,
       }),
-      managedThreadId: args.updatedThread.id,
-      managerThreadId: args.updatedThread.parentThreadId,
       reason: "assigned",
     });
   }
   if (args.previousThread.parentThreadId) {
-    await queueManagerSystemMessageBestEffort(deps, {
-      input: buildThreadOwnershipSystemInput({
-        templateId: "systemMessageThreadOwnershipRemoved",
-        thread: args.updatedThread,
+    await queueParentSystemMessageBestEffort(deps, {
+      childThreadId: args.updatedThread.id,
+      parentThreadId: args.previousThread.parentThreadId,
+      messageText: renderTemplate("systemMessageThreadOwnershipRemoved", {
+        threadLabel,
       }),
-      managedThreadId: args.updatedThread.id,
-      managerThreadId: args.previousThread.parentThreadId,
       reason: "removed",
     });
   }
 }
 
-function releaseUnarchivedChildrenFromArchivedManagerInTransaction(
+function releaseUnarchivedChildrenFromArchivedThreadInTransaction(
   deps: ThreadOwnershipTransactionDeps,
-  args: ReleaseUnarchivedChildrenFromArchivedManagerArgs,
+  args: ReleaseUnarchivedChildrenFromArchivedThreadArgs,
 ): void {
   const childThreads = listUnarchivedAssignedChildThreads(deps.db, {
-    parentThreadId: args.managerThreadId,
+    parentThreadId: args.parentThreadId,
   });
 
   for (const childThread of childThreads) {
@@ -190,17 +155,15 @@ export function archiveThreadAndReleaseChildren(
         return null;
       }
 
-      if (archivedThread.type === "manager") {
-        releaseUnarchivedChildrenFromArchivedManagerInTransaction(
-          {
-            db: tx,
-            hub: notificationBuffer,
-          },
-          {
-            managerThreadId: archivedThread.id,
-          },
-        );
-      }
+      releaseUnarchivedChildrenFromArchivedThreadInTransaction(
+        {
+          db: tx,
+          hub: notificationBuffer,
+        },
+        {
+          parentThreadId: archivedThread.id,
+        },
+      );
 
       return archivedThread;
     },

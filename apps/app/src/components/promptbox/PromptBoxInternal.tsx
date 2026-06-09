@@ -129,7 +129,7 @@ export interface PromptBoxSubmissionConfig {
   onModifierSubmit?: () => void;
   /** When true, the submit button is enabled even when the textarea is
    * empty and no attachments are present. Used by callers (e.g. the
-   * new-manager flow) where empty submission has a meaningful fallback
+   * new-thread flow) where empty submission has a meaningful fallback
    * server-side. */
   allowEmptyInput?: boolean;
 }

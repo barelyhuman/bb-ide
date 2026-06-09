@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
-import type { ThreadType } from "@bb/domain";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type {
   AppSummary,
@@ -158,7 +157,6 @@ interface PanelStageProps {
 interface NewTabPanelStoryProps {
   apps: readonly AppSummary[];
   currentThreadId: string;
-  currentThreadType: ThreadType | undefined;
   initialQuery: string;
   projectId: string | undefined;
   recentItems: readonly ThreadRecentItem[];
@@ -188,7 +186,6 @@ interface SeedThreadRecentItemsArgs {
 
 interface SeededNewTabPageProps {
   currentThreadId: string;
-  currentThreadType: ThreadType | undefined;
   initialQuery: string;
   onSelect: (selection: FileSearchSelection) => void;
   projectId: string | undefined;
@@ -297,7 +294,6 @@ function useStoryQueryClient({
 
 function SeededNewTabPage({
   currentThreadId,
-  currentThreadType,
   initialQuery,
   onSelect,
   projectId,
@@ -311,7 +307,6 @@ function SeededNewTabPage({
       projectId={projectId}
       environmentId={ENVIRONMENT_ID}
       currentThreadId={currentThreadId}
-      currentThreadType={currentThreadType}
       focusRequest={0}
       initialQuery={initialQuery}
       onSelect={onSelect}
@@ -322,7 +317,6 @@ function SeededNewTabPage({
 function NewTabPanelStory({
   apps,
   currentThreadId,
-  currentThreadType,
   initialQuery,
   projectId,
   recentItems,
@@ -387,7 +381,6 @@ function NewTabPanelStory({
       <QueryClientProvider client={queryClient}>
         <SeededNewTabPage
           currentThreadId={currentThreadId}
-          currentThreadType={currentThreadType}
           initialQuery={initialQuery}
           projectId={projectId}
           recentItems={recentItems}
@@ -438,7 +431,6 @@ function NewTabPanelStory({
             <NewTabActionMenu
               projectId={projectId}
               currentThreadId={currentThreadId}
-              currentThreadType={currentThreadType}
               onSelect={handleSelect}
               onOpenFileSearch={handleOpenFileSearch}
               onCreateAppPromptPrefill={noop}
@@ -469,7 +461,6 @@ export function NewTab() {
         <NewTabPanelStory
           apps={[]}
           currentThreadId={BLANK_THREAD_ID}
-          currentThreadType="standard"
           initialQuery=""
           projectId={PROJECT_ID}
           recentItems={[]}
@@ -482,7 +473,6 @@ export function NewTab() {
         <NewTabPanelStory
           apps={APPS_ROW_APPS}
           currentThreadId={APPS_THREAD_ID}
-          currentThreadType="manager"
           initialQuery="s"
           projectId={PROJECT_ID}
           recentItems={[]}
@@ -498,7 +488,6 @@ export function NewTab() {
         <NewTabPanelStory
           apps={[]}
           currentThreadId={RECENTS_THREAD_ID}
-          currentThreadType="manager"
           initialQuery="story"
           projectId={PROJECT_ID}
           recentItems={RECENT_ROW_ITEMS}
@@ -509,12 +498,11 @@ export function NewTab() {
       </StoryRow>
       <StoryRow
         label="search results"
-        hint="active New tab seeded with workspace and manager thread-storage matches"
+        hint="active New tab seeded with workspace and thread-storage matches"
       >
         <NewTabPanelStory
           apps={APPS_RESPONSE}
           currentThreadId={SEARCH_THREAD_ID}
-          currentThreadType="manager"
           initialQuery="thread"
           projectId={PROJECT_ID}
           recentItems={[]}
@@ -531,7 +519,6 @@ export function NewTab() {
           <NewTabPanelStory
             apps={[]}
             currentThreadId={OPEN_BROWSER_THREAD_ID}
-            currentThreadType="standard"
             initialQuery=""
             projectId={PROJECT_ID}
             recentItems={[]}

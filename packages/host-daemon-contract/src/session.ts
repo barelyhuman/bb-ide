@@ -688,7 +688,7 @@ export type HostDaemonInternalSchema = {
     $post: Endpoint<{ json: HostDaemonAppDataResyncRequest }, { ok: true }>;
   };
   "/session/tool-call": {
-    /** Used by the daemon to execute server-side tool calls on behalf of a provider (e.g. message_user). */
+    /** Used by the daemon to execute server-side tool calls requested by a provider. */
     $post: Endpoint<
       { json: HostDaemonToolCallRequest },
       HostDaemonToolCallResponse

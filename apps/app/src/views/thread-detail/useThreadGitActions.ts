@@ -297,12 +297,11 @@ export function useThreadGitActions({
   const threadGitActionDialog = useDialogState<ThreadGitActionDialogTarget>();
   const workspaceWorkingTree = workspaceStatus?.workingTree;
   const workspaceMergeBase = workspaceStatus?.mergeBase;
-  const canUseGitUi = thread?.type !== "manager";
   const isArchivedThread = thread?.archivedAt != null;
   const isDirectThreadEnvironment = environment?.managed === false;
 
   const threadHeaderGitActions = useMemo<ThreadHeaderGitAction[]>(() => {
-    if (!thread || !canUseGitUi || !workspaceStatus || isArchivedThread) {
+    if (!thread || !workspaceStatus || isArchivedThread) {
       return [];
     }
 
@@ -335,7 +334,6 @@ export function useThreadGitActions({
 
     return actions;
   }, [
-    canUseGitUi,
     environment?.managed,
     isArchivedThread,
     isDirectThreadEnvironment,

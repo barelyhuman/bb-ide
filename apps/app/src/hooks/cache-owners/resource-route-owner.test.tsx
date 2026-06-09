@@ -76,7 +76,6 @@ function makeThread(
     status: "idle",
     title: "Thread",
     titleFallback: "Thread",
-    type: "standard",
     updatedAt: 1,
     runtime: {
       displayStatus: "idle",

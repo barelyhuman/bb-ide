@@ -23,7 +23,6 @@ import type {
   TerminalSessionStatus,
   ThreadDynamicContextFileStatus,
   ThreadScheduleKind,
-  ThreadType,
   ThreadEventItemType,
   ThreadEventScopeKind,
   ThreadEventType,
@@ -124,7 +123,6 @@ export const projectExecutionDefaults = sqliteTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     providerId: text("provider_id").notNull(),
-    threadType: text("thread_type").$type<ThreadType>().notNull(),
     model: text("model").notNull(),
     serviceTier: text("service_tier").$type<ServiceTier>().notNull(),
     reasoningLevel: text("reasoning_level").$type<ReasoningLevel>().notNull(),
@@ -132,11 +130,7 @@ export const projectExecutionDefaults = sqliteTable(
     updatedAt: integer("updated_at").notNull(),
   },
   (table) => [
-    uniqueIndex("project_execution_defaults_project_thread_type_idx").on(
-      table.projectId,
-      table.threadType,
-    ),
-    index("project_execution_defaults_project_idx").on(table.projectId),
+    uniqueIndex("project_execution_defaults_project_idx").on(table.projectId),
   ],
 );
 
@@ -272,8 +266,6 @@ export const threads = sqliteTable(
     reasoningLevelOverride: text(
       "reasoning_level_override",
     ).$type<ReasoningLevel>(),
-    type: text("type").$type<ThreadType>().notNull().default("standard"),
-    sortKey: text("sort_key"),
     title: text("title"),
     titleFallback: text("title_fallback"),
     status: text("status", { enum: threadStatusValues })
@@ -299,12 +291,6 @@ export const threads = sqliteTable(
       table.projectId,
       table.archivedAt,
       table.deletedAt,
-      table.id,
-    ),
-    index("threads_project_type_sort_idx").on(
-      table.projectId,
-      table.type,
-      table.sortKey,
       table.id,
     ),
     index("threads_pin_sort_idx")

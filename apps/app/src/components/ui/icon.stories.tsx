@@ -18,7 +18,7 @@ const USAGE: Partial<Record<IconName, string>> = {
   Check:
     "Selected item in pickers/menus, CopyButton confirmation, completed todo",
   ChevronDown:
-    "Picker/dropdown trigger, section toggle headers, managed-child indent glyph",
+    "Picker/dropdown trigger, section toggle headers, child-thread indent glyph",
   ChevronLeft: "Image lightbox previous",
   ChevronRight:
     "Sidebar row collapsed-state glyph, breadcrumb separator, lightbox next, submenu indicator, replay-capture expand",
@@ -28,7 +28,7 @@ const USAGE: Partial<Record<IconName, string>> = {
   Circle: "Radio item indicator in menus",
   CircleCheck: "Auth callback success state",
   CircleDashed:
-    "Thread row busy spinner, manager-children busy section indicator",
+    "Thread row busy spinner, child-thread busy section indicator",
   CircleX: "Auth callback failure state",
   Clock: "Automations nav button in sidebar, automation rows in Automations view",
   Columns2: "Git diff toolbar “split view”",
@@ -71,8 +71,8 @@ const USAGE: Partial<Record<IconName, string>> = {
   Square: "Stop button while running, in-progress and pending todo glyphs",
   Trash2: "Delete queued message, remove project source, delete replay capture",
   UserRound:
-    "Manager indicator in sidebar, “Managed by” indicators in prompt banner",
-  UserRoundPlus: "“New Manager” button in sidebar",
+    "Parent-thread indicator in sidebar and prompt banner",
+  UserRoundPlus: "unused legacy parent-action icon",
   X: "Close dialogs/drawers, clear search input, remove attachment, close metadata panel",
   Zap: "Fast-mode indicator in model picker trigger, Fast-mode toggle row",
 };

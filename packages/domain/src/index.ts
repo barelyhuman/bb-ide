@@ -14,8 +14,6 @@ export {
   promptMentionPathSourceSchema,
   promptMentionPathSourceValues,
   promptMentionResourceSchema,
-  promptMentionThreadTypeSchema,
-  promptMentionThreadTypeValues,
   promptTextMentionSchema,
   reasoningLevelSchema,
   reasoningLevelValues,
@@ -38,7 +36,6 @@ export type {
   PromptMentionPathEntryKind,
   PromptMentionPathSource,
   PromptMentionResource,
-  PromptMentionThreadType,
   PromptTextMention,
   ReasoningLevel,
   ResolvedThreadExecutionOptions,
@@ -86,8 +83,8 @@ export {
 } from "./apps.js";
 export type { AppDataPath, ApplicationId, AppSourceName } from "./apps.js";
 
-export { threadDynamicContextFileStatusValues } from "./manager-dynamic-context.js";
-export type { ThreadDynamicContextFileStatus } from "./manager-dynamic-context.js";
+export { threadDynamicContextFileStatusValues } from "./thread-dynamic-context.js";
+export type { ThreadDynamicContextFileStatus } from "./thread-dynamic-context.js";
 
 export {
   TERMINAL_COLS_MAX,
@@ -185,7 +182,6 @@ export {
   availableModelSchema,
   dynamicToolSchema,
   modelReasoningEffortSchema,
-  messageUserToolArgumentsSchema,
   providerCapabilitiesSchema,
   providerInfoSchema,
   toolCallOutputItemSchema,
@@ -324,8 +320,6 @@ export {
   threadRuntimeStateSchema,
   threadStatusSchema,
   threadStatusValues,
-  threadTypeSchema,
-  threadTypeValues,
   threadWithRuntimeSchema,
   workspaceBranchSchema,
   workspaceChangeStatsSchema,
@@ -345,7 +339,6 @@ export type {
   ThreadRuntimeDisplayStatus,
   ThreadRuntimeState,
   ThreadStatus,
-  ThreadType,
   ThreadWithRuntime,
   WorkspaceChangeStats,
   WorkspaceCommitSummary,
@@ -372,7 +365,7 @@ export {
   provisioningTranscriptEntrySchema,
   systemPermissionGrantLifecycleEventDataSchema,
   systemErrorEventDataSchema,
-  systemManagerUserMessageEventDataSchema,
+  systemLegacyUserMessageEventDataSchema,
   systemOperationEventDataSchema,
   systemProviderTurnWatchdogEventDataSchema,
   systemEventTypeSchema,
@@ -402,7 +395,7 @@ export type {
   ProvisioningTranscriptEntry,
   SystemPermissionGrantLifecycleEventData,
   SystemErrorEventData,
-  SystemManagerUserMessageEventData,
+  SystemLegacyUserMessageEventData,
   SystemOperationEventData,
   SystemProviderTurnWatchdogEventData,
   SystemEventType,

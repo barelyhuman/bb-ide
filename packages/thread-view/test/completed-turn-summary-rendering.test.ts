@@ -271,7 +271,7 @@ describe("completed turn summary rendering", () => {
     ];
     const steerRequest = event.clientTurnRequested({
       initiator: "agent",
-      senderThreadId: "thr_manager",
+      senderThreadId: "thr_parent",
       target: { kind: "auto", expectedTurnId: "turn-1" },
       text: "Please account for the restart",
     });
@@ -359,7 +359,7 @@ describe("completed turn summary rendering", () => {
     ]);
   });
 
-  it("splits completed turn summaries around converted manager user messages", () => {
+  it("splits completed turn summaries around converted legacy user messages", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
 
     const timeline = renderCompletedTimeline({
@@ -369,8 +369,8 @@ describe("completed turn summary rendering", () => {
           itemId: "tool-before-message",
           command: "pnpm test",
         }),
-        event.managerUserMessage({
-          text: "Visible manager update",
+        event.legacyUserMessage({
+          text: "Visible legacy update",
         }),
         event.commandCompleted({
           itemId: "tool-after-message",

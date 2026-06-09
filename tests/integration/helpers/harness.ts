@@ -26,6 +26,10 @@ import { createLifecycleDedupers } from "../../../apps/server/src/lifecycle-dedu
 import { createApp } from "../../../apps/server/src/server.js";
 import { PendingInteractionLifecycle } from "../../../apps/server/src/services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "../../../apps/server/src/services/machine-auth.js";
+import {
+  copyBuiltinSkills,
+  resolveBuiltinSkillsRootPath,
+} from "../../../apps/server/src/services/skills/builtin-skills-copy.js";
 import { createAppVersionService } from "../../../apps/server/src/services/system/app-version.js";
 import { createBbAppManagedConfigReloader } from "../../../apps/server/src/services/system/bb-app-managed-config.js";
 import { TerminalSessionLifecycle } from "../../../apps/server/src/services/terminals/terminal-session-lifecycle.js";
@@ -201,6 +205,11 @@ async function startIntegrationServer(
 ): Promise<RunningTestServer> {
   const serverDataDir = path.join(tmpRoot, "server-data");
   await fs.mkdir(serverDataDir, { recursive: true });
+  const builtinSkillsRootPath = path.join(serverDataDir, "builtin-skills");
+  await copyBuiltinSkills({
+    skillsRootPath: resolveBuiltinSkillsRootPath(),
+    targetPath: builtinSkillsRootPath,
+  });
 
   const db = initDb(":memory:");
   const hub = new NotificationHub();
@@ -213,7 +222,7 @@ async function startIntegrationServer(
   });
   const config: ServerRuntimeConfig = {
     appVersion: "0.0.0-dev",
-    builtinSkillsRootPath: path.join(serverDataDir, "builtin-skills"),
+    builtinSkillsRootPath,
     customModels: [],
     dataDir: serverDataDir,
     featureFlags: defaultFeatureFlags,

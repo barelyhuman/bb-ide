@@ -243,7 +243,7 @@ interface PermissionGrantLifecycleArgs extends DefaultTurnEventOptions {
   toolName?: string;
 }
 
-interface ManagerUserMessageArgs extends EventFactoryRowOptions {
+interface LegacyUserMessageArgs extends EventFactoryRowOptions {
   text: string;
   turnId?: string;
 }
@@ -300,8 +300,8 @@ export interface TimelineEventFactory {
   inputAccepted(
     args: InputAcceptedArgs,
   ): ThreadEventRowOfType<"turn/input/accepted">;
-  managerUserMessage(
-    args: ManagerUserMessageArgs,
+  legacyUserMessage(
+    args: LegacyUserMessageArgs,
   ): ThreadEventRowOfType<"system/manager/user_message">;
   permissionGrantLifecycle(
     args?: PermissionGrantLifecycleArgs,
@@ -740,9 +740,9 @@ export function createTimelineEventFactory(
         },
       };
     },
-    managerUserMessage(args) {
+    legacyUserMessage(args) {
       const base = {
-        ...nextRowBase("manager-user-message", args),
+        ...nextRowBase("legacy-user-message", args),
         scope: turnScope(args.turnId ?? defaultTurnId()),
       };
       return {

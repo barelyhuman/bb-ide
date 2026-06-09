@@ -49,11 +49,6 @@ import { formatAgentThreadInput, sendThreadMessage } from "./thread-send.js";
 import { recordAcceptedPromptHistoryEntry } from "../prompt-history.js";
 import { requireThreadCommandEnvironment } from "./thread-command-environment.js";
 import { tryTransitionInTransaction } from "./thread-transitions.js";
-import {
-  prependManagerPreferencesSystemMessageIfChanged,
-  recordManagerDynamicFileDeliveryInTransaction,
-  withManagerPreferencesDeliveryLock,
-} from "./manager-dynamic-file-delivery.js";
 
 interface SendQueuedMessageArgs {
   mode: SendQueuedMessageMode;
@@ -241,93 +236,79 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
   await ensureHostSessionReadyForWork(deps, {
     hostId: environment.hostId,
   });
-  return await withManagerPreferencesDeliveryLock({ thread }, async () => {
-    const preparedInput = await prependManagerPreferencesSystemMessageIfChanged(
-      deps,
-      {
-        hostId: environment.hostId,
-        input,
-        thread,
-      },
-    );
-    const preparedCommand = await prepareTurnSubmitCommandPayload(deps, {
-      environment,
-      execution,
-      input: preparedInput.input,
-      permissionEscalation,
-      providerThreadId,
-      target: { mode: "start" },
-      thread,
-    });
-
-    const command = deps.db.transaction(
-      (tx) => {
-        const consumed = deleteClaimedQueuedThreadMessageInTransaction(tx, {
-          id: args.queuedMessage.id,
-          claimToken: args.queuedMessage.claimToken,
-        });
-        if (!consumed) {
-          return null;
-        }
-        const request = appendClientTurnEventInTransaction(tx, {
-          environmentId: thread.environmentId,
-          execution,
-          initiator,
-          input: preparedInput.input,
-          requestMethod: "turn/start",
-          senderThreadId,
-          source: "tell",
-          target: { kind: "new-turn" },
-          threadId: thread.id,
-          type: "client/turn/requested",
-        });
-        recordAcceptedPromptHistoryEntry(
-          { db: tx },
-          {
-            thread,
-            input: preparedInput.input,
-            initiator,
-            target: { kind: "new-turn" },
-            requestSequence: request.sequence,
-          },
-        );
-        recordManagerDynamicFileDeliveryInTransaction(
-          tx,
-          preparedInput.stateUpdate,
-        );
-        const command = addRequestIdToTurnSubmitCommandPayload({
-          requestId: request.requestId,
-          preparedCommand,
-        });
-        tryTransitionInTransaction(tx, deps.hub, thread.id, "active");
-        return command;
-      },
-      { behavior: "immediate" },
-    );
-    if (!command) {
-      throw createQueuedMessageClaimLostError();
-    }
-
-    deps.hub.notifyThread(
-      thread.id,
-      ["events-appended", "queue-changed", "status-changed"],
-      {
-        eventTypes: ["client/turn/requested"],
-      },
-    );
-    startLiveHostCommand(deps, {
-      command,
-      hostId: environment.hostId,
-      timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
-      onError: (error) => {
-        deps.logger.warn(
-          { err: error, threadId: thread.id },
-          "Live queued message command failed",
-        );
-      },
-    });
-    return queuedMessage;
+  const preparedCommand = await prepareTurnSubmitCommandPayload(deps, {
+    environment,
+    execution,
+    input,
+    permissionEscalation,
+    providerThreadId,
+    target: { mode: "start" },
+    thread,
   });
+
+  const command = deps.db.transaction(
+    (tx) => {
+      const consumed = deleteClaimedQueuedThreadMessageInTransaction(tx, {
+        id: args.queuedMessage.id,
+        claimToken: args.queuedMessage.claimToken,
+      });
+      if (!consumed) {
+        return null;
+      }
+      const request = appendClientTurnEventInTransaction(tx, {
+        environmentId: thread.environmentId,
+        execution,
+        initiator,
+        input,
+        requestMethod: "turn/start",
+        senderThreadId,
+        source: "tell",
+        target: { kind: "new-turn" },
+        threadId: thread.id,
+        type: "client/turn/requested",
+      });
+      recordAcceptedPromptHistoryEntry(
+        { db: tx },
+        {
+          thread,
+          input,
+          initiator,
+          target: { kind: "new-turn" },
+          requestSequence: request.sequence,
+        },
+      );
+      const command = addRequestIdToTurnSubmitCommandPayload({
+        requestId: request.requestId,
+        preparedCommand,
+      });
+      tryTransitionInTransaction(tx, deps.hub, thread.id, "active");
+      return command;
+    },
+    { behavior: "immediate" },
+  );
+  if (!command) {
+    throw createQueuedMessageClaimLostError();
+  }
+
+  deps.hub.notifyThread(
+    thread.id,
+    ["events-appended", "queue-changed", "status-changed"],
+    {
+      eventTypes: ["client/turn/requested"],
+    },
+  );
+  startLiveHostCommand(deps, {
+    command,
+    hostId: environment.hostId,
+    timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+    onError: (error) => {
+      deps.logger.warn(
+        { err: error, threadId: thread.id },
+        "Live queued message command failed",
+      );
+    },
+  });
+  return queuedMessage;
 }
 
 async function sendClaimedQueuedMessageForThread(

@@ -33,7 +33,7 @@ Listing:
 
   bb thread list                           List threads
     --project <id>                         Filter by project (defaults to BB_PROJECT_ID)
-    --parent-thread <id>                   Filter by parent/manager
+    --parent-thread <id>                   Filter by parent thread
     --archived                             Show only archived threads
 
 Inspecting:
@@ -76,7 +76,7 @@ Ownership:
   bb thread update [id]                    Update thread metadata
     --self                                 Target current thread
     --title <title>                        Set title
-    --parent-thread <id>                   Assign to a parent/manager
+    --parent-thread <id>                   Assign to a parent thread
     --clear-parent-thread                  Remove parent assignment
 
 Lifecycle:

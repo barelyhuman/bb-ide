@@ -1,6 +1,6 @@
 import { useCallback, useMemo, type ReactNode } from "react";
-import { ManagerThreadStorageBrowser } from "./ManagerThreadStorageBrowser";
-import type { ManagerStorageBrowserController } from "./useManagerStorageBrowser";
+import { ThreadStorageBrowser } from "./ThreadStorageBrowser";
+import type { ThreadStorageBrowserController } from "./useThreadStorageBrowser";
 import { Link } from "react-router-dom";
 import type {
   Environment,
@@ -43,7 +43,7 @@ import {
 } from "@/components/workspace/workspace-change-summary";
 import { getGitStatusDisplay } from "@/components/workspace/workspace-status";
 import { useUnarchiveThread } from "../../hooks/mutations/thread-state-mutations";
-import { buildManagerSelectorOptions } from "@/views/thread-detail/threadManagerSelectorOptions";
+import { buildParentSelectorOptions } from "@/views/thread-detail/threadParentSelectorOptions";
 import { getThreadRoutePath } from "@/lib/app-route-paths";
 
 // ---------------------------------------------------------------------------
@@ -53,68 +53,64 @@ import { getThreadRoutePath } from "@/lib/app-route-paths";
 // without bypassing the production rendering path.
 // ---------------------------------------------------------------------------
 
-export interface ManagerSelectorRowProps {
+export interface ParentSelectorRowProps {
   thread: Thread;
   projectId: string;
   parentThreadDisplayName: string | null;
-  managerThreads: readonly ThreadListEntry[];
-  canAssignToManager: boolean;
+  parentThreads: readonly ThreadListEntry[];
+  canAssignToParent: boolean;
   canTakeOverThread: boolean;
   updateThreadPending: boolean;
-  onAssignManager: (parentThreadId: string | null) => void;
+  onAssignParent: (parentThreadId: string | null) => void;
   /** Force the assignment dropdown open on first render. Used by stories. */
   defaultOpen?: boolean;
 }
 
-export function ManagerSelectorRow({
+export function ParentSelectorRow({
   thread,
   projectId,
   parentThreadDisplayName,
-  managerThreads,
-  canAssignToManager,
+  parentThreads,
+  canAssignToParent,
   canTakeOverThread,
   updateThreadPending,
-  onAssignManager,
+  onAssignParent,
   defaultOpen,
-}: ManagerSelectorRowProps) {
-  const isManagerThread = thread.type === "manager";
+}: ParentSelectorRowProps) {
   const parentThreadId = thread.parentThreadId ?? undefined;
-  const managerSelectorOptions = useMemo(
+  const parentSelectorOptions = useMemo(
     () =>
-      buildManagerSelectorOptions({
+      buildParentSelectorOptions({
         currentThreadId: thread.id,
-        isManagerThread,
-        managerThreads,
+        parentThreads,
         parentThreadDisplayName,
         parentThreadId,
       }),
     [
-      isManagerThread,
-      managerThreads,
+      parentThreads,
       parentThreadDisplayName,
       parentThreadId,
       thread.id,
     ],
   );
-  const managerSelectorValue = parentThreadId ?? "none";
-  const selectedManagerOptionLabel = managerSelectorOptions.find(
-    (option) => option.value === managerSelectorValue,
+  const parentSelectorValue = parentThreadId ?? "none";
+  const selectedParentOptionLabel = parentSelectorOptions.find(
+    (option) => option.value === parentSelectorValue,
   )?.label;
 
-  if (isManagerThread) return null;
-  if (!parentThreadId && !canAssignToManager && !canTakeOverThread) {
+  if (!parentThreadId && !canAssignToParent && !canTakeOverThread) {
     return null;
   }
 
   return (
-    <DetailRow label="Manager" valueClassName="min-w-0">
+    <DetailRow label="Parent" valueClassName="min-w-0">
       {parentThreadId ? (
         <div className="inline-flex max-w-full min-w-0 items-center gap-1 text-xs text-foreground">
           <Link
             to={getThreadRoutePath({ projectId, threadId: parentThreadId })}
             className="min-w-0 truncate text-xs text-foreground no-underline transition-[text-decoration-color] duration-150 hover:underline hover:underline-offset-2"
           >
-            {selectedManagerOptionLabel ?? "Manager"}
+            {selectedParentOptionLabel ?? "Parent thread"}
           </Link>
           <Button
             type="button"
@@ -123,9 +119,9 @@ export function ManagerSelectorRow({
             className="size-3.5 shrink-0 rounded-full p-0 text-muted-foreground hover:bg-transparent hover:text-foreground [&_svg]:size-3"
             disabled={updateThreadPending}
             onClick={() => {
-              onAssignManager(null);
+              onAssignParent(null);
             }}
-            aria-label="Unassign manager"
+            aria-label="Clear parent thread"
           >
             <Icon name="X" />
           </Button>
@@ -137,15 +133,15 @@ export function ManagerSelectorRow({
               role="button"
               tabIndex={
                 updateThreadPending ||
-                (managerSelectorOptions.length <= 1 &&
-                  managerSelectorValue === "none")
+                (parentSelectorOptions.length <= 1 &&
+                  parentSelectorValue === "none")
                   ? -1
                   : 0
               }
               className="inline-flex w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-0 text-xs leading-tight text-foreground outline-none ring-sidebar-ring transition-colors hover:text-foreground focus-visible:ring-2"
             >
               <span className="min-w-0 truncate text-xs text-foreground">
-                {selectedManagerOptionLabel ?? "None"}
+                {selectedParentOptionLabel ?? "None"}
               </span>
               <Icon
                 name="ChevronDown"
@@ -154,12 +150,12 @@ export function ManagerSelectorRow({
             </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="min-w-40 max-w-72">
-            <DropdownMenuLabel>Assign to manager</DropdownMenuLabel>
-            {managerSelectorOptions.map((option) => (
+            <DropdownMenuLabel>Assign parent thread</DropdownMenuLabel>
+            {parentSelectorOptions.map((option) => (
               <DropdownMenuItem
                 key={option.value}
                 onSelect={() => {
-                  onAssignManager(
+                  onAssignParent(
                     option.value === "none" ? null : option.value,
                   );
                 }}
@@ -171,7 +167,7 @@ export function ManagerSelectorRow({
                 <Icon
                   name="Check"
                   className={
-                    managerSelectorValue === option.value
+                    parentSelectorValue === option.value
                       ? cn("opacity-100", COARSE_POINTER_ICON_SIZE_CLASS)
                       : cn("opacity-0", COARSE_POINTER_ICON_SIZE_CLASS)
                   }
@@ -181,15 +177,6 @@ export function ManagerSelectorRow({
           </DropdownMenuContent>
         </DropdownMenu>
       )}
-    </DetailRow>
-  );
-}
-
-export function KindRow({ thread }: { thread: Thread }) {
-  if (thread.type !== "manager") return null;
-  return (
-    <DetailRow label="Kind" valueClassName="min-w-0 truncate">
-      Manager
     </DetailRow>
   );
 }
@@ -207,7 +194,6 @@ export function EnvironmentRow({
     projectId: thread.projectId,
     environmentId: environment?.id ?? "",
   });
-  if (thread.type === "manager") return null;
   if (!environment) return null;
   const display = formatEnvironmentDisplay({
     environment,
@@ -280,7 +266,6 @@ export function WorkspacePathRow({
   thread,
   environment,
 }: WorkspacePathRowProps) {
-  if (thread.type === "manager") return null;
   if (!environment?.path) return null;
   const display = getWorkspacePathRowDisplay(environment);
   if (!display) return null;
@@ -305,7 +290,6 @@ export interface BranchRowProps {
 
 export function BranchRow({ thread, workspaceStatus }: BranchRowProps) {
   const branchName = workspaceStatus?.branch.currentBranch ?? null;
-  if (thread.type === "manager") return null;
   if (!branchName) return null;
   return (
     <DetailRow label="Branch" valueClassName="min-w-0 truncate">
@@ -380,7 +364,6 @@ export function MergeBaseRow({
       workspaceStatus.branch.defaultBranch;
   const showMergeBase =
     showBranchComparisonUi && Boolean(mergeBaseBranch) && !isOnDefaultBranch;
-  if (thread.type === "manager") return null;
   if (!showMergeBase) return null;
   const canRequestMergeBaseOptions =
     mergeBaseBranchOptions === undefined &&
@@ -436,11 +419,8 @@ export function GitStatusRow({
   workspaceUnavailable,
   selectedMergeBaseBranch,
 }: GitStatusRowProps) {
-  const isManagerThread = thread.type === "manager";
-  const canUseGitUi = !isManagerThread;
   const isWorkspaceDeleted = environment?.status === "destroyed";
   const showWorkspaceStatus =
-    canUseGitUi &&
     (Boolean(workspaceStatus) ||
       Boolean(workspaceStatusError) ||
       Boolean(workspaceUnavailable) ||
@@ -501,7 +481,6 @@ export function ArchivedRow({ thread }: ArchivedRowProps) {
       <ThreadUnarchiveButton
         isPending={isPending}
         onUnarchive={onUnarchive}
-        threadType={thread.type}
       />
     </DetailRow>
   );
@@ -555,7 +534,6 @@ export function ChangedFilesRow({
   workspaceStatus,
   onChangedFileClick,
 }: ChangedFilesRowProps) {
-  if (thread.type === "manager") return null;
   return (
     <ChangedFilesDetailRow
       sections={selectWorkspaceChangedFilesSections(workspaceStatus)}
@@ -567,17 +545,17 @@ export function ChangedFilesRow({
   );
 }
 
-export interface ManagerWorkspaceRowProps {
-  controller: ManagerStorageBrowserController;
+export interface ThreadStorageRowProps {
+  controller: ThreadStorageBrowserController;
   filesError?: Error | null;
   isFilesLoading: boolean;
 }
 
-export function ManagerWorkspaceRow({
+export function ThreadStorageRow({
   controller,
   filesError,
   isFilesLoading,
-}: ManagerWorkspaceRowProps) {
+}: ThreadStorageRowProps) {
   const { isSearchOpen, openSearch } = controller;
   return (
     <DetailRow
@@ -587,7 +565,7 @@ export function ManagerWorkspaceRow({
       labelClassName="flex items-center justify-between gap-2"
       label={
         <>
-          <span>Manager workspace</span>
+          <span>Thread storage</span>
           {isSearchOpen ? null : (
             <Button
               type="button"
@@ -603,7 +581,7 @@ export function ManagerWorkspaceRow({
         </>
       }
     >
-      <ManagerThreadStorageBrowser
+      <ThreadStorageBrowser
         controller={controller}
         filesError={filesError}
         isFilesLoading={isFilesLoading}
@@ -620,8 +598,8 @@ export interface ThreadMetadataContentProps {
   thread: Thread;
   projectId: string;
   parentThreadDisplayName: string | null;
-  managerThreads: readonly ThreadListEntry[];
-  canAssignToManager: boolean;
+  parentThreads: readonly ThreadListEntry[];
+  canAssignToParent: boolean;
   canTakeOverThread: boolean;
   environment: Environment | null;
   workspaceStatus: WorkspaceStatus | undefined;
@@ -635,8 +613,8 @@ export interface ThreadMetadataContentProps {
   isLoadingMergeBaseBranchOptions: boolean;
   threadSchedules: readonly ThreadSchedule[];
   updateThreadPending: boolean;
-  storage?: ManagerWorkspaceRowProps;
-  onAssignManager: (parentThreadId: string | null) => void;
+  storage?: ThreadStorageRowProps;
+  onAssignParent: (parentThreadId: string | null) => void;
   onMergeBaseBranchChange: (branch: string) => void;
   onMergeBasePickerOpenChange?: (open: boolean) => void;
   onMergeBaseBranchSearchQueryChange?: (query: string) => void;
@@ -666,12 +644,9 @@ export function hasAnyThreadMetadata({
   | "workspaceUnavailable"
   | "threadSchedules"
 >): boolean {
-  const isManagerThread = thread.type === "manager";
   const parentThreadId = thread.parentThreadId ?? undefined;
-  const canUseGitUi = !isManagerThread;
   const isWorkspaceDeleted = environment?.status === "destroyed";
   const showWorkspaceStatus =
-    canUseGitUi &&
     (Boolean(workspaceStatus) ||
       Boolean(workspaceStatusError) ||
       Boolean(workspaceUnavailable) ||
@@ -680,14 +655,12 @@ export function hasAnyThreadMetadata({
   const branchName = workspaceStatus?.branch.currentBranch ?? null;
   const workspaceChangedFilesSections =
     selectWorkspaceChangedFilesSections(workspaceStatus);
-  const showThreadChangedFiles =
-    canUseGitUi && workspaceChangedFilesSections.length > 0;
+  const showThreadChangedFiles = workspaceChangedFilesSections.length > 0;
 
   return Boolean(
-    isManagerThread ||
     parentThreadId ||
-    (!isManagerThread && environment) ||
-    (!isManagerThread && branchName) ||
+    environment ||
+    branchName ||
     showWorkspaceStatus ||
     showThreadChangedFiles ||
     threadSchedules.length > 0 ||
@@ -704,7 +677,7 @@ interface DetailCardWrapperProps {
  * Shared DetailCard styling used by ThreadMetadataContent and the per-row
  * stories so a single row in isolation looks the same as it does inside the
  * full panel. Owns the info tab's vertical scroll: the rows scroll as a group
- * so no section (e.g. Manager workspace) can be pushed out of reach. Any
+ * so no section can be pushed out of reach. Any
  * flex-filling row carries its own min-height so it stays usable once the
  * group scrolls.
  */
@@ -724,8 +697,8 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
     thread,
     projectId,
     parentThreadDisplayName,
-    managerThreads,
-    canAssignToManager,
+    parentThreads,
+    canAssignToParent,
     canTakeOverThread,
     environment,
     workspaceStatus,
@@ -740,7 +713,7 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
     threadSchedules,
     updateThreadPending,
     storage,
-    onAssignManager,
+    onAssignParent,
     onMergeBaseBranchChange,
     onMergeBasePickerOpenChange,
     onMergeBaseBranchSearchQueryChange,
@@ -749,16 +722,15 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
 
   return (
     <ThreadMetadataCard>
-      <KindRow thread={thread} />
-      <ManagerSelectorRow
+      <ParentSelectorRow
         thread={thread}
         projectId={projectId}
         parentThreadDisplayName={parentThreadDisplayName}
-        managerThreads={managerThreads}
-        canAssignToManager={canAssignToManager}
+        parentThreads={parentThreads}
+        canAssignToParent={canAssignToParent}
         canTakeOverThread={canTakeOverThread}
         updateThreadPending={updateThreadPending}
-        onAssignManager={onAssignManager}
+        onAssignParent={onAssignParent}
       />
       <EnvironmentRow thread={thread} environment={environment} />
       <WorkspacePathRow thread={thread} environment={environment} />
@@ -791,7 +763,7 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
         workspaceStatus={workspaceStatus}
         onChangedFileClick={onChangedFileClick}
       />
-      {storage ? <ManagerWorkspaceRow {...storage} /> : null}
+      {storage ? <ThreadStorageRow {...storage} /> : null}
     </ThreadMetadataCard>
   );
 }

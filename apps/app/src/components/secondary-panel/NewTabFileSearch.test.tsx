@@ -38,14 +38,12 @@ interface ProviderWrapperProps {
 interface RenderLauncherArgs {
   projectId?: string;
   currentThreadId?: string;
-  currentThreadType?: NewTabFileSearchProps["currentThreadType"];
   onSelect?: NewTabFileSearchProps["onSelect"];
 }
 
 interface RenderActionMenuArgs {
   projectId?: string;
   currentThreadId?: string;
-  currentThreadType?: NewTabActionMenuProps["currentThreadType"];
   onSelect?: NewTabActionMenuProps["onSelect"];
   onOpenFileSearch?: NewTabActionMenuProps["onOpenFileSearch"];
   onCreateAppPromptPrefill?: NewTabActionMenuProps["onCreateAppPromptPrefill"];
@@ -220,7 +218,6 @@ function renderLauncher(args: RenderLauncherArgs = {}) {
       projectId: args.projectId ?? "proj_1",
       environmentId: null,
       currentThreadId: args.currentThreadId ?? "thr_1",
-      currentThreadType: args.currentThreadType ?? "manager",
       focusRequest: 0,
       onSelect: args.onSelect ?? vi.fn(),
     }),
@@ -236,7 +233,6 @@ function renderActionMenu(args: RenderActionMenuArgs = {}) {
     createElement(NewTabActionMenu, {
       projectId: args.projectId ?? "proj_1",
       currentThreadId: args.currentThreadId ?? "thr_1",
-      currentThreadType: args.currentThreadType ?? "manager",
       onSelect: args.onSelect ?? vi.fn(),
       onOpenFileSearch: args.onOpenFileSearch ?? vi.fn(),
       onCreateAppPromptPrefill: args.onCreateAppPromptPrefill,

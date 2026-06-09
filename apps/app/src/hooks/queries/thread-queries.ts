@@ -8,7 +8,6 @@ import { useMemo } from "react";
 import type {
   PendingInteraction,
   ResolvedThreadExecutionOptions,
-  ThreadType,
 } from "@bb/domain";
 import type {
   AutomationsOverviewResponse,
@@ -121,8 +120,8 @@ export interface UseThreadsFilters extends Omit<
 }
 
 export interface ProjectThreadSubsetFilters {
+  hasParent?: ThreadListFilters["hasParent"];
   parentThreadId?: string;
-  type?: ThreadType;
 }
 
 export interface UseProjectThreadSubsetArgs {
@@ -184,8 +183,8 @@ function buildThreadSubsetListFilters({
   if (filters.parentThreadId !== undefined) {
     listFilters.parentThreadId = filters.parentThreadId;
   }
-  if (filters.type !== undefined) {
-    listFilters.type = filters.type;
+  if (filters.hasParent !== undefined) {
+    listFilters.hasParent = filters.hasParent;
   }
 
   return listFilters;
@@ -201,7 +200,10 @@ function threadMatchesProjectThreadSubset(
   ) {
     return false;
   }
-  if (filters.type !== undefined && thread.type !== filters.type) {
+  if (
+    filters.hasParent !== undefined &&
+    (thread.parentThreadId !== null) !== filters.hasParent
+  ) {
     return false;
   }
   return true;
@@ -254,16 +256,14 @@ export interface UseArchivedThreadsFilters {
 }
 
 interface ArchivedThreadsApiFilters {
-  managed?: boolean;
-  type?: ThreadListFilters["type"];
+  hasParent?: ThreadListFilters["hasParent"];
 }
 
 function archivedThreadsKindToApiFilters(
   kind: ArchivedThreadsKindFilter,
 ): ArchivedThreadsApiFilters {
-  if (kind === "manager") return { type: "manager" };
-  if (kind === "managed") return { managed: true, type: "standard" };
-  if (kind === "unmanaged") return { managed: false, type: "standard" };
+  if (kind === "root") return { hasParent: false };
+  if (kind === "child") return { hasParent: true };
   return {};
 }
 
@@ -339,7 +339,7 @@ export function useProjectThreadSubset({
 }: UseProjectThreadSubsetArgs): UseProjectThreadSubsetResult {
   const queryClient = useQueryClient();
   const enabled = (enabledOption ?? true) && Boolean(projectId);
-  const { parentThreadId, type } = filters;
+  const { hasParent, parentThreadId } = filters;
   const activeProjectThreadListQueryKey =
     enabled && projectId
       ? threadListQueryKey({ archived: false, projectId })
@@ -377,11 +377,11 @@ export function useProjectThreadSubset({
     () =>
       activeProjectThreadsQuery.data
         ? filterProjectThreadSubset(activeProjectThreadsQuery.data, {
+            hasParent,
             parentThreadId,
-            type,
           })
         : undefined,
-    [activeProjectThreadsQuery.data, parentThreadId, type],
+    [activeProjectThreadsQuery.data, hasParent, parentThreadId],
   );
 
   return {

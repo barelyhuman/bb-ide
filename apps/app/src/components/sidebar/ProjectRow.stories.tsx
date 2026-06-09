@@ -116,7 +116,6 @@ function InteractiveProjectRow({
       collapsedEnvironmentIds={collapsedEnvironmentIds}
       isLocalPathInvalid={isLocalPathInvalid}
       onCreateProjectThread={noop}
-      onCreateProjectManager={noop}
       onToggleProjectCollapsed={onToggleProjectCollapsed}
       onToggleThreadCollapsed={onToggleThreadCollapsed}
       onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
@@ -159,8 +158,8 @@ const pendingThread = makeThread({
   titleFallback: "Diagnose Claude CLI auth path",
   hasPendingInteraction: true,
 });
-const standardThread = makeThread({
-  id: "thr_standard",
+const rootThread = makeThread({
+  id: "thr_root",
   title: "Stabilize Pnpm Dev Environment",
   titleFallback: "Stabilize Pnpm Dev Environment",
   environmentHostId: HOST_IDS.local,
@@ -185,69 +184,66 @@ const sharedWorktreeThreadB = makeThread({
   environmentBranchName: "bb/set-default-tab-for-panel-thr_vnj2qze4fg",
   environmentWorkspaceDisplayKind: "managed-worktree",
 });
-const manager = makeThread({
-  id: "thr_manager",
-  type: "manager",
-  title: "Frontend Manager",
-  titleFallback: "Frontend Manager",
+const parentThread = makeThread({
+  id: "thr_parent",
+  title: "Frontend Parent",
+  titleFallback: "Frontend Parent",
 });
-const managerChildA = makeThread({
-  id: "thr_manager_child_a",
+const parentChildA = makeThread({
+  id: "thr_parent_child_a",
   title: "Update Timeline Row Types",
   titleFallback: "Update Timeline Row Types",
-  parentThreadId: manager.id,
+  parentThreadId: parentThread.id,
 });
-const managerChildB = makeThread({
-  id: "thr_manager_child_b",
+const parentChildB = makeThread({
+  id: "thr_parent_child_b",
   title: "Fix Timeline Pagination Bugs",
   titleFallback: "Fix Timeline Pagination Bugs",
-  parentThreadId: manager.id,
+  parentThreadId: parentThread.id,
   status: "active",
   runtime: {
     displayStatus: "active",
     hostReconnectGraceExpiresAt: null,
   },
 });
-const deepRootManager = makeThread({
-  id: "thr_deep_root_manager",
-  type: "manager",
-  title: "Prototype Manager",
-  titleFallback: "Prototype Manager",
+const deepRootParent = makeThread({
+  id: "thr_deep_root_parent",
+  title: "Prototype Parent",
+  titleFallback: "Prototype Parent",
 });
-const deepStandardParent = makeThread({
-  id: "thr_deep_standard_parent",
+const deepIntermediateParent = makeThread({
+  id: "thr_deep_intermediate_parent",
   title: "Sidebar Parent Thread",
   titleFallback: "Sidebar Parent Thread",
-  parentThreadId: deepRootManager.id,
+  parentThreadId: deepRootParent.id,
 });
-const deepStandardChild = makeThread({
-  id: "thr_deep_standard_child",
-  title: "Standard Child With Its Own Children",
-  titleFallback: "Standard Child With Its Own Children",
-  parentThreadId: deepStandardParent.id,
+const deepParentChild = makeThread({
+  id: "thr_deep_parent_child",
+  title: "Child With Its Own Children",
+  titleFallback: "Child With Its Own Children",
+  parentThreadId: deepIntermediateParent.id,
 });
-const deepNestedManager = makeThread({
-  id: "thr_deep_nested_manager",
-  type: "manager",
-  title: "Nested Manager Marker",
-  titleFallback: "Nested Manager Marker",
-  parentThreadId: deepStandardChild.id,
+const deepNestedParent = makeThread({
+  id: "thr_deep_nested_parent",
+  title: "Nested Parent Marker",
+  titleFallback: "Nested Parent Marker",
+  parentThreadId: deepParentChild.id,
 });
-// depth 4: child of the depth-3 nested manager. Its parent is the deepest row
+// depth 4: child of the depth-3 nested parent. Its parent is the deepest row
 // that still pins (level 3 = the cap); this row itself sits one past the cap and
 // renders non-sticky, so the story exercises both the last pinned level and the
 // first unpinned one.
-const deepNestedManagerChild = makeThread({
-  id: "thr_deep_nested_manager_child",
+const deepNestedParentChild = makeThread({
+  id: "thr_deep_nested_parent_child",
   title: "Beyond The Sticky Cap",
   titleFallback: "Beyond The Sticky Cap",
-  parentThreadId: deepNestedManager.id,
+  parentThreadId: deepNestedParent.id,
 });
 const deepWorktreeA = makeThread({
   id: "thr_deep_worktree_a",
   title: "Worktree Thread A",
   titleFallback: "Worktree Thread A",
-  parentThreadId: deepStandardParent.id,
+  parentThreadId: deepIntermediateParent.id,
   environmentId: "env_deep_worktree",
   environmentHostId: HOST_IDS.local,
   environmentBranchName: "bb/sidebar-parent-child-nesting",
@@ -257,7 +253,7 @@ const deepWorktreeB = makeThread({
   id: "thr_deep_worktree_b",
   title: "Worktree Thread B",
   titleFallback: "Worktree Thread B",
-  parentThreadId: deepStandardParent.id,
+  parentThreadId: deepIntermediateParent.id,
   environmentId: "env_deep_worktree",
   environmentHostId: HOST_IDS.local,
   environmentBranchName: "bb/sidebar-parent-child-nesting",
@@ -277,10 +273,10 @@ const multipleProjects: MultiProjectEntry[] = [
     threadListState: {
       status: "ready",
       threads: [
-        { ...standardThread, projectId: "proj_bb" },
-        { ...manager, projectId: "proj_bb" },
-        { ...managerChildA, projectId: "proj_bb" },
-        { ...managerChildB, projectId: "proj_bb" },
+        { ...rootThread, projectId: "proj_bb" },
+        { ...parentThread, projectId: "proj_bb" },
+        { ...parentChildA, projectId: "proj_bb" },
+        { ...parentChildB, projectId: "proj_bb" },
         { ...busyThread, projectId: "proj_bb" },
         { ...pendingThread, projectId: "proj_bb" },
       ],
@@ -367,29 +363,29 @@ export function Overview() {
         })}
       </StoryRow>
       <StoryRow
-        label="manager + standard"
-        hint="ProjectRow groups managers before unmanaged standards — click the manager chevron to collapse its children"
+        label="parent + root"
+        hint="ProjectRow nests child threads under their parent — click the parent chevron to collapse its children"
       >
         {singleProject({
           threadListState: {
             status: "ready",
-            threads: [manager, managerChildA, managerChildB, idleThread],
+            threads: [parentThread, parentChildA, parentChildB, idleThread],
           },
         })}
       </StoryRow>
       <StoryRow
         label="deep parent nesting"
-        hint="mixed manager/standard parents past the sticky cap (4 levels), with a worktree group nested below a standard parent — scroll to see the deepest parent within the cap pin while the row past it stays loose"
+        hint="nested parent threads past the sticky cap (4 levels), with a worktree group nested below a parent thread — scroll to see the deepest parent within the cap pin while the row past it stays loose"
       >
         {singleProject({
           threadListState: {
             status: "ready",
             threads: [
-              deepRootManager,
-              deepStandardParent,
-              deepStandardChild,
-              deepNestedManager,
-              deepNestedManagerChild,
+              deepRootParent,
+              deepIntermediateParent,
+              deepParentChild,
+              deepNestedParent,
+              deepNestedParentChild,
               deepWorktreeA,
               deepWorktreeB,
             ],
@@ -397,20 +393,20 @@ export function Overview() {
         })}
       </StoryRow>
       <StoryRow
-        label="manager starts collapsed"
+        label="parent starts collapsed"
         hint="children hidden by default"
       >
         {singleProject({
-          initialCollapsedThreadIds: new Set([manager.id]),
+          initialCollapsedThreadIds: new Set([parentThread.id]),
           threadListState: {
             status: "ready",
-            threads: [manager, managerChildA, managerChildB],
+            threads: [parentThread, parentChildA, parentChildB],
           },
         })}
       </StoryRow>
       <StoryRow
         label="environment group"
-        hint="two unmanaged standard threads sharing one worktree environment — grouped under a worktree header that surfaces the branch"
+        hint="two root threads sharing one worktree environment — grouped under a worktree header that surfaces the branch"
       >
         {singleProject({
           threadListState: {
@@ -432,33 +428,33 @@ export function Overview() {
         })}
       </StoryRow>
       <StoryRow
-        label="collapsed manager — child needs input"
+        label="collapsed parent — child needs input"
         hint="trailing attention dot surfaces a hidden child blocked on the user"
       >
         {singleProject({
-          initialCollapsedThreadIds: new Set([manager.id]),
+          initialCollapsedThreadIds: new Set([parentThread.id]),
           threadListState: {
             status: "ready",
             threads: [
-              manager,
-              managerChildA,
-              { ...managerChildB, hasPendingInteraction: true },
+              parentThread,
+              parentChildA,
+              { ...parentChildB, hasPendingInteraction: true },
             ],
           },
         })}
       </StoryRow>
       <StoryRow
-        label="collapsed manager — needs input + working"
+        label="collapsed parent — needs input + working"
         hint="one child blocked, another running: attention wins, trailing slot shows the attention dot"
       >
         {singleProject({
-          initialCollapsedThreadIds: new Set([manager.id]),
+          initialCollapsedThreadIds: new Set([parentThread.id]),
           threadListState: {
             status: "ready",
             threads: [
-              manager,
-              { ...managerChildA, hasPendingInteraction: true },
-              managerChildB,
+              parentThread,
+              { ...parentChildA, hasPendingInteraction: true },
+              parentChildB,
             ],
           },
         })}
@@ -511,7 +507,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="multiple projects"
-        hint="four projects stacked — active project at the top with a standard thread, manager group, and busy/pending threads; another collapsed with a long truncated name; one with two idle threads; an empty one at the bottom"
+        hint="four projects stacked — active project at the top with a root thread, parent group, and busy/pending threads; another collapsed with a long truncated name; one with two idle threads; an empty one at the bottom"
       >
         <SidebarStage>
           <SidebarStickyStack>
@@ -530,15 +526,14 @@ export function Overview() {
 // ---------------------------------------------------------------------------
 // Full sidebar — three realistic projects expanded together. Helpful for
 // eyeballing the vertical rhythm: project↔project separation vs. the tighter
-// grouping inside a manager.
+// grouping inside a parent thread.
 // ---------------------------------------------------------------------------
 
-const fullManagerA = makeThread({
-  id: "thr_full_a_manager",
+const fullParentA = makeThread({
+  id: "thr_full_a_parent",
   projectId: "proj_full_a",
-  type: "manager",
-  title: "Codex Manager",
-  titleFallback: "Codex Manager",
+  title: "Codex Parent",
+  titleFallback: "Codex Parent",
 });
 
 interface FullChildSpec {
@@ -555,14 +550,14 @@ const fullProjectAChildSpecs: FullChildSpec[] = [
 ];
 
 const fullProjectAThreads: ThreadListEntry[] = [
-  fullManagerA,
+  fullParentA,
   ...fullProjectAChildSpecs.map((spec, index) =>
     makeThread({
       id: `thr_full_a_child_${index}`,
       projectId: "proj_full_a",
       title: spec.title,
       titleFallback: spec.title,
-      parentThreadId: fullManagerA.id,
+      parentThreadId: fullParentA.id,
       ...(spec.busy
         ? {
             status: "active",
@@ -576,22 +571,22 @@ const fullProjectAThreads: ThreadListEntry[] = [
     }),
   ),
   makeThread({
-    id: "thr_full_a_managed_env_group_1",
+    id: "thr_full_a_worktree_env_group_1",
     projectId: "proj_full_a",
     title: "Audit recurring permission failures",
     titleFallback: "Audit recurring permission failures",
-    parentThreadId: fullManagerA.id,
+    parentThreadId: fullParentA.id,
     environmentId: "env_full_a_codex_train",
     environmentHostId: "host_local",
     environmentBranchName: "bb/squash-merge-ready-app-train-thr_s6fn8fuv9w",
     environmentWorkspaceDisplayKind: "managed-worktree",
   }),
   makeThread({
-    id: "thr_full_a_managed_env_group_2",
+    id: "thr_full_a_worktree_env_group_2",
     projectId: "proj_full_a",
     title: "Investigate ux regression bug",
     titleFallback: "Investigate ux regression bug",
-    parentThreadId: fullManagerA.id,
+    parentThreadId: fullParentA.id,
     environmentId: "env_full_a_codex_train",
     environmentHostId: "host_local",
     environmentBranchName: "bb/squash-merge-ready-app-train-thr_s6fn8fuv9w",
@@ -662,16 +657,15 @@ const fullProjectBThreads: ThreadListEntry[] = [
   }),
 ];
 
-const fullManagerC = makeThread({
-  id: "thr_full_c_manager",
+const fullParentC = makeThread({
+  id: "thr_full_c_parent",
   projectId: "proj_full_c",
-  type: "manager",
-  title: "Frontend Manager",
-  titleFallback: "Frontend Manager",
+  title: "Frontend Parent",
+  titleFallback: "Frontend Parent",
 });
 
 const fullProjectCThreads: ThreadListEntry[] = [
-  fullManagerC,
+  fullParentC,
   makeThread({
     id: "thr_full_c_standalone",
     projectId: "proj_full_c",
@@ -710,13 +704,12 @@ export function Full() {
     <StoryCard>
       <StoryRow
         label="full sidebar"
-        hint="action buttons + three projects: bb (active) with a manager that has 4 loose children + a 2-thread env sub-group, plus 2 standalones and a 2-thread project-level env group; pierre with 3 standalones; ingest-pipeline with a manager + 1 standalone"
+        hint="action buttons + three projects: bb (active) with a parent that has 4 loose children + a 2-thread env sub-group, plus 2 standalones and a 2-thread project-level env group; pierre with 3 standalones; ingest-pipeline with a parent + 1 standalone"
       >
         <SidebarStage>
           <div className="px-2 pb-2">
             <ProjectListActionButtons
               onNewChat={noop}
-              onNewManager={noop}
               onOpenAutomations={noop}
             />
           </div>

@@ -424,7 +424,6 @@ function printThreadStatus(
 ): void {
   const { thread } = payload;
   console.log(`Thread: ${thread.id}`);
-  console.log(`  Type: ${thread.type}`);
   console.log(`  Status: ${statusText(thread.status)}`);
   if (thread.title) {
     console.log(`  Title: ${thread.title}`);

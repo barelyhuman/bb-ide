@@ -391,9 +391,9 @@ const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
   "hostDaemonOnlineRpcCommandSchema.selectedBranch":
     "host.list_branches may omit exact selected-branch classification when the caller only needs a branch option page.",
   "hostDaemonCommandSchema.threadStoragePath":
-    "thread.start may include a storage path for manager threads so the daemon creates the directory before the agent starts.",
+    "thread.start may include a storage path so the daemon creates the directory before the agent starts.",
   "hostDaemonCommandSchema.disallowedTools":
-    "manager thread runtime context may omit provider-specific built-in tool removals for providers that do not need them.",
+    "thread runtime context may omit provider-specific built-in tool removals for providers that do not need them.",
   "hostDaemonCommandSchema.resumeContext.disallowedTools":
     "turn.submit resume context may omit provider-specific built-in tool removals for providers that do not need them.",
 };
@@ -719,47 +719,47 @@ describe("host-daemon command schemas", () => {
     expect(
       hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.file_metadata",
-        path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
+        path: "/tmp/bb-data/thread-storage/thread-123/notes.md",
         rootPath: "/tmp/bb-data/thread-storage/thread-123",
       }),
     ).toMatchObject({
       type: "host.file_metadata",
-      path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
+      path: "/tmp/bb-data/thread-storage/thread-123/notes.md",
       rootPath: "/tmp/bb-data/thread-storage/thread-123",
     });
 
     expect(
       hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.read_file",
-        path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
+        path: "/tmp/bb-data/thread-storage/thread-123/notes.md",
         rootPath: "/tmp/bb-data/thread-storage/thread-123",
       }),
     ).toMatchObject({
       type: "host.read_file",
-      path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
+      path: "/tmp/bb-data/thread-storage/thread-123/notes.md",
       rootPath: "/tmp/bb-data/thread-storage/thread-123",
     });
 
     expect(
       hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.read_file",
-        path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
+        path: "/tmp/bb-data/thread-storage/thread-123/notes.md",
       }),
     ).toMatchObject({
       type: "host.read_file",
-      path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
+      path: "/tmp/bb-data/thread-storage/thread-123/notes.md",
     });
 
     expect(
       hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.read_file",
-        path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
+        path: "/tmp/bb-data/thread-storage/thread-123/notes.md",
         rootPath: "/tmp/bb-data/thread-storage/thread-123",
         ref: "HEAD",
       }),
     ).toMatchObject({
       type: "host.read_file",
-      path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
+      path: "/tmp/bb-data/thread-storage/thread-123/notes.md",
       rootPath: "/tmp/bb-data/thread-storage/thread-123",
       ref: "HEAD",
     });
@@ -1059,7 +1059,7 @@ describe("host-daemon command schemas", () => {
     expect(() =>
       hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.read_file",
-        path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
+        path: "/tmp/bb-data/thread-storage/thread-123/notes.md",
         ref: "HEAD",
       }),
     ).toThrow();
@@ -1155,11 +1155,11 @@ describe("host-daemon command schemas", () => {
           permissionMode: "full",
           permissionEscalation: null,
         },
-        instructions: "Be a helpful manager.",
+        instructions: "Be a helpful thread.",
         dynamicTools: [
           {
-            name: "message_user",
-            description: "Send a user-visible update",
+            name: "notify_user",
+            description: "Send a thread-visible update",
             inputSchema: { type: "object" },
           },
         ],
@@ -1696,15 +1696,15 @@ describe("host-daemon command schemas", () => {
 
     expect(
       hostDaemonOnlineRpcResultSchemaByType["host.read_file"].parse({
-        path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
-        content: "# Preferences",
+        path: "/tmp/bb-data/thread-storage/thread-123/notes.md",
+        content: "# Notes",
         contentEncoding: "utf8",
         mimeType: "text/markdown",
         sizeBytes: 13,
       }),
     ).toMatchObject({
-      path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
-      content: "# Preferences",
+      path: "/tmp/bb-data/thread-storage/thread-123/notes.md",
+      content: "# Notes",
       contentEncoding: "utf8",
     });
 
@@ -1724,12 +1724,12 @@ describe("host-daemon command schemas", () => {
 
     expect(
       hostDaemonOnlineRpcResultSchemaByType["host.file_metadata"].parse({
-        path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
+        path: "/tmp/bb-data/thread-storage/thread-123/notes.md",
         modifiedAtMs: 1234.5,
         sizeBytes: 26_214_401,
       }),
     ).toMatchObject({
-      path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
+      path: "/tmp/bb-data/thread-storage/thread-123/notes.md",
       modifiedAtMs: 1234.5,
       sizeBytes: 26_214_401,
     });
@@ -2376,8 +2376,8 @@ describe("host-daemon session schemas", () => {
         commandType: "host.read_file",
         ok: true,
         result: {
-          path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
-          content: "# Preferences",
+          path: "/tmp/bb-data/thread-storage/thread-123/notes.md",
+          content: "# Notes",
           contentEncoding: "utf8",
           mimeType: "text/markdown",
           modifiedAtMs: 1234.5,
@@ -2390,8 +2390,8 @@ describe("host-daemon session schemas", () => {
       commandType: "host.read_file",
       ok: true,
       result: {
-        path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
-        content: "# Preferences",
+        path: "/tmp/bb-data/thread-storage/thread-123/notes.md",
+        content: "# Notes",
         contentEncoding: "utf8",
         mimeType: "text/markdown",
         modifiedAtMs: 1234.5,

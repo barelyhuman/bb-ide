@@ -59,9 +59,9 @@ const gitSectionWithMergeBase: ThreadPromptGitSection = {
   },
 };
 
-const managedBySection: ThreadPromptContextBannerProps["managedBySection"] = {
-  managerName: "Manager",
-  href: "/projects/proj_1/threads/thr_manager",
+const parentThreadSection: ThreadPromptContextBannerProps["parentThreadSection"] = {
+  parentThreadTitle: "Parent thread",
+  href: "/projects/proj_1/threads/thr_parent",
 };
 
 function renderBanner(overrides: BannerOverrides): void {
@@ -72,8 +72,8 @@ function renderBanner(overrides: BannerOverrides): void {
         gitSection={null}
         gitSectionPending={false}
         archivedSection={null}
-        managedBySection={null}
-        managerChildrenSection={null}
+        parentThreadSection={null}
+        childThreadsSection={null}
         expandedSection={null}
         onToggleSection={vi.fn()}
         {...overrides}
@@ -107,10 +107,10 @@ describe("ThreadPromptContextBanner", () => {
     ).toBe(false);
   });
 
-  it("keeps an accessible archived status when archived text compacts next to managed-by", () => {
+  it("keeps an accessible archived status when archived text compacts next to parent-thread", () => {
     renderBanner({
       archivedSection: { archivedAt: 1 },
-      managedBySection,
+      parentThreadSection,
     });
 
     expect(

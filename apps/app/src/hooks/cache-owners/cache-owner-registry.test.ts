@@ -90,7 +90,6 @@ const CACHE_OWNER_QUERY_KEY_IMPORTS: CacheOwnerQueryKeyImportRegistry = {
   "hooks/cache-owners/mutation-cache-effects.ts": [
     "allAppsQueryKeyPrefix",
     "appSourcesQueryKey",
-    "projectDefaultExecutionOptionsQueryKeyPrefix",
     "projectPathsQueryKeyPrefix",
     "sidebarNavigationQueryKey",
     "threadDefaultExecutionOptionsQueryKey",
@@ -148,7 +147,6 @@ const CACHE_OWNER_QUERY_KEY_IMPORTS: CacheOwnerQueryKeyImportRegistry = {
     "hostsQueryKey",
     "sidebarNavigationQueryKey",
     "systemProvidersQueryKey",
-    "threadListQueryKey",
     "threadQueryKey",
     "threadStorageFilePreviewQueryKeyPrefix",
     "threadStorageFilesForThreadQueryKeyPrefix",
@@ -202,7 +200,6 @@ const CACHE_OWNER_QUERY_KEY_IMPORTS: CacheOwnerQueryKeyImportRegistry = {
   ],
   "hooks/cache-owners/thread-list-cache-owner.ts": [
     "sidebarNavigationQueryKey",
-    "threadListQueryKey",
     "threadQueryKey",
     "threadsQueryKey",
   ],

@@ -8,13 +8,12 @@ import type {
   ReasoningLevel,
   ServiceTier,
   Thread,
-  ThreadType,
 } from "@bb/domain";
 import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import type { EnvironmentArgs } from "@bb/server-contract";
 import {
-  isLiveManagerParentThread,
-  type ManagerParentThread,
+  isLiveParentThread,
+  type ParentThread,
 } from "./thread-parent.js";
 
 export const DEFAULT_SERVICE_TIER: ServiceTier = "default";
@@ -34,12 +33,10 @@ const DEFAULT_PERMISSION_MODE: PermissionMode = "full";
 const MANAGED_CHILD_PERMISSION_MODE: PermissionMode = "workspace-write";
 const PRODUCT_DEFAULT_PROVIDER_ID = "codex";
 const PRODUCT_DEFAULT_MODEL = "gpt-5.5";
-const MANAGER_DEFAULT_REASONING_LEVEL: ReasoningLevel = "xhigh";
 
 export interface ResolveCreateThreadExecutionDefaultsArgs {
   requestedProviderId?: string;
   storedDefaults: ProjectExecutionDefaults | null;
-  threadType: ThreadType;
 }
 
 export interface CreateThreadExecutionDefaultsResolved {
@@ -48,28 +45,27 @@ export interface CreateThreadExecutionDefaultsResolved {
 }
 
 export interface IsManagedChildThreadArgs {
-  parentThread?: ManagerParentThread | null;
+  parentThread?: ParentThread | null;
   thread: Pick<Thread, "parentThreadId" | "projectId">;
 }
 
 export interface ResolveThreadDefaultPermissionModeArgs {
-  parentThread?: ManagerParentThread | null;
+  parentThread?: ParentThread | null;
   thread: Pick<Thread, "parentThreadId" | "projectId" | "providerId">;
 }
 
 export interface ResolveThreadExecutionPermissionModeArgs {
   lastExecutionPermissionMode?: PermissionMode;
-  parentThread?: ManagerParentThread | null;
+  parentThread?: ParentThread | null;
   projectExecutionPermissionMode?: PermissionMode;
   requestedPermissionMode?: PermissionMode;
   thread: Pick<Thread, "parentThreadId" | "projectId" | "providerId">;
 }
 
 export interface ResolveCreateThreadEnvironmentArgs {
-  parentThread?: ManagerParentThread | null;
+  parentThread?: ParentThread | null;
   projectId: string;
   requestedEnvironment: EnvironmentArgs;
-  threadType: ThreadType;
 }
 
 export interface ResolveSupportedPermissionModeArgs {
@@ -123,7 +119,7 @@ function isManagedChildThread(args: IsManagedChildThreadArgs): boolean {
     return false;
   }
 
-  return isLiveManagerParentThread({
+  return isLiveParentThread({
     parentThread: args.parentThread ?? null,
     projectId: args.thread.projectId,
   });
@@ -147,30 +143,10 @@ function resolveSupportedPermissionMode(
   return supportedPermissionModes[0] ?? DEFAULT_PERMISSION_MODE;
 }
 
-function buildManagerThreadExecutionDefaults(
-  providerId: string,
-): ProjectExecutionDefaults | null {
-  if (providerId !== PRODUCT_DEFAULT_PROVIDER_ID) {
-    return null;
-  }
-
-  return {
-    providerId,
-    model: PRODUCT_DEFAULT_MODEL,
-    reasoningLevel: MANAGER_DEFAULT_REASONING_LEVEL,
-    permissionMode: resolveSupportedPermissionMode({
-      providerId,
-      preferredPermissionMode: DEFAULT_PERMISSION_MODE,
-    }),
-    serviceTier: DEFAULT_SERVICE_TIER,
-  };
-}
-
 function buildProductThreadExecutionDefaults(
-  threadType: ThreadType,
   providerId: string,
 ): ProjectExecutionDefaults | null {
-  const defaults = buildInitialProjectExecutionDefaults(threadType);
+  const defaults = buildInitialProjectExecutionDefaults();
   return defaults.providerId === providerId ? defaults : null;
 }
 
@@ -192,27 +168,12 @@ export function resolveCreateThreadExecutionDefaults(
   }
 
   return {
-    executionDefaults: buildProductThreadExecutionDefaults(
-      args.threadType,
-      providerId,
-    ),
+    executionDefaults: buildProductThreadExecutionDefaults(providerId),
     providerId,
   };
 }
 
-export function buildInitialProjectExecutionDefaults(
-  threadType: ThreadType,
-): ProjectExecutionDefaults {
-  if (threadType === "manager") {
-    const managerDefaults = buildManagerThreadExecutionDefaults(
-      PRODUCT_DEFAULT_PROVIDER_ID,
-    );
-    if (!managerDefaults) {
-      throw new Error("Manager defaults were not configured");
-    }
-    return managerDefaults;
-  }
-
+export function buildInitialProjectExecutionDefaults(): ProjectExecutionDefaults {
   return {
     providerId: PRODUCT_DEFAULT_PROVIDER_ID,
     model: PRODUCT_DEFAULT_MODEL,
@@ -230,15 +191,14 @@ export function resolveCreateThreadEnvironment(
 ): EnvironmentArgs {
   if (
     args.projectId === PERSONAL_PROJECT_ID &&
-    args.threadType === "standard" &&
-    isLiveManagerParentThread({
+    isLiveParentThread({
       parentThread: args.parentThread ?? null,
       projectId: args.projectId,
     }) &&
     isPersonalHostDefaultEnvironment(args.requestedEnvironment)
   ) {
     if (!args.parentThread?.environmentId) {
-      throw new Error("Personal manager parent is missing an environment");
+      throw new Error("Personal parent thread is missing an environment");
     }
     return {
       type: "reuse",
@@ -247,8 +207,7 @@ export function resolveCreateThreadEnvironment(
   }
 
   if (
-    args.threadType === "standard" &&
-    isLiveManagerParentThread({
+    isLiveParentThread({
       parentThread: args.parentThread ?? null,
       projectId: args.projectId,
     }) &&

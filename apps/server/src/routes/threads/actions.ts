@@ -59,7 +59,7 @@ import {
   toThreadResponseFromThread,
 } from "../../services/threads/thread-runtime-display.js";
 import {
-  archiveManagerThreads,
+  archiveThreadAndChildren,
   archiveThreadWithLifecycleEffects,
 } from "../../services/threads/thread-archive.js";
 import {
@@ -390,16 +390,8 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
 
   post("/threads/:id/archive-all", (context) => {
     const thread = requirePublicThread(deps.db, context.req.param("id"));
-    if (thread.type !== "manager") {
-      throw new ApiError(
-        400,
-        "invalid_request",
-        "Archive all is only available for manager threads",
-      );
-    }
-
-    const archivedThreadIds = archiveManagerThreads(deps, {
-      managerThread: thread,
+    const archivedThreadIds = archiveThreadAndChildren(deps, {
+      parentThread: thread,
     });
     return context.json({
       ok: true,

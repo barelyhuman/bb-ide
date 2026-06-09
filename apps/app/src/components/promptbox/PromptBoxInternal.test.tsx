@@ -478,7 +478,6 @@ describe("PromptBoxInternal rich paste", () => {
       kind: "thread",
       threadId: "thr_design",
       projectId: "proj_design",
-      threadType: "standard",
       label: "Design review",
     };
     const serializedText = "@thread:thr_design";
@@ -520,7 +519,6 @@ describe("PromptBoxInternal rich paste", () => {
       kind: "thread",
       threadId: "thr_design",
       projectId: "proj_design",
-      threadType: "standard",
       label: "Design review",
     };
     render(
@@ -667,7 +665,6 @@ describe("PromptBoxInternal mentions", () => {
               resource: {
                 kind: "thread",
                 threadId: "thr_x",
-                threadType: "standard",
                 label: "Design review",
               },
             },
@@ -845,7 +842,6 @@ describe("PromptBoxInternal mentions", () => {
             projectId: "proj_current",
             threadId: "thr_project",
             title: "Project planning",
-            threadType: "manager",
           },
           {
             kind: "thread",
@@ -855,7 +851,6 @@ describe("PromptBoxInternal mentions", () => {
             projectName: "Marketing Site",
             threadId: "thr_standard_project",
             title: "Project implementation",
-            threadType: "standard",
           },
           {
             kind: "path",
@@ -901,7 +896,6 @@ describe("PromptBoxInternal mentions", () => {
     expect(screen.getByRole("button", { name: /Marketing Site/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /project\.ts/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /projects/ })).toBeTruthy();
-    expect(container.querySelector('[data-icon="UserRound"]')).not.toBeNull();
     expect(
       container.querySelector('[data-icon="MessageSquare"]'),
     ).not.toBeNull();

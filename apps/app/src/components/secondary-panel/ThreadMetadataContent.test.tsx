@@ -23,7 +23,6 @@ function makeThread(overrides: ThreadOverrides = {}): Thread {
     environmentId: "env_test",
     automationId: null,
     providerId: "openai",
-    type: "standard",
     title: "Test thread",
     titleFallback: null,
     status: "idle",

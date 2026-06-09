@@ -18,10 +18,6 @@ import {
 import { textInput } from "../helpers/prompt-input.js";
 import { withTestHarness } from "../helpers/test-app.js";
 
-function resolveLocalTimezone(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-}
-
 interface WriteRuntimeSkillArgs {
   name: string;
   rootPath: string;
@@ -51,28 +47,28 @@ describe("thread runtime config", () => {
     {
       childProviderId: "codex",
       expectedPermissionMode: "full",
-      managerProviderId: null,
+      parentProviderId: null,
       name: "defaults root-thread execution permission mode to full",
       requestedModel: "gpt-5",
     },
     {
       childProviderId: "codex",
       expectedPermissionMode: "workspace-write",
-      managerProviderId: "codex",
-      name: "defaults managed child execution permission mode to workspace-write when supported",
+      parentProviderId: "codex",
+      name: "defaults child execution permission mode to workspace-write when supported",
       requestedModel: "gpt-5",
     },
     {
       childProviderId: "pi",
       expectedPermissionMode: "full",
-      managerProviderId: "pi",
-      name: "falls back to full for managed child execution when the provider does not support workspace-write",
+      parentProviderId: "pi",
+      name: "falls back to full for child execution when the provider does not support workspace-write",
       requestedModel: "openai-codex/gpt-5.4",
     },
-  ])("$name", async ({ childProviderId, expectedPermissionMode, managerProviderId, requestedModel }) => {
+  ])("$name", async ({ childProviderId, expectedPermissionMode, parentProviderId, requestedModel }) => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
-        id: `host-runtime-${childProviderId}-${managerProviderId ?? "root"}`,
+        id: `host-runtime-${childProviderId}-${parentProviderId ?? "root"}`,
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -81,19 +77,18 @@ describe("thread runtime config", () => {
         hostId: host.id,
         projectId: project.id,
       });
-      const managerThread =
-        managerProviderId === null
+      const parentThread =
+        parentProviderId === null
           ? null
           : seedThread(harness.deps, {
               projectId: project.id,
               environmentId: environment.id,
-              type: "manager",
-              providerId: managerProviderId,
+              providerId: parentProviderId,
             });
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        parentThreadId: managerThread?.id ?? null,
+        parentThreadId: parentThread?.id ?? null,
         providerId: childProviderId,
       });
 
@@ -109,7 +104,7 @@ describe("thread runtime config", () => {
     });
   });
 
-  it("ignores standard project permission defaults for managed child execution", async () => {
+  it("uses child permission defaults instead of project defaults", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-runtime-managed-child-project-default-permission-mode",
@@ -121,15 +116,14 @@ describe("thread runtime config", () => {
         hostId: host.id,
         projectId: project.id,
       });
-      const managerThread = seedThread(harness.deps, {
+      const parentThread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        type: "manager",
       });
       const childThread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        parentThreadId: managerThread.id,
+        parentThreadId: parentThread.id,
         providerId: "codex",
       });
 
@@ -164,18 +158,17 @@ describe("thread runtime config", () => {
         hostId: host.id,
         projectId: project.id,
       });
-      const deletedManager = seedThread(harness.deps, {
+      const deletedParent = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        type: "manager",
       });
       markThreadDeleted(harness.db, harness.hub, {
-        threadId: deletedManager.id,
+        threadId: deletedParent.id,
       });
       const childThread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        parentThreadId: deletedManager.id,
+        parentThreadId: deletedParent.id,
         providerId: "codex",
       });
 
@@ -425,10 +418,9 @@ describe("thread runtime config", () => {
         environmentId: environment.id,
         parentThreadId: rootThread.id,
       });
-      const managerThread = seedThread(harness.deps, {
+      const parentThread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        type: "manager",
       });
 
       expect(
@@ -451,14 +443,14 @@ describe("thread runtime config", () => {
       ).toBe("deny");
       expect(
         resolvePermissionEscalation({
-          thread: managerThread,
+          thread: parentThread,
           initiator: "user",
         }),
-      ).toBe("deny");
+      ).toBe("ask");
     });
   });
 
-  it("uses the project root as cwd and a host data-dir workspace for managers", async () => {
+  it("resolves the workspace and host data-dir storage path", async () => {
     await withTestHarness(async (harness) => {
       const hostId = "host-runtime";
       seedHostSession(harness.deps, { id: hostId });
@@ -471,16 +463,15 @@ describe("thread runtime config", () => {
         projectId: project.id,
         path: "/tmp/runtime-project-root",
       });
-      const managerThread = seedThread(harness.deps, {
+      const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        type: "manager",
       });
 
       const runtimeConfig = await resolveThreadRuntimeCommandConfig(
         harness.deps,
         {
-          thread: managerThread,
+          thread,
           environment: {
             cleanupRequestedAt: environment.cleanupRequestedAt,
             hostId: environment.hostId,
@@ -492,17 +483,13 @@ describe("thread runtime config", () => {
         },
       );
 
-      expect(runtimeConfig.instructions).toContain(
-        "Project root: `/tmp/runtime-project-root`",
+      expect(runtimeConfig.workspacePath).toBe("/tmp/runtime-project-root");
+      expect(runtimeConfig.threadStoragePath).toBe(
+        `/tmp/bb-host-data/${hostId}/thread-storage/${thread.id}`,
       );
+      expect(runtimeConfig.workspaceProvisionType).toBe("unmanaged");
       expect(runtimeConfig.instructions).toContain(
-        `BB data dir: \`/tmp/bb-host-data/${hostId}\``,
-      );
-      expect(runtimeConfig.instructions).toContain(
-        `Thread storage: \`/tmp/bb-host-data/${hostId}/thread-storage/${managerThread.id}\``,
-      );
-      expect(runtimeConfig.instructions).toContain(
-        `Local timezone: \`${resolveLocalTimezone()}\``,
+        "You are a coding agent working on a project thread inside bb",
       );
     });
   });

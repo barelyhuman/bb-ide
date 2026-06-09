@@ -27,18 +27,18 @@ export function Overview() {
     <StoryCard>
       <StoryRow
         label="standard"
-        hint="canonical state — manager selector + env + branch + merge base + clean git status"
+        hint="canonical state — parent selector + host + env + branch + merge base + clean git status"
       >
         {render({})}
       </StoryRow>
       <StoryRow
-        label="standard, assigned to manager"
+        label="standard, child thread"
         hint='thread.parentThreadId set — selector renders the link form'
       >
         {render({
-          thread: makeThread({ parentThreadId: "thr_codex_manager" }),
-          parentThreadDisplayName: "Codex Manager",
-          canAssignToManager: false,
+          thread: makeThread({ parentThreadId: "thr_codex_parent" }),
+          parentThreadDisplayName: "Codex Parent",
+          canAssignToParent: false,
           canTakeOverThread: true,
         })}
       </StoryRow>
@@ -68,14 +68,13 @@ export function Overview() {
         })}
       </StoryRow>
       <StoryRow
-        label="manager thread"
-        hint='thread.type=manager — Kind row reads "Manager"; environment/branch/merge-base hidden'
+        label="parent thread"
+        hint='parent thread with no environment — environment/branch/merge-base hidden'
       >
         {render({
           thread: makeThread({
-            type: "manager",
-            title: "Codex Manager",
-            titleFallback: "Codex Manager",
+            title: "Codex Parent",
+            titleFallback: "Codex Parent",
             environmentId: null,
           }),
           environment: null,

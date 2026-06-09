@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { ThreadType } from "@bb/domain";
 import type { SidebarBootstrapResponse } from "@bb/server-contract";
 import { buildPathMentionSuggestions } from "./pathMentionSuggestions";
 import { useSidebarNavigation } from "./queries/project-queries";
@@ -13,7 +12,6 @@ const PROMPT_MENTION_LIMIT = 8;
 
 export interface UsePromptMentionsOptions {
   currentThreadId?: string;
-  currentThreadType?: ThreadType;
   environmentId: string | null;
 }
 
@@ -73,7 +71,6 @@ export function usePromptMentions(
     limit: PROMPT_MENTION_LIMIT,
     environmentId: options.environmentId,
     currentThreadId: options.currentThreadId,
-    currentThreadType: options.currentThreadType,
     includeDirectories: true,
   });
   const projectNamesQuery = useSidebarNavigation({

@@ -101,7 +101,6 @@ export type * from "./areas/apps.js";
 export type * from "./areas/guide.js";
 export type * from "./areas/environments.js";
 export type * from "./areas/hosts.js";
-export type * from "./areas/managers.js";
 export type * from "./areas/projects.js";
 export type * from "./areas/providers.js";
 export type * from "./areas/replay.js";

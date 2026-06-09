@@ -223,8 +223,8 @@ const contextBannerElement: ReactNode = dirtyContextBannerSection ? (
       onPromptBannerFileClick: noop,
     }}
     gitSectionPending={false}
-    managedBySection={null}
-    managerChildrenSection={null}
+    parentThreadSection={null}
+    childThreadsSection={null}
     expandedSection={null}
     onToggleSection={noop}
   />
@@ -331,7 +331,7 @@ function Row({
   };
   const resolvedPlaceholder =
     promptPlaceholder ??
-    getFollowUpPromptPlaceholder(threadRuntimeDisplayStatus, false);
+    getFollowUpPromptPlaceholder(threadRuntimeDisplayStatus);
   return (
     <PromptStage>
       <FollowUpPromptBox

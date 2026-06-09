@@ -1586,22 +1586,22 @@ describe("thread command dispatch", () => {
     });
   });
 
-  it("uses the server-provided manager runtime config", async () => {
-    const threadStorage = await makeTempDir("bb-manager-runtime-");
+  it("uses the server-provided thread runtime config", async () => {
+    const threadStorage = await makeTempDir("bb-thread-runtime-");
     const harness = createHarness({ workspacePath: threadStorage });
-    const managerInstructions = [
-      "You are a manager in a project inside bb.",
+    const threadInstructions = [
+      "You are a thread in a project inside bb.",
       "Prefer concise user updates.",
       "Delegate implementation quickly.",
-      "Manager Project",
+      "Parent Project",
       threadStorage,
     ].join("\n");
 
     await dispatchCommand(
       {
         type: "thread.start",
-        environmentId: "env-manager",
-        threadId: "thread-manager",
+        environmentId: "env-parent",
+        threadId: "thread-parent",
         workspaceContext: {
           workspacePath: threadStorage,
           workspaceProvisionType: "unmanaged",
@@ -1618,11 +1618,11 @@ describe("thread command dispatch", () => {
           permissionMode: "full",
           permissionEscalation: null,
         },
-        instructions: managerInstructions,
+        instructions: threadInstructions,
         dynamicTools: [
           {
-            name: "message_user",
-            description: "Send a user-visible update from the manager thread.",
+            name: "notify_user",
+            description: "Send a user-visible update from the thread.",
             inputSchema: {
               type: "object",
               additionalProperties: false,
@@ -1643,9 +1643,9 @@ describe("thread command dispatch", () => {
     );
 
     expect(harness.runtimeState.startedDynamicTools).toEqual([
-      expect.objectContaining({ name: "message_user" }),
+      expect.objectContaining({ name: "notify_user" }),
     ]);
-    expect(harness.runtimeState.startedInstructions).toBe(managerInstructions);
+    expect(harness.runtimeState.startedInstructions).toBe(threadInstructions);
   });
 
   it("creates threadStoragePath directory before starting the thread", async () => {
@@ -1726,7 +1726,7 @@ describe("thread command dispatch", () => {
     const tempDir = await makeTempDir("bb-thread-storage-delete-");
     const threadDir = path.join(tempDir, "thr_del123");
     await fs.mkdir(threadDir);
-    await fs.writeFile(path.join(threadDir, "PREFERENCES.md"), "prefs");
+    await fs.writeFile(path.join(threadDir, "notes.md"), "notes");
 
     const harness = createHarness();
 

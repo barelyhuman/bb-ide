@@ -10,7 +10,6 @@ import type {
   ReasoningLevel,
   ResolvedThreadExecutionOptions,
   ServiceTier,
-  ThreadType,
   ThreadExecutionSource,
 } from "@bb/domain";
 import { ApiError } from "../../errors.js";
@@ -63,7 +62,6 @@ export interface ResolveExistingThreadExecutionPlanArgs {
 export interface ResolveProjectCreateDefaultExecutionPlanArgs {
   projectId: string;
   requestedProviderId?: string;
-  threadType: ThreadType;
 }
 
 export interface ExistingThreadExecutionPlan {
@@ -234,7 +232,6 @@ export async function resolveExistingThreadExecutionPlan(
     args.projectDefaults === undefined
       ? getProjectExecutionDefaults(deps.db, {
           projectId: thread.projectId,
-          threadType: thread.type,
         })
       : args.projectDefaults;
   const projectExecution =
@@ -325,12 +322,10 @@ export function resolveProjectCreateDefaultExecutionPlan(
 ): ProjectCreateDefaultExecutionPlan {
   const storedDefaults = getProjectExecutionDefaults(deps.db, {
     projectId: args.projectId,
-    threadType: args.threadType,
   });
   const resolution = resolveCreateThreadExecutionDefaults({
     requestedProviderId: args.requestedProviderId,
     storedDefaults,
-    threadType: args.threadType,
   });
   return {
     defaultView: resolution.executionDefaults,

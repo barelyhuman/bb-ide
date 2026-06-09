@@ -180,7 +180,7 @@ describe("public thread data routes", () => {
         sequence: 1,
         type: "system/manager/user_message",
         scope: threadScope(),
-        data: { text: "Manager note one" },
+        data: { text: "Legacy note one" },
       });
       seedEvent(harness.deps, {
         threadId: thread.id,
@@ -188,7 +188,7 @@ describe("public thread data routes", () => {
         sequence: 2,
         type: "system/manager/user_message",
         scope: threadScope(),
-        data: { text: "Manager note two" },
+        data: { text: "Legacy note two" },
       });
 
       const timelineResponse = await harness.app.request(
@@ -638,11 +638,9 @@ describe("public thread data routes", () => {
     });
   });
 
-  it("returns the manager user-visible output when a later assistant item is empty", async () => {
+  it("returns a user-visible system output when a later assistant item is empty", async () => {
     await withTestHarness(async (harness) => {
-      const { environment, thread } = seedThreadFixture(harness, {
-        thread: { type: "manager" },
-      });
+      const { environment, thread } = seedThreadFixture(harness);
 
       seedEvent(harness.deps, {
         threadId: thread.id,
@@ -652,7 +650,7 @@ describe("public thread data routes", () => {
         sequence: 1,
         type: "system/manager/user_message",
         data: {
-          text: "Visible manager update",
+          text: "Visible system update",
           toolCallId: "call-1",
           turnId: "turn-1",
         },
@@ -678,7 +676,7 @@ describe("public thread data routes", () => {
       );
       expect(outputResponse.status).toBe(200);
       await expect(readJson(outputResponse)).resolves.toEqual({
-        output: "Visible manager update",
+        output: "Visible system update",
       });
     });
   });
@@ -1704,7 +1702,6 @@ describe("public thread data routes", () => {
       upsertProjectExecutionDefaults(harness.deps.db, {
         projectId: project.id,
         providerId: "codex",
-        threadType: "standard",
         model: "gpt-5.5",
         reasoningLevel: "max",
         permissionMode: "full",
@@ -2040,7 +2037,6 @@ describe("public thread data routes", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        type: "manager",
       });
       const threadStoragePath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
 
@@ -2093,7 +2089,6 @@ describe("public thread data routes", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        type: "manager",
       });
       const threadStoragePath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
 
@@ -2157,7 +2152,7 @@ describe("public thread data routes", () => {
     });
   });
 
-  it("lists thread storage files for standard threads with environments", async () => {
+  it("lists thread storage files for threads with environments", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
@@ -2172,7 +2167,6 @@ describe("public thread data routes", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        type: "standard",
       });
       const threadStoragePath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
 
@@ -2225,7 +2219,6 @@ describe("public thread data routes", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        type: "manager",
         status: "provisioning",
       });
       const threadStoragePath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
@@ -2269,7 +2262,6 @@ describe("public thread data routes", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        type: "manager",
       });
       const pngBytes = Uint8Array.from([137, 80, 78, 71]);
       const threadStorageRoot = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
@@ -2376,7 +2368,6 @@ describe("public thread data routes", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        type: "manager",
       });
       const threadStorageRoot = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
       const html = "<!doctype html><h1>Preview</h1>";
@@ -2617,9 +2608,7 @@ describe("public thread data routes", () => {
 
   it("maps thread storage root-escape failures to invalid_path", async () => {
     await withTestHarness(async (harness) => {
-      const { host, thread } = seedThreadFixture(harness, {
-        thread: { type: "manager" },
-      });
+      const { host, thread } = seedThreadFixture(harness);
       const threadStorageRoot = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
 
       const filePromise = harness.app.request(
@@ -2657,9 +2646,7 @@ describe("public thread data routes", () => {
 
   it("returns an empty thread storage file list when the durable storage is absent", async () => {
     await withTestHarness(async (harness) => {
-      const { host, thread } = seedThreadFixture(harness, {
-        thread: { type: "manager" },
-      });
+      const { host, thread } = seedThreadFixture(harness);
       const threadStoragePath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
 
       const filesPromise = harness.app.request(
@@ -2691,9 +2678,7 @@ describe("public thread data routes", () => {
 
   it("maps thread storage file read failures to user-facing 4xx responses", async () => {
     await withTestHarness(async (harness) => {
-      const { thread } = seedThreadFixture(harness, {
-        thread: { type: "manager" },
-      });
+      const { thread } = seedThreadFixture(harness);
 
       const filePromise = harness.app.request(
         `/api/v1/threads/${thread.id}/thread-storage/content?path=${encodeURIComponent("notes/missing.txt")}`,
@@ -2774,7 +2759,7 @@ describe("public thread data routes", () => {
         sequence: 1,
         type: "system/manager/user_message",
         scope: threadScope(),
-        data: { text: "A manager note" },
+        data: { text: "A legacy note" },
       });
       seedEvent(harness.deps, {
         threadId: thread.id,

@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import type { ThreadType } from "@bb/domain";
 import { useDebounceValue } from "usehooks-ts";
 import { useProjectPathSuggestions } from "./queries/project-queries";
 import { useThreadStoragePaths } from "./queries/thread-queries";
@@ -28,7 +27,6 @@ export interface UsePathSuggestionsArgs {
   limit?: number;
   environmentId: string | null;
   currentThreadId?: string;
-  currentThreadType?: ThreadType;
   includeDirectories: boolean;
 }
 
@@ -90,8 +88,7 @@ export function usePathSuggestions(
   const hasQuery = trimmedQuery.length > 0;
   const debouncedTrimmedQuery = debouncedQuery?.trim() ?? "";
   const isDebouncing = hasQuery && trimmedQuery !== debouncedTrimmedQuery;
-  const includeThreadStorage =
-    args.currentThreadType === "manager" && Boolean(args.currentThreadId);
+  const includeThreadStorage = Boolean(args.currentThreadId);
 
   const threadStorageOptions = useMemo<PathListOptions>(
     () => ({

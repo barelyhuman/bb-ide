@@ -91,7 +91,6 @@ function makeThread(): Thread {
     stopRequestedAt: null,
     title: "Thread title",
     titleFallback: "Thread title",
-    type: "standard",
     updatedAt: 10,
   };
 }

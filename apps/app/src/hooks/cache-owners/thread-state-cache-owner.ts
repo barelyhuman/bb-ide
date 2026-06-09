@@ -1,9 +1,9 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import type {
-  ManagerArchiveThreadsResponse,
   ProjectResponse,
   ReorderPinnedThreadRequest,
+  ThreadArchiveAllResponse,
 } from "@bb/server-contract";
 import { applyNeighborReorder } from "@/lib/neighbor-reorder";
 import {
@@ -84,9 +84,9 @@ interface RollbackPinnedThreadOrderTransactionArgs {
   transaction: PinnedThreadOrderTransaction | undefined;
 }
 
-interface ArchiveManagerThreadsTransactionArgs {
-  managerThreadId: string;
+interface ArchiveThreadAndChildrenTransactionArgs {
   queryClient: QueryClient;
+  threadId: string;
 }
 
 interface RollbackArchiveThreadsTransactionArgs {
@@ -96,7 +96,7 @@ interface RollbackArchiveThreadsTransactionArgs {
 
 interface SettleArchiveThreadsTransactionArgs {
   queryClient: QueryClient;
-  response: ManagerArchiveThreadsResponse | undefined;
+  response: ThreadArchiveAllResponse | undefined;
   transaction: ArchiveThreadsTransaction | undefined;
 }
 
@@ -471,16 +471,15 @@ export async function beginUnarchiveThreadTransaction({
   };
 }
 
-export async function beginArchiveManagerThreadsTransaction({
-  managerThreadId,
+export async function beginArchiveThreadAndChildrenTransaction({
   queryClient,
-}: ArchiveManagerThreadsTransactionArgs): Promise<ArchiveThreadsTransaction> {
+  threadId,
+}: ArchiveThreadAndChildrenTransactionArgs): Promise<ArchiveThreadsTransaction> {
   await queryClient.cancelQueries({ queryKey: threadsQueryKey() });
   await queryClient.cancelQueries({ queryKey: sidebarNavigationQueryKey() });
   const archivedThreadIds = getCachedLiveThreadIdsMatching({
     matchesThread: (thread) =>
-      thread.id === managerThreadId ||
-      thread.parentThreadId === managerThreadId,
+      thread.id === threadId || thread.parentThreadId === threadId,
     queryClient,
   });
   await Promise.all(
@@ -505,8 +504,7 @@ export async function beginArchiveManagerThreadsTransaction({
   });
   removeLiveThreadsFromCachedLists({
     matchesThread: (thread) =>
-      thread.id === managerThreadId ||
-      thread.parentThreadId === managerThreadId,
+      thread.id === threadId || thread.parentThreadId === threadId,
     queryClient,
   });
 

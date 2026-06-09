@@ -2,7 +2,6 @@ import {
   type PromptInput,
   type PromptTextMention,
   type ThreadEvent,
-  type ThreadType,
 } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
 import type { AcceptedClientRequest } from "./accepted-client-request-context.js";
@@ -150,25 +149,11 @@ function shouldRenderClientRequestInitiator(
     case "user":
       return true;
     case "agent":
-      return shouldRenderAgentClientRequest(options?.threadType);
+      return true;
     case "system":
       return false;
     default:
       return assertNever(initiator);
-  }
-}
-
-function shouldRenderAgentClientRequest(
-  threadType: ThreadType | undefined,
-): boolean {
-  const resolvedThreadType = threadType ?? "standard";
-  switch (resolvedThreadType) {
-    case "standard":
-      return true;
-    case "manager":
-      return false;
-    default:
-      return assertNever(resolvedThreadType);
   }
 }
 
@@ -430,7 +415,7 @@ export function parseAcceptedSteerFromClientRequest(
   });
 }
 
-export function parseManagerUserMessage(
+export function parseLegacyUserMessage(
   decoded: ThreadEvent,
   meta: EventMeta,
 ): EventProjectionAssistantTextMessage | null {
@@ -445,7 +430,7 @@ export function parseManagerUserMessage(
 
   return {
     kind: "assistant-text",
-    id: messageId(decoded.threadId, "assistant", `manager:${meta.seq}`),
+    id: messageId(decoded.threadId, "assistant", `legacy:${meta.seq}`),
     threadId: decoded.threadId,
     sourceSeqStart: meta.seq,
     sourceSeqEnd: meta.seq,
@@ -453,6 +438,6 @@ export function parseManagerUserMessage(
     scope: decoded.scope,
     text,
     status: "completed",
-    isManagerUserMessage: true,
+    isLegacyUserMessage: true,
   };
 }

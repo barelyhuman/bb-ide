@@ -121,7 +121,7 @@
         var(--bb-sidebar-sticky-label-height) +
         var(--bb-sidebar-sticky-label-gap)
     );
-    /* The first pinned parent level (a manager, parent thread, or worktree
+    /* The first pinned parent level (a parent thread or worktree
        group header) sits directly below the project row. Deeper levels stack
        from this base via --bb-sidebar-sticky-parent-level (set inline per row),
        capped in JS so a deep chain can't pin more ancestors than the viewport

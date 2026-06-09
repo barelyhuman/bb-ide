@@ -73,13 +73,12 @@ describe("ConversationMessageContent", () => {
   });
 
   it("renders user message thread mentions as router links", () => {
-    const token = "@thread:thr_manager";
+    const token = "@thread:thr_parent";
     const resource: PromptMentionResource = {
       kind: "thread",
-      threadId: "thr_manager",
+      threadId: "thr_parent",
       projectId: "proj_target",
-      threadType: "manager",
-      label: "Prompt UX manager",
+      label: "Prompt UX thread",
     };
     render(
       <MemoryRouter>
@@ -103,15 +102,14 @@ describe("ConversationMessageContent", () => {
       </MemoryRouter>,
     );
 
-    // The mention type ("Manager") now renders as a leading icon, so the
-    // pill's accessible name is the resource label; the full prefixed form
-    // stays available as the title/tooltip.
+    // The pill's accessible name is the resource label; the serialized form
+    // stays available as data attributes for editor round-tripping.
     const mention = screen.getByRole("link", {
-      name: "Prompt UX manager",
+      name: "Prompt UX thread",
     });
-    expect(mention.getAttribute("title")).toBe("Manager: Prompt UX manager");
+    expect(mention.getAttribute("title")).toBe("Thread: Prompt UX thread");
     expect(mention.getAttribute("href")).toBe(
-      "/projects/proj_target/threads/thr_manager",
+      "/projects/proj_target/threads/thr_parent",
     );
     expect(mention.getAttribute("data-prompt-mention")).toBe("true");
     expect(
@@ -180,7 +178,6 @@ describe("ConversationMessageContent", () => {
                 kind: "thread",
                 threadId: "thr_boundary",
                 projectId: "proj_boundary",
-                threadType: "standard",
                 label: "Boundary thread",
               },
             },
@@ -198,8 +195,8 @@ describe("ConversationMessageContent", () => {
   });
 
   it("renders agent-originated messages as expandable rows with sender links and hides bb reply guidance", () => {
-    const bodyText =
-      "Line 1\nLine 2\nLine 3\nLine 4 with enough additional detail to force an expandable generated message preview in jsdom";
+    const messageBody =
+      "Line 1\nLine 2\nLine 3\nLine 4\nAdditional details that make this generated message long enough to expand.";
     render(
       <MemoryRouter initialEntries={["/"]}>
         <AppRouteNavigationProvider>
@@ -213,10 +210,10 @@ describe("ConversationMessageContent", () => {
               }
             }}
             senderThreadId="thr_sender123"
-            senderThreadTitle="Frontend manager"
+            senderThreadTitle="Frontend thread"
             attachments={null}
             mentions={[]}
-            text={`[bb message from thread:thr_sender123; reply with \`bb thread tell thr_sender123 "<your response>"\`]\n\n${bodyText}`}
+            text={`[bb message from thread:thr_sender123; reply with \`bb thread tell thr_sender123 "<your response>"\`]\n\n${messageBody}`}
             turnRequest={{ kind: "message", status: "accepted" }}
           />
           <LocationProbe label="location" />
@@ -224,12 +221,16 @@ describe("ConversationMessageContent", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("Message from")).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: /Message from Frontend thread/u,
+      }),
+    ).toBeTruthy();
     const senderLink = screen.getByRole("link", {
-      name: "Frontend manager",
+      name: "Frontend thread",
     });
     const toggle = screen.getByRole("button", {
-      name: /Message from Frontend manager/u,
+      name: /Message from Frontend thread/u,
     });
     expect(senderLink.getAttribute("href")).toBe(
       "/projects/proj_123/threads/thr_sender123",
@@ -245,7 +246,9 @@ describe("ConversationMessageContent", () => {
     expect(screen.queryByText("thr_sender123")).toBeNull();
     expect(screen.queryByText(/\[bb message from thread/u)).toBeNull();
     expect(screen.queryByText(/bb thread tell/u)).toBeNull();
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(
+      toggle.getAttribute("aria-expanded"),
+    ).toBe("true");
     expect(screen.getAllByText(/Line 4/u).length).toBeGreaterThan(0);
   });
 
@@ -255,7 +258,7 @@ describe("ConversationMessageContent", () => {
         role="user"
         initiator="agent"
         senderThreadId="thr_sender123"
-        senderThreadTitle="Frontend manager"
+        senderThreadTitle="Frontend thread"
         attachments={null}
         mentions={[]}
         text={
@@ -266,13 +269,13 @@ describe("ConversationMessageContent", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Message from Frontend manager" }),
+      screen.getByRole("button", { name: "Message from Frontend thread" }),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: /steer/u })).toBeNull();
     expect(screen.queryByText("steer")).toBeNull();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Message from Frontend manager" }),
+      screen.getByRole("button", { name: "Message from Frontend thread" }),
     );
 
     expect(screen.getByText("steer")).toBeTruthy();
@@ -280,7 +283,7 @@ describe("ConversationMessageContent", () => {
 
   it("renders mention pills in agent-originated rows with shifted offsets", () => {
     const token = "@thread:thr_target";
-    const text = `[bb message from thread:thr_sender123; reply with \`bb thread tell thr_sender123 "<your response>"\`]\n\nAsk ${token} to review the generated prompt mention copy and paste behavior in enough detail to expand.`;
+    const text = `[bb message from thread:thr_sender123; reply with \`bb thread tell thr_sender123 "<your response>"\`]\n\nAsk ${token} to review the parent-thread cleanup details and confirm the route copy still reads clearly.`;
     const start = text.indexOf(token);
 
     render(
@@ -295,7 +298,7 @@ describe("ConversationMessageContent", () => {
             }
           }}
           senderThreadId="thr_sender123"
-          senderThreadTitle="Frontend manager"
+          senderThreadTitle="Frontend thread"
           attachments={null}
           mentions={[
             {
@@ -305,7 +308,6 @@ describe("ConversationMessageContent", () => {
                 kind: "thread",
                 threadId: "thr_target",
                 projectId: "proj_target",
-                threadType: "standard",
                 label: "API planning",
               },
             },
@@ -314,6 +316,12 @@ describe("ConversationMessageContent", () => {
           turnRequest={{ kind: "message", status: "accepted" }}
         />
       </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Message from Frontend thread/u,
+      }),
     );
 
     const mention = screen.getByRole("link", { name: "API planning" });

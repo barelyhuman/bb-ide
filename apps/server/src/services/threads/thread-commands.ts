@@ -235,9 +235,6 @@ export async function buildThreadStartCommand(
     instructions: runtimeContext.instructions,
     dynamicTools: runtimeContext.dynamicTools,
     injectedSkillSources: runtimeContext.injectedSkillSources,
-    ...(runtimeContext.disallowedTools?.length
-      ? { disallowedTools: [...runtimeContext.disallowedTools] }
-      : {}),
     instructionMode: runtimeContext.instructionMode,
     threadStoragePath: runtimeContext.threadStoragePath,
   };
@@ -267,9 +264,6 @@ function buildPreparedTurnSubmitCommandPayload(
       instructions: args.runtimeContext.instructions,
       dynamicTools: args.runtimeContext.dynamicTools,
       injectedSkillSources: args.runtimeContext.injectedSkillSources,
-      ...(args.runtimeContext.disallowedTools?.length
-        ? { disallowedTools: [...args.runtimeContext.disallowedTools] }
-        : {}),
       instructionMode: args.runtimeContext.instructionMode,
     },
   };
@@ -296,16 +290,6 @@ export async function prepareTurnSubmitCommandPayload(
     thread: args.thread,
     environment: args.environment,
   });
-  if (
-    args.thread.type === "manager" &&
-    !isAgentProviderId(args.thread.providerId)
-  ) {
-    throw new ApiError(
-      500,
-      "internal_error",
-      `Manager thread has unsupported provider ${args.thread.providerId}`,
-    );
-  }
   return buildPreparedTurnSubmitCommandPayload({
     environmentId: args.environment.id,
     execution: args.execution,

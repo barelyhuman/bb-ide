@@ -30,10 +30,9 @@ const standardVisibilityOptions: BuildEventProjectionMessagesOptions = {
   threadStatus: "active",
 };
 
-const managerVisibilityOptions: BuildEventProjectionMessagesOptions = {
+const systemVisibilityOptions: BuildEventProjectionMessagesOptions = {
   systemClientRequestVisibility: "visible",
   threadStatus: "active",
-  threadType: "manager",
 };
 
 function agentSteerRequest(): ClientTurnRequestedEventRow {
@@ -111,7 +110,7 @@ describe("user message parsing", () => {
     const parsed = parsePromptInput([
       {
         type: "text",
-        text: "[bb system]\n\nCurrent PREFERENCES.md contents:\n\nsecret",
+        text: "[bb system]\n\nHidden agent-only context:\n\nsecret",
         mentions: [],
         visibility: "agent-only",
       },
@@ -140,7 +139,7 @@ describe("user message parsing", () => {
     const parsed = parsePromptInput([
       {
         type: "text",
-        text: "[bb system]\n\nPREFERENCES.md was removed.",
+        text: "[bb system]\n\nHidden agent-only context was removed.",
         mentions: [],
         visibility: "agent-only",
       },
@@ -201,7 +200,7 @@ describe("user message parsing", () => {
     const message = parseUserFromClientRequest({
       decoded: event,
       meta,
-      options: managerVisibilityOptions,
+      options: systemVisibilityOptions,
     });
 
     expect(message).toMatchObject({
@@ -215,9 +214,9 @@ describe("user message parsing", () => {
   it("preserves mentions for visible system-initiated messages", () => {
     const factory = createTimelineEventFactory({ threadId: "thread-1" });
     const mentionText = "@thread:thr_child";
-    const text = `[bb system]\n\nManaged thread needs attention: ${mentionText} (Backend cleanup)`;
+    const text = `[bb system]\n\nChild thread needs attention: ${mentionText} (Backend cleanup)`;
     const mentionStart =
-      "[bb system]\n\nManaged thread needs attention: ".length;
+      "[bb system]\n\nChild thread needs attention: ".length;
     const mention: PromptTextMention = {
       start: mentionStart,
       end: mentionStart + mentionText.length,
@@ -226,7 +225,6 @@ describe("user message parsing", () => {
         label: "Backend cleanup",
         projectId: "proj_alpha",
         threadId: "thr_child",
-        threadType: "standard",
       },
     };
     const row = factory.clientTurnRequested({
@@ -241,7 +239,7 @@ describe("user message parsing", () => {
     const message = parseUserFromClientRequest({
       decoded: event,
       meta,
-      options: managerVisibilityOptions,
+      options: systemVisibilityOptions,
     });
 
     expect(message).toMatchObject({
@@ -266,7 +264,7 @@ describe("user message parsing", () => {
       }
       const visibilityOptions =
         event.initiator === "system"
-          ? managerVisibilityOptions
+          ? systemVisibilityOptions
           : standardVisibilityOptions;
       const expectedText = event.input
         .filter((part) => part.type === "text")

@@ -3,7 +3,6 @@ import { createAppsArea, createCurrentAppDataArea, createCurrentAppMessageArea }
 import { createEnvironmentsArea } from "./areas/environments.js";
 import { createGuideArea } from "./areas/guide.js";
 import { createHostsArea } from "./areas/hosts.js";
-import { createManagersArea } from "./areas/managers.js";
 import { createProjectsArea } from "./areas/projects.js";
 import { createProvidersArea } from "./areas/providers.js";
 import { createReplayArea } from "./areas/replay.js";
@@ -25,7 +24,6 @@ export interface BbSdk extends BbRealtime {
   environments: ReturnType<typeof createEnvironmentsArea>;
   guide: ReturnType<typeof createGuideArea>;
   hosts: ReturnType<typeof createHostsArea>;
-  managers: ReturnType<typeof createManagersArea>;
   message: ReturnType<typeof createCurrentAppMessageArea>;
   projects: ReturnType<typeof createProjectsArea>;
   providers: ReturnType<typeof createProvidersArea>;
@@ -58,7 +56,6 @@ export function createBbSdk(args: CreateBbSdkArgs): BbSdk {
     environments: createEnvironmentsArea(sdkContext),
     guide: createGuideArea(),
     hosts: createHostsArea(sdkContext),
-    managers: createManagersArea(sdkContext),
     message: createCurrentAppMessageArea(sdkContext),
     on(args) {
       return realtime.on(args);

@@ -168,22 +168,22 @@ describe("TimelineTitleView", () => {
               title={title({
                 segments: [
                   {
-                    text: "Manager",
+                    text: "Parent thread",
                     em: true,
                     shimmer: false,
                     truncate: true,
-                    link: { kind: "thread", threadId: "thr_manager" },
+                    link: { kind: "thread", threadId: "thr_parent" },
                   },
                 ],
               })}
-              resolveSegmentLinkHref={() => "/projects/p/threads/thr_manager"}
+              resolveSegmentLinkHref={() => "/projects/p/threads/thr_parent"}
             />
           </div>
         </AppRouteNavigationProvider>
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByRole("link", { name: "Manager" }));
+    fireEvent.click(screen.getByRole("link", { name: "Parent thread" }));
 
     expect(onWrapperClick).not.toHaveBeenCalled();
   });
@@ -196,16 +196,16 @@ describe("TimelineTitleView", () => {
             title={title({
               segments: [
                 {
-                  text: "Manager",
+                  text: "Parent thread",
                   em: true,
                   shimmer: false,
                   truncate: true,
-                  link: { kind: "thread", threadId: "thr_manager" },
+                  link: { kind: "thread", threadId: "thr_parent" },
                 },
               ],
             })}
             resolveSegmentLinkHref={() =>
-              "/projects/proj_1/threads/thr_manager?panel=timeline#row"
+              "/projects/proj_1/threads/thr_parent?panel=timeline#row"
             }
           />
           <LocationProbe label="location" />
@@ -214,12 +214,12 @@ describe("TimelineTitleView", () => {
     );
 
     const notDefaultPrevented = fireEvent.click(
-      screen.getByRole("link", { name: "Manager" }),
+      screen.getByRole("link", { name: "Parent thread" }),
     );
 
     expect(notDefaultPrevented).toBe(false);
     expect(screen.getByTestId("location").textContent).toBe(
-      "/projects/proj_1/threads/thr_manager?panel=timeline#row",
+      "/projects/proj_1/threads/thr_parent?panel=timeline#row",
     );
   });
 });

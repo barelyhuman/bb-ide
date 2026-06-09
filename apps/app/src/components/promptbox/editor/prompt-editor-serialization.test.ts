@@ -52,8 +52,7 @@ describe("prompt editor serialization", () => {
           resource: {
             kind: "thread",
             threadId: "thr_prompt",
-            threadType: "manager",
-            label: "Prompt manager",
+            label: "Prompt thread",
           },
         },
         {
@@ -88,7 +87,6 @@ describe("prompt editor serialization", () => {
           resource: {
             kind: "thread",
             threadId: "thr_prompt",
-            threadType: "manager",
             label: "Prompt manager",
           },
         },
@@ -113,7 +111,6 @@ describe("prompt editor serialization", () => {
       kind: "thread",
       threadId: "thr_second",
       projectId: "proj_second",
-      threadType: "standard",
       label: "Second thread",
     };
     const editor = createTestEditorFromContent({
@@ -166,7 +163,6 @@ describe("prompt editor serialization", () => {
           resource: {
             kind: "thread",
             threadId: "thr_one",
-            threadType: "standard",
             label: "First thread",
           },
         },
@@ -176,7 +172,6 @@ describe("prompt editor serialization", () => {
           resource: {
             kind: "thread",
             threadId: "thr_overlap",
-            threadType: "standard",
             label: "Overlapping thread",
           },
         },
@@ -186,7 +181,6 @@ describe("prompt editor serialization", () => {
           resource: {
             kind: "thread",
             threadId: "thr_two",
-            threadType: "standard",
             label: "Second thread",
           },
         },
@@ -196,7 +190,6 @@ describe("prompt editor serialization", () => {
           resource: {
             kind: "thread",
             threadId: "thr_out_of_bounds",
-            threadType: "standard",
             label: "Out of bounds",
           },
         },

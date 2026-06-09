@@ -16,7 +16,6 @@ import type {
 } from "@bb/domain";
 import type {
   CreateExecutionInputSources,
-  CreateManagerExecutionInputSources,
   ExecutionInputFieldSource,
   ExistingThreadExecutionInputSources,
   SystemExecutionOptionsModelLoadError,
@@ -80,7 +79,6 @@ interface PickerOption<T extends string> {
 
 type ThreadCreationOptionsScope =
   | "new-thread"
-  | "new-manager"
   | "component-local";
 
 interface UsePromptModelReasoningOptions {
@@ -101,10 +99,6 @@ interface UseNewThreadCreationOptions extends UsePromptModelReasoningOptions {
   scope?: "new-thread";
 }
 
-interface UseNewManagerCreationOptions extends UsePromptModelReasoningOptions {
-  scope: "new-manager";
-}
-
 interface UseComponentLocalCreationOptions
   extends UsePromptModelReasoningOptions {
   scope: "component-local";
@@ -112,7 +106,6 @@ interface UseComponentLocalCreationOptions
 
 type ScopedExecutionInputSources =
   | CreateExecutionInputSources
-  | CreateManagerExecutionInputSources
   | ExistingThreadExecutionInputSources;
 
 type StringSelectionSetter = (value: string) => void;
@@ -389,7 +382,7 @@ function buildExecutionInputSources({
   storedValues,
   touchedFields,
 }: BuildExecutionInputSourcesArgs): ScopedExecutionInputSources {
-  const usesStoredValues = scope === "new-thread" || scope === "new-manager";
+  const usesStoredValues = scope === "new-thread";
   const hasTouchedExecutionField =
     touchedFields.has("selectedProviderId") ||
     touchedFields.has("selectedModel") ||
@@ -443,15 +436,6 @@ function buildExecutionInputSources({
     touched:
       forcesExplicitExecutionFields || touchedFields.has("permissionMode"),
   });
-
-  if (scope === "new-manager") {
-    return {
-      ...(providerSource ? { providerId: providerSource } : {}),
-      ...(modelSource ? { model: modelSource } : {}),
-      ...(serviceTierSource ? { serviceTier: serviceTierSource } : {}),
-      ...(reasoningLevelSource ? { reasoningLevel: reasoningLevelSource } : {}),
-    };
-  }
 
   if (scope === "component-local") {
     return {
@@ -517,9 +501,6 @@ function sanitizeStoredEnvironmentValue(stored: string): string {
 }
 
 export function useThreadCreationOptions(
-  options: UseNewManagerCreationOptions,
-): UseThreadCreationOptionsResult<CreateManagerExecutionInputSources>;
-export function useThreadCreationOptions(
   options: UseComponentLocalCreationOptions,
 ): UseThreadCreationOptionsResult<ExistingThreadExecutionInputSources>;
 export function useThreadCreationOptions(
@@ -560,8 +541,7 @@ export function useThreadCreationOptions(
     useAtom(environmentSelectionAtomFamily(projectId));
   // Reuse env values are intentionally NEVER persisted to localStorage —
   // they represent a transient "create one thread in this worktree" intent,
-  // not a project default. Held in shared root-compose state so all mode
-  // entry points clear it when switching to manager mode.
+  // not a project default.
   const [rootComposeReuseValue, setRootComposeReuseValue] =
     useRootComposeReuseEnvironment();
   const [threadSelections, setThreadSelections] =
@@ -580,8 +560,7 @@ export function useThreadCreationOptions(
     resetKey,
   );
   const usesLocalThreadSelections = scope !== "new-thread";
-  const usesStoredCreateSelections =
-    scope === "new-thread" || scope === "new-manager";
+  const usesStoredCreateSelections = scope === "new-thread";
   const nextThreadSelections = useMemo(
     () =>
       getInitialThreadPromptSelections({

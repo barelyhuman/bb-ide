@@ -60,7 +60,6 @@ interface ThreadWithRuntimeFixtureArgs {
   projectId: string;
   title: string | null;
   titleFallback: string | null;
-  type?: ThreadWithRuntime["type"];
 }
 
 function threadWithRuntime({
@@ -68,7 +67,6 @@ function threadWithRuntime({
   projectId,
   title,
   titleFallback,
-  type = "standard",
 }: ThreadWithRuntimeFixtureArgs): ThreadWithRuntime {
   return {
     archivedAt: null,
@@ -91,7 +89,6 @@ function threadWithRuntime({
     stopRequestedAt: null,
     title,
     titleFallback,
-    type,
     updatedAt: 10,
   };
 }
@@ -192,13 +189,12 @@ describe("ThreadTimelineRows", () => {
       },
       seedQueryClient: (queryClient) => {
         queryClient.setQueryData<ThreadWithRuntime>(
-          threadQueryKey("thr_manager123"),
+          threadQueryKey("thr_parent123"),
           threadWithRuntime({
-            id: "thr_manager123",
+            id: "thr_parent123",
             projectId: "project-1",
             title: "Ops manager",
             titleFallback: "Ops manager",
-            type: "manager",
           }),
         );
       },
@@ -206,7 +202,7 @@ describe("ThreadTimelineRows", () => {
         conversationRow({
           role: "user",
           initiator: "agent",
-          senderThreadId: "thr_manager123",
+          senderThreadId: "thr_parent123",
           text: "Manager-to-child status update.",
         }),
       ],
