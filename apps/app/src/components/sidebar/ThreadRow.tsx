@@ -56,6 +56,7 @@ import {
 } from "./sidebarRowClasses";
 import type { ConsumeDragClickSuppression } from "@/components/ui/use-drag-click-suppression";
 import type { SidebarSortableDragBindings } from "./sortableMotion";
+import { SidebarChildToggleChevron } from "./SidebarChildToggleChevron";
 
 interface ThreadRowBaseOptions {
   depth: number;
@@ -89,12 +90,6 @@ interface ThreadRowProps {
   options: ThreadRowOptions;
 }
 
-interface ThreadParentChevronProps {
-  isCollapsed: boolean;
-  onToggle: () => void;
-  threadTitle: string;
-}
-
 type ThreadRowClickCaptureHandler = MouseEventHandler<HTMLDivElement>;
 
 interface ThreadRowContainerArgs {
@@ -104,44 +99,6 @@ interface ThreadRowContainerArgs {
   onClickCapture?: ThreadRowClickCaptureHandler;
   stickyLevel?: number;
   style: CSSProperties;
-}
-
-// Toggles a parent thread's children. Mirrors the "Projects" section-label
-// chevron (trailing the title, ChevronRight that rotates 90° when expanded) but
-// stays visible at rest: unlike a labeled section, a thread row gives no other
-// cue that it has children to collapse.
-function ThreadParentChevron({
-  isCollapsed,
-  onToggle,
-  threadTitle,
-}: ThreadParentChevronProps) {
-  return (
-    <button
-      type="button"
-      aria-expanded={!isCollapsed}
-      aria-label={
-        isCollapsed
-          ? `Expand ${threadTitle} threads`
-          : `Collapse ${threadTitle} threads`
-      }
-      title={isCollapsed ? "Expand child threads" : "Collapse child threads"}
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onToggle();
-      }}
-      className="relative z-10 inline-flex size-5 shrink-0 items-center justify-center rounded-md text-subtle-foreground outline-none ring-sidebar-ring transition-colors hover:bg-state-hover hover:text-foreground focus-visible:ring-2"
-    >
-      <Icon
-        name="ChevronRight"
-        className={cn(
-          "size-3 transition-transform duration-150",
-          !isCollapsed && "rotate-90",
-        )}
-        aria-hidden="true"
-      />
-    </button>
-  );
 }
 
 function ThreadDraftIndicator() {
@@ -417,19 +374,20 @@ function ThreadRowComponent({
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="min-w-0 truncate">{threadTitle}</span>
         {parentOptions && hasChildren ? (
-          <ThreadParentChevron
+          <SidebarChildToggleChevron
             isCollapsed={isParentCollapsed}
-            onToggle={() => {
-              parentOptions.onToggleCollapsed(thread.id);
-            }}
-            threadTitle={threadTitle}
+            expandLabel={`Expand ${threadTitle} threads`}
+            collapseLabel={`Collapse ${threadTitle} threads`}
+            expandTitle="Expand child threads"
+            collapseTitle="Collapse child threads"
+            onToggle={() => parentOptions.onToggleCollapsed(thread.id)}
           />
         ) : null}
         {hasComposerDraft ? <ThreadDraftIndicator /> : null}
       </span>
       <span
         className={cn(
-          "flex shrink-0 items-center justify-end",
+          "flex shrink-0 items-center justify-end max-md:pointer-coarse:pointer-events-none",
           COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS,
         )}
       >
@@ -458,7 +416,7 @@ function ThreadRowComponent({
             data-sidebar-hover-actions-open={isActionsOpen ? "true" : undefined}
             className={cn(
               SIDEBAR_HOVER_ACTIONS_CLASS,
-              "absolute inset-0 z-10 flex items-center justify-end",
+              "absolute inset-0 z-10 flex items-center justify-end max-md:pointer-coarse:hidden",
             )}
           >
             <ThreadActionsMenu
