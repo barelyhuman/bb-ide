@@ -23,6 +23,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import { QuickCreateProjectProvider } from "@/hooks/useQuickCreateProject";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
+import { COMPACT_VIEWPORT_QUERY } from "@/components/ui/hooks/use-compact-viewport";
+import {
+  restoreMatchMedia,
+  setupMatchMedia,
+} from "@/test/helpers/match-media";
 import { AppLayout } from "./AppLayout";
 import {
   BROWSER_COLLAPSED_HEADER_RESERVE_CLASS,
@@ -136,6 +141,7 @@ async function renderAppLayout(args: RenderAppLayoutArgs): Promise<void> {
 
 afterEach(() => {
   cleanup();
+  restoreMatchMedia();
   localStorage.clear();
   setBbDesktopInfo(null);
 });
@@ -527,6 +533,40 @@ describe("AppLayout desktop chrome", () => {
       BROWSER_COLLAPSED_HEADER_RESERVE_CLASS,
     );
     // Still exactly one toggle after collapsing — the same pinned overlay.
+    expect(
+      screen.getAllByRole("button", { name: "Toggle Sidebar" }),
+    ).toHaveLength(1);
+  });
+
+  it("keeps the browser header reserve stable while the mobile sidebar drawer opens", async () => {
+    setupMatchMedia({
+      matchesByQuery: new Map([[COMPACT_VIEWPORT_QUERY, true]]),
+    });
+
+    await renderAppLayout({
+      desktopInfo: null,
+      initialEntry: "/projects/proj_mobile",
+    });
+
+    const trigger = await screen.findByRole("button", {
+      name: "Toggle Sidebar",
+    });
+    const headerRow = screen.getByTestId("app-page-header-content-row");
+
+    expect(headerRow.className).toContain(
+      BROWSER_COLLAPSED_HEADER_RESERVE_CLASS,
+    );
+
+    fireEvent.click(trigger);
+
+    expect(
+      document
+        .querySelector("[data-sidebar='panel']")
+        ?.getAttribute("data-open"),
+    ).toBe("true");
+    expect(headerRow.className).toContain(
+      BROWSER_COLLAPSED_HEADER_RESERVE_CLASS,
+    );
     expect(
       screen.getAllByRole("button", { name: "Toggle Sidebar" }),
     ).toHaveLength(1);
