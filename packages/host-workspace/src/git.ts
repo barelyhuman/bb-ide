@@ -663,7 +663,12 @@ export async function getWorkspaceGitOperation(
 
   const [gitDir, status] = await Promise.all([
     getAbsoluteGitDir(cwd),
-    runGit(["status", "--porcelain=v1", "--untracked-files=all"], { cwd }),
+    // --no-optional-locks: status must not take index.lock, or background
+    // polling races concurrent commits in the same checkout.
+    runGit(
+      ["--no-optional-locks", "status", "--porcelain=v1", "--untracked-files=all"],
+      { cwd },
+    ),
   ]);
   const hasConflicts = hasPorcelainConflict(
     parsePorcelainEntries(status.stdout),
@@ -1003,7 +1008,7 @@ export async function listRemoteBranches(cwd: string): Promise<string[]> {
 export async function hasUncommittedChanges(cwd: string): Promise<boolean> {
   await ensureGitRepo(cwd);
   const status = await runGit(
-    ["status", "--porcelain=v1", "--untracked-files=all"],
+    ["--no-optional-locks", "status", "--porcelain=v1", "--untracked-files=all"],
     { cwd },
   );
   return status.stdout.trim().length > 0;
