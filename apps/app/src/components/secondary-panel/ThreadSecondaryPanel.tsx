@@ -55,6 +55,7 @@ import {
   shouldUseMacosDesktopChrome,
 } from "@/lib/bb-desktop";
 import { IframeDragGuardOverlay } from "@/lib/iframe-drag-guard";
+import type { SecondaryFixedPanelTab } from "@/lib/fixed-panel-tabs-state";
 export type {
   GitDiffDisplayMode,
   GitDiffSelectionOption,
@@ -80,8 +81,13 @@ export interface NewTabMenuRenderProps {
 
 export type NewTabMenuRenderer = (props: NewTabMenuRenderProps) => ReactNode;
 
+interface ResolveActiveFixedPanelArgs {
+  activeTab: SecondaryFixedPanelTab | null;
+  canUseGitUi: boolean;
+}
+
 export interface ThreadSecondaryPanelProps {
-  activePanel: ThreadSecondaryPanelTab | null;
+  activeTab: SecondaryFixedPanelTab | null;
   canUseGitUi: boolean;
   defaultMergeBaseBranch?: string;
   environmentId?: string;
@@ -142,8 +148,32 @@ export interface ThreadSecondaryPanelProps {
   renderAsDrawer: boolean;
 }
 
+function resolveActiveFixedPanel({
+  activeTab,
+  canUseGitUi,
+}: ResolveActiveFixedPanelArgs): ThreadSecondaryPanelTab | null {
+  if (activeTab === null) {
+    return null;
+  }
+
+  switch (activeTab.kind) {
+    case "thread-info":
+      return "thread-info";
+    case "git-diff":
+      return canUseGitUi ? "git-diff" : "thread-info";
+    case "workspace-file-preview":
+    case "host-file-preview":
+    case "thread-storage-file-preview":
+    case "app":
+    case "browser":
+    case "terminal":
+    case "new-tab":
+      return null;
+  }
+}
+
 export function ThreadSecondaryPanel({
-  activePanel: rawActivePanel,
+  activeTab,
   canUseGitUi,
   defaultMergeBaseBranch,
   environmentId,
@@ -169,6 +199,7 @@ export function ThreadSecondaryPanel({
 }: ThreadSecondaryPanelProps) {
   const activeFileTab = fileTabs?.find((tab) => tab.isActive);
   const hasActiveFileTab = activeFileTab !== undefined;
+  const isTerminalTabActive = activeTab?.kind === "terminal" && hasActiveFileTab;
   const togglePanelIconName = renderAsDrawer ? "X" : "PanelRight";
   // The conversation-collapse toggle only exists on a wide viewport; the drawer
   // layout fills the screen and cannot collapse the conversation.
@@ -204,11 +235,10 @@ export function ThreadSecondaryPanel({
       },
       [handleResizeDragging, handleSecondaryPanelResizeStart],
     );
-  const activePanel =
-    !canUseGitUi && rawActivePanel === "git-diff"
-      ? "thread-info"
-      : rawActivePanel;
-  const isDiffPanelActive = activePanel === "git-diff";
+  const activeFixedPanel =
+    resolveActiveFixedPanel({ activeTab, canUseGitUi }) ?? "thread-info";
+  const isDiffPanelActive = activeFixedPanel === "git-diff";
+  const shouldShowGitDiffTab = canUseGitUi && showGitDiffTab !== false;
   const {
     currentGitDiff,
     gitDiffError,
@@ -304,7 +334,7 @@ export function ThreadSecondaryPanel({
             // semantics describe this compact row of view controls without
             // claiming the unimplemented tab contract.
             role="toolbar"
-            aria-label="Secondary panel views"
+            aria-label="Right panel views"
           >
             <Button
               type="button"
@@ -316,12 +346,14 @@ export function ThreadSecondaryPanel({
               )}
               onClick={() => onPanelChange("thread-info")}
               aria-label="Show thread info panel"
-              aria-pressed={activePanel === "thread-info" && !hasActiveFileTab}
+              aria-pressed={
+                activeFixedPanel === "thread-info" && !hasActiveFileTab
+              }
               title="Info"
             >
               <Icon name="Info" />
             </Button>
-            {showGitDiffTab !== false ? (
+            {shouldShowGitDiffTab ? (
               <Button
                 type="button"
                 variant="ghost"
@@ -378,13 +410,13 @@ export function ThreadSecondaryPanel({
               onClick={onClose}
               aria-label={
                 renderAsDrawer
-                  ? "Close secondary panel"
-                  : "Hide secondary panel"
+                  ? "Close right panel"
+                  : "Hide right panel"
               }
               title={
                 renderAsDrawer
-                  ? "Close secondary panel"
-                  : "Hide secondary panel"
+                  ? "Close right panel"
+                  : "Hide right panel"
               }
             >
               <Icon name={togglePanelIconName} />
@@ -415,7 +447,13 @@ export function ThreadSecondaryPanel({
         */}
         {browserDeck}
         {isBrowserTabActive ? null : hasActiveFileTab ? (
-          <div className={cn(PANEL_SCROLL_SLOT_CLASS, "pb-3")}>
+          <div
+            className={
+              isTerminalTabActive
+                ? "min-h-0 flex-1 overflow-hidden"
+                : cn(PANEL_SCROLL_SLOT_CLASS, "pb-3")
+            }
+          >
             {fileTabContent ?? (
               <EmptyStatePanel className="mx-4 rounded-lg">
                 No file preview content provided.
@@ -590,7 +628,7 @@ function SecondaryPanelResizeHandle({
           : "pointer-events-none w-0 opacity-0",
         isResizing && "bg-accent/20",
       )}
-      aria-label="Resize thread and secondary panels"
+      aria-label="Resize thread and right panel"
     >
       <span
         className={cn(

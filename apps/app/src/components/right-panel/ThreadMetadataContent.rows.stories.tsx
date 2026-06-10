@@ -12,7 +12,7 @@ import {
   ThreadCommitsRow,
   ChangedFilesRow,
   ThreadMetadataCard,
-} from "./ThreadMetadataContent";
+} from "../secondary-panel/ThreadMetadataContent";
 import {
   PanelStage,
   baseProps,
@@ -22,11 +22,11 @@ import {
   makeThread,
   makeThreadSchedule,
   makeWorkspaceStatus,
-} from "./ThreadMetadataContent.fixtures";
+} from "../secondary-panel/ThreadMetadataContent.fixtures";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
-  title: "secondary-panel/Info/Row",
+  title: "right-panel/Info/Row",
 };
 
 const noop = () => {};
@@ -190,7 +190,7 @@ export function WorkspacePath() {
           <WorkspacePathRow
             thread={makeThread()}
             environment={makeEnvironment({
-              path: "/Users/michael/.bb-dev/worktrees/env_7m3cieyz6q/bb/apps/app/src/components/secondary-panel",
+              path: "/Users/michael/.bb-dev/worktrees/env_7m3cieyz6q/bb/apps/app/src/components/right-panel",
             })}
           />
         </RowStage>
@@ -658,13 +658,13 @@ export function ChangedFiles() {
                 deletions: 24,
                 files: [
                   {
-                    path: "apps/app/src/components/secondary-panel/ThreadMetadataContent.tsx",
+                    path: "apps/app/src/components/right-panel/ThreadMetadataContent.stories.tsx",
                     status: "M",
                     insertions: 38,
                     deletions: 12,
                   },
                   {
-                    path: "apps/app/src/components/secondary-panel/ThreadMetadataContent.fixtures.tsx",
+                    path: "apps/app/src/components/right-panel/ThreadMetadataContent.rows.stories.tsx",
                     status: "A",
                     insertions: 72,
                     deletions: 0,
@@ -718,13 +718,13 @@ export function ChangedFiles() {
                 deletions: 24,
                 files: [
                   {
-                    path: "apps/app/src/components/secondary-panel/ThreadMetadataContent.tsx",
+                    path: "apps/app/src/components/right-panel/ThreadMetadataContent.stories.tsx",
                     status: "M",
                     insertions: 38,
                     deletions: 12,
                   },
                   {
-                    path: "apps/app/src/components/secondary-panel/ThreadMetadataContent.fixtures.tsx",
+                    path: "apps/app/src/components/right-panel/ThreadMetadataContent.rows.stories.tsx",
                     status: "A",
                     insertions: 72,
                     deletions: 0,

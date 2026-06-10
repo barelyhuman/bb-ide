@@ -14,18 +14,28 @@ import {
   projectPathsQueryKey,
   threadStoragePathsQueryKey,
 } from "@/hooks/queries/query-keys";
-import { ThreadSecondaryPanel } from "./ThreadSecondaryPanel";
-import type { SecondaryPanelFileTab } from "./ThreadSecondaryPanel";
-import { NewTabActionMenu } from "./NewTabFileSearch";
-import { NewTabPage } from "./NewTabPage";
-import type { FileSearchSelection } from "./useThreadFileTabs";
+import { ThreadSecondaryPanel } from "../secondary-panel/ThreadSecondaryPanel";
+import type { SecondaryPanelFileTab } from "../secondary-panel/ThreadSecondaryPanel";
+import { NewTabActionMenu } from "../secondary-panel/NewTabFileSearch";
+import { NewTabPage } from "../secondary-panel/NewTabPage";
+import type { FileSearchSelection } from "../secondary-panel/useThreadFileTabs";
+import { Icon } from "@/components/ui/icon.js";
 import {
   getThreadRecentItemsStorageKey,
   type ThreadRecentItem,
-} from "./threadRecentItems";
+} from "../secondary-panel/threadRecentItems";
+import {
+  createNewTabFixedPanelTab,
+  createTerminalFixedPanelTab,
+  type SecondaryFixedPanelTab,
+} from "@/lib/fixed-panel-tabs-state";
+import {
+  getFileNameFromPath,
+  resolveRightPanelFileVisual,
+} from "../secondary-panel/rightPanelFileVisuals";
 
 export default {
-  title: "secondary-panel/New tab",
+  title: "right-panel/New tab",
 };
 
 const PROJECT_ID = "proj_bb";
@@ -36,6 +46,7 @@ const APPS_THREAD_ID = "thr_new_tab_apps_story";
 const RECENTS_THREAD_ID = "thr_new_tab_recents_story";
 const SEARCH_THREAD_ID = "thr_new_tab_search_story";
 const OPEN_BROWSER_THREAD_ID = "thr_new_tab_browser_story";
+const STORY_TERMINAL_ID = "term_new_tab_story";
 
 const noop = () => {};
 
@@ -43,6 +54,7 @@ const NEW_TAB: SecondaryPanelFileTab = {
   id: "new-tab",
   filename: "New tab",
   isActive: true,
+  leadingVisual: <Icon name="NewTab" className="size-3.5" aria-hidden />,
   statusLabel: null,
   onSelect: noop,
   onClose: noop,
@@ -58,15 +70,15 @@ const WORKSPACE_PATH_RESULTS: WorkspacePathEntry[] = [
   },
   {
     kind: "file",
-    path: "apps/app/src/components/secondary-panel/ThreadSecondaryPanel.tsx",
-    name: "ThreadSecondaryPanel.tsx",
+    path: "apps/app/src/components/right-panel/ThreadSecondaryPanel.stories.tsx",
+    name: "ThreadSecondaryPanel.stories.tsx",
     score: 88,
     positions: [40, 41, 42, 43, 44, 45],
   },
   {
     kind: "file",
-    path: "apps/app/src/components/secondary-panel/useThreadFileTabs.ts",
-    name: "useThreadFileTabs.ts",
+    path: "apps/app/src/components/right-panel/ThreadSecondaryPanelNewTab.stories.tsx",
+    name: "ThreadSecondaryPanelNewTab.stories.tsx",
     score: 72,
     positions: [43, 44, 45, 46, 47, 48],
   },
@@ -145,7 +157,7 @@ const RECENT_ROW_ITEMS: ThreadRecentItem[] = [
   },
   {
     source: "workspace",
-    path: "apps/app/src/components/secondary-panel/story-source.tsx",
+    path: "apps/app/src/components/right-panel/story-source.tsx",
     openedAt: Date.now() - 25 * 60 * 60 * 1000,
   },
 ];
@@ -168,7 +180,57 @@ interface NewTabPanelStoryProps {
 
 type NewTabStoryOutcome =
   | { kind: "file"; selection: FileSearchSelection }
-  | { kind: "browser" };
+  | { kind: "browser" }
+  | { kind: "terminal" };
+
+function createStoryActiveTab(
+  outcome: NewTabStoryOutcome | null,
+): SecondaryFixedPanelTab {
+  if (outcome === null) {
+    return createNewTabFixedPanelTab();
+  }
+
+  if (outcome.kind === "browser") {
+    return {
+      id: "browser",
+      kind: "browser",
+      title: null,
+      url: "",
+    };
+  }
+
+  if (outcome.kind === "terminal") {
+    return createTerminalFixedPanelTab({ terminalId: STORY_TERMINAL_ID });
+  }
+
+  const { selection } = outcome;
+  if (selection.source === "app") {
+    return {
+      applicationId: selection.applicationId,
+      id: `app:${selection.applicationId}`,
+      kind: "app",
+    };
+  }
+
+  if (selection.source === "workspace") {
+    return {
+      environmentId: ENVIRONMENT_ID,
+      id: `workspace:${selection.path}`,
+      kind: "workspace-file-preview",
+      lineNumber: null,
+      path: selection.path,
+      source: { kind: "working-tree" },
+      statusLabel: null,
+    };
+  }
+
+  return {
+    id: `thread-storage:${selection.path}`,
+    isPinned: false,
+    kind: "thread-storage-file-preview",
+    path: selection.path,
+  };
+}
 
 interface StoryQueryClientArgs {
   apps: readonly AppSummary[];
@@ -339,9 +401,13 @@ function NewTabPanelStory({
   const handleOpenBrowser = useCallback(() => {
     setOutcome({ kind: "browser" });
   }, []);
+  const handleStartTerminal = useCallback(() => {
+    setOutcome({ kind: "terminal" });
+  }, []);
   const handleOpenFileSearch = useCallback(() => {
     setOutcome(null);
   }, []);
+  const activeTab = createStoryActiveTab(outcome);
   const fileTabs = useMemo<SecondaryPanelFileTab[]>(() => {
     if (outcome === null) {
       return [NEW_TAB];
@@ -352,6 +418,25 @@ function NewTabPanelStory({
           id: "browser",
           filename: "Browser",
           isActive: true,
+          leadingVisual: <Icon name="Globe" className="size-3.5" aria-hidden />,
+          statusLabel: null,
+          onSelect: noop,
+          onClose: () => setOutcome(null),
+        },
+      ];
+    }
+    if (outcome.kind === "terminal") {
+      const terminalTab = createTerminalFixedPanelTab({
+        terminalId: STORY_TERMINAL_ID,
+      });
+      return [
+        {
+          id: terminalTab.id,
+          filename: "Terminal",
+          isActive: true,
+          leadingVisual: (
+            <Icon name="Terminal" className="size-3.5" aria-hidden />
+          ),
           statusLabel: null,
           onSelect: noop,
           onClose: () => setOutcome(null),
@@ -368,8 +453,19 @@ function NewTabPanelStory({
         filename:
           selection.source === "app"
             ? selection.applicationId
-            : (selection.path.split("/").at(-1) ?? selection.path),
+            : getFileNameFromPath({ path: selection.path }),
         isActive: true,
+        leadingVisual: (
+          <Icon
+            name={
+              selection.source === "app"
+                ? "AppWindow"
+                : resolveRightPanelFileVisual({ path: selection.path }).iconName
+            }
+            className="size-3.5"
+            aria-hidden
+          />
+        ),
         statusLabel: null,
         onSelect: noop,
         onClose: () => setOutcome(null),
@@ -392,7 +488,14 @@ function NewTabPanelStory({
         <p className="font-medium text-foreground">Opened browser tab</p>
         <p className="pt-1 text-xs text-muted-foreground">
           A new in-panel web browser tab opens here (see the
-          &ldquo;secondary-panel/Browser tab&rdquo; story).
+          &ldquo;right-panel/Browser tab&rdquo; story).
+        </p>
+      </div>
+    ) : outcome.kind === "terminal" ? (
+      <div className="flex min-h-full flex-col justify-center bg-neutral-950 px-4 font-mono text-xs text-emerald-100">
+        <p>$ bb terminal start</p>
+        <p className="pt-1 text-emerald-300">
+          Terminal tab opened from the New tab menu.
         </p>
       </div>
     ) : (
@@ -416,7 +519,7 @@ function NewTabPanelStory({
   return (
     <PanelStage>
       <ThreadSecondaryPanel
-        activePanel="thread-info"
+        activeTab={activeTab}
         canUseGitUi
         defaultMergeBaseBranch="main"
         environmentId={ENVIRONMENT_ID}
@@ -435,6 +538,7 @@ function NewTabPanelStory({
               onOpenFileSearch={handleOpenFileSearch}
               onCreateAppPromptPrefill={noop}
               onOpenBrowser={showOpenBrowser ? handleOpenBrowser : undefined}
+              onStartTerminal={handleStartTerminal}
               onCloseMenu={closeMenu}
             />
           </QueryClientProvider>
@@ -513,7 +617,7 @@ export function NewTab() {
       </StoryRow>
       <StoryRow
         label="open browser"
-        hint="desktop-only Open browser action in the panel + menu"
+        hint="desktop-only Open browser action in the right-panel menu; Start terminal is available beside it"
       >
         <WithDesktopBrowser>
           <NewTabPanelStory

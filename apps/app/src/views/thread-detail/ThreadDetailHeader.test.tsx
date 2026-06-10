@@ -20,6 +20,7 @@ vi.mock("@/components/ui/sidebar.js", () => ({
 
 interface RenderHeaderOverrides {
   actionsMenu?: ReactNode;
+  activeTerminalCount?: number;
   isSecondaryPanelOpen?: boolean;
   onOpenThreadGitAction?: (target: ThreadGitActionDialogTarget) => void;
   onToggleSecondaryPanel?: () => void;
@@ -35,13 +36,11 @@ function renderHeader(overrides: RenderHeaderOverrides = {}) {
   const noop = () => {};
   const props = {
     actionsMenu: overrides.actionsMenu ?? null,
-    activeTerminalCount: 0,
+    activeTerminalCount: overrides.activeTerminalCount ?? 0,
     isChildThread: false,
     isSecondaryPanelOpen: overrides.isSecondaryPanelOpen ?? false,
-    isTerminalPanelOpen: false,
     onOpenThreadGitAction: overrides.onOpenThreadGitAction ?? noop,
     onToggleSecondaryPanel: overrides.onToggleSecondaryPanel ?? noop,
-    onToggleTerminalPanel: noop,
     threadHeaderGitActions: overrides.threadHeaderGitActions ?? [],
     threadTitle: "Test thread",
   };
@@ -137,32 +136,39 @@ describe("ThreadDetailHeader git actions", () => {
 });
 
 describe("ThreadDetailHeader panel toggle", () => {
-  it("opens the secondary panel from the closed state", () => {
+  it("toggles the right panel from the closed state", () => {
     const onToggleSecondaryPanel = vi.fn();
     renderHeader({
       isSecondaryPanelOpen: false,
       onToggleSecondaryPanel,
     });
 
-    const button = screen.getByRole("button", { name: "Show panel" });
-    expect(button.getAttribute("aria-expanded")).toBe("false");
-    // Closed state renders the recognizable panel icon, not a chevron, so it
-    // reads as "open the right side panel".
+    const button = screen.getByRole("button", { name: "Show right panel" });
+    expect(button.getAttribute("aria-pressed")).toBe("false");
     expect(button.querySelector("[data-icon='PanelRight']")).not.toBeNull();
 
     fireEvent.click(button);
     expect(onToggleSecondaryPanel).toHaveBeenCalledTimes(1);
   });
 
-  it("drops the panel toggle from the conversation header once the panel is open", () => {
-    // Open state moves the expand/collapse-conversation toggle into the panel
-    // header, so the conversation header no longer carries a panel affordance.
-    renderHeader({ isSecondaryPanelOpen: true });
+  it("toggles the right panel from the open state", () => {
+    const onToggleSecondaryPanel = vi.fn();
+    renderHeader({
+      isSecondaryPanelOpen: true,
+      onToggleSecondaryPanel,
+    });
 
-    expect(screen.queryByRole("button", { name: "Show panel" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Expand panel" })).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Restore conversation" }),
-    ).toBeNull();
+    const button = screen.getByRole("button", { name: "Hide right panel" });
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(button);
+    expect(onToggleSecondaryPanel).toHaveBeenCalledTimes(1);
+  });
+
+  it("badges the right panel button when terminals are active", () => {
+    renderHeader({ activeTerminalCount: 12 });
+
+    const button = screen.getByRole("button", { name: "Show right panel" });
+    expect(button.textContent).toContain("9+");
   });
 });

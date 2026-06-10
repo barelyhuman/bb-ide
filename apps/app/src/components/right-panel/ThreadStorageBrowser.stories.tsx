@@ -1,16 +1,16 @@
 import { useState, type ReactNode } from "react";
 import type { WorkspaceFile } from "@bb/server-contract";
 import { DetailCard } from "@/components/ui/detail-card.js";
-import { ThreadStorageRow } from "./ThreadMetadataContent";
-import { useThreadStorageBrowser } from "./useThreadStorageBrowser";
+import { ThreadStorageRow } from "../secondary-panel/ThreadMetadataContent";
+import { useThreadStorageBrowser } from "../secondary-panel/useThreadStorageBrowser";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
-  title: "secondary-panel/Workspace",
+  title: "right-panel/Thread storage",
 };
 
 // Mirrors the DetailCard styling used by ThreadMetadataCard so a row in
-// isolation reads the same way as it does inside the full info-tab panel.
+// isolation reads the same way as it does inside the full right-panel Info tab.
 function PanelStage({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-[360px] w-full max-w-[460px] min-w-0 flex-col overflow-hidden rounded-md border border-border bg-background px-4 py-3">
@@ -61,7 +61,7 @@ export function Overview() {
     <StoryCard>
       <StoryRow
         label="default"
-        hint="Flat list of workspace files; click a row to select it"
+        hint="Flat list of thread-storage files; click a row to select it"
       >
         <PanelStage>
           <InteractiveRow files={FILES} isFilesLoading={false} />

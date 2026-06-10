@@ -1,17 +1,17 @@
 import {
   ThreadMetadataContent,
   type ThreadMetadataContentProps,
-} from "./ThreadMetadataContent";
+} from "../secondary-panel/ThreadMetadataContent";
 import {
   PanelStage,
   baseProps,
   makeThread,
   makeThreadSchedule,
-} from "./ThreadMetadataContent.fixtures";
+} from "../secondary-panel/ThreadMetadataContent.fixtures";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
-  title: "secondary-panel/Info",
+  title: "right-panel/Info",
 };
 
 function render(overrides: Partial<ThreadMetadataContentProps>) {

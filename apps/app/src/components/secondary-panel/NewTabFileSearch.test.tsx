@@ -14,6 +14,7 @@ import type {
   AppSearchSuggestion,
   FilePathSearchSuggestion,
   FileSearchSuggestion,
+  UseFileSearchSuggestionsArgs,
   UseFileSearchSuggestionsResult,
 } from "@/hooks/useFileSearchSuggestions";
 import type {
@@ -21,12 +22,14 @@ import type {
   BbDesktopApi,
   BbDesktopInfo,
 } from "@bb/server-contract";
+import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import {
   NewTabActionMenu,
   NewTabFileSearch,
   type NewTabActionMenuProps,
   type NewTabFileSearchProps,
 } from "./NewTabFileSearch";
+import { getThreadRecentItemsStorageKey } from "./threadRecentItems";
 import { createNoopDesktopBrowserApi } from "@/test/bb-desktop-test-utils";
 import { CHROME_SECTION_LABEL_CLASS } from "@/components/ui/chromeStyleTokens";
 import type { PromptDraftState } from "@/lib/prompt-draft";
@@ -48,6 +51,7 @@ interface RenderActionMenuArgs {
   onOpenFileSearch?: NewTabActionMenuProps["onOpenFileSearch"];
   onCreateAppPromptPrefill?: NewTabActionMenuProps["onCreateAppPromptPrefill"];
   onOpenBrowser?: NewTabActionMenuProps["onOpenBrowser"];
+  onStartTerminal?: NewTabActionMenuProps["onStartTerminal"];
   onCloseMenu?: NewTabActionMenuProps["onCloseMenu"];
 }
 
@@ -73,6 +77,8 @@ const fileSearchMockState = vi.hoisted<FileSearchMockState>(() => ({
   isUnavailable: false,
 }));
 
+const fileSearchMockArgs = vi.hoisted<UseFileSearchSuggestionsArgs[]>(() => []);
+
 const appsQueryMockState = vi.hoisted<AppsQueryMockState>(() => ({
   data: [],
   isLoading: false,
@@ -87,7 +93,10 @@ const promptDraftMockState = vi.hoisted<PromptDraftMockState>(() => ({
 // The launcher's data sources are the only external boundary here; stub them so
 // the test focuses on the menu/search split and desktop Browser gating.
 vi.mock("@/hooks/useFileSearchSuggestions", () => ({
-  useFileSearchSuggestions: () => fileSearchMockState,
+  useFileSearchSuggestions: (args: UseFileSearchSuggestionsArgs) => {
+    fileSearchMockArgs.push(args);
+    return fileSearchMockState;
+  },
 }));
 
 vi.mock("@/hooks/queries/thread-queries", () => ({
@@ -139,6 +148,15 @@ const FILE_SUGGESTION = {
   positions: [],
 } satisfies FilePathSearchSuggestion;
 
+const REPORT_FILE_SUGGESTION = {
+  source: "workspace",
+  entryKind: "file",
+  path: "reports/desktop-size.html",
+  name: "desktop-size.html",
+  score: 80,
+  positions: [],
+} satisfies FilePathSearchSuggestion;
+
 const DRAFT_WITH_ATTACHMENT = {
   text: "Keep this draft",
   mentions: [],
@@ -160,6 +178,7 @@ function resetFileSearchMockState(): void {
   fileSearchMockState.fileSearchError = false;
   fileSearchMockState.isDebouncing = false;
   fileSearchMockState.isUnavailable = false;
+  fileSearchMockArgs.length = 0;
 }
 
 function resetAppsQueryMockState(): void {
@@ -237,6 +256,7 @@ function renderActionMenu(args: RenderActionMenuArgs = {}) {
       onOpenFileSearch: args.onOpenFileSearch ?? vi.fn(),
       onCreateAppPromptPrefill: args.onCreateAppPromptPrefill,
       onOpenBrowser: args.onOpenBrowser,
+      onStartTerminal: args.onStartTerminal,
       onCloseMenu: args.onCloseMenu ?? vi.fn(),
     }),
     { wrapper },
@@ -246,6 +266,7 @@ function renderActionMenu(args: RenderActionMenuArgs = {}) {
 afterEach(() => {
   cleanup();
   delete window.bbDesktop;
+  localStorage.clear();
   resetFileSearchMockState();
   resetAppsQueryMockState();
   resetPromptDraftMockState();
@@ -285,14 +306,14 @@ describe("NewTabActionMenu", () => {
     expect(screen.queryByText("Open")).toBeNull();
   });
 
-  it("orders action rows as Open file, Open browser, Create App with no Apps section when no apps exist", () => {
+  it("orders action rows as Open file, Open browser, Start terminal, Create App with no Apps section when no apps exist", () => {
     window.bbDesktop = createDesktopApiStub();
 
-    renderActionMenu({ onOpenBrowser: vi.fn() });
+    renderActionMenu({ onOpenBrowser: vi.fn(), onStartTerminal: vi.fn() });
 
     expect(
       screen.getAllByRole("button").map((button) => button.textContent ?? ""),
-    ).toEqual(["Open file", "Open browser", "Create App..."]);
+    ).toEqual(["Open file", "Open browser", "Start terminal", "Create App..."]);
     // No installed apps ⇒ no divider and no Apps title; Create App still trails.
     expect(screen.queryByRole("separator")).toBeNull();
     expect(screen.queryByText("Apps")).toBeNull();
@@ -302,19 +323,21 @@ describe("NewTabActionMenu", () => {
     window.bbDesktop = createDesktopApiStub();
     setAppSummaries([APP_SUGGESTION.app]);
 
-    renderActionMenu({ onOpenBrowser: vi.fn() });
+    renderActionMenu({ onOpenBrowser: vi.fn(), onStartTerminal: vi.fn() });
 
-    // Open file, Open browser, the installed app rows, then Create App last.
+    // Open file, Open browser, Start terminal, the installed app rows, then
+    // Create App last.
     expect(
       screen.getAllByRole("button").map((button) => button.textContent ?? ""),
     ).toEqual([
       "Open file",
       "Open browser",
+      "Start terminal",
       expect.stringContaining("Review Board"),
       "Create App...",
     ]);
 
-    // Apps get their own divided, titled section after Open browser.
+    // Apps get their own divided, titled section after the open actions.
     const divider = screen.getByRole("separator");
     const appsTitle = screen.getByText("Apps");
     expect(appsTitle.parentElement?.className).toContain(
@@ -323,15 +346,15 @@ describe("NewTabActionMenu", () => {
     expect(divider.className).toContain("mx-2");
     expect(divider.className).toContain("w-auto");
     expect(divider.className).toContain("bg-border-seam");
-    const openBrowser = screen.getByRole("button", { name: /Open browser/u });
+    const startTerminal = screen.getByRole("button", {
+      name: /Start terminal/u,
+    });
     const appRow = screen.getByRole("button", { name: /Review Board/u });
     const orderedAfter = (a: Element, b: Element) =>
-      Boolean(
-        a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING,
-      );
-    // Divider follows Open browser; the Apps title follows the divider; the app
-    // row follows the title.
-    expect(orderedAfter(openBrowser, divider)).toBe(true);
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    // Divider follows Start terminal; the Apps title follows the divider; the
+    // app row follows the title.
+    expect(orderedAfter(startTerminal, divider)).toBe(true);
     expect(orderedAfter(divider, appsTitle)).toBe(true);
     expect(orderedAfter(appsTitle, appRow)).toBe(true);
   });
@@ -351,13 +374,13 @@ describe("NewTabActionMenu", () => {
     expect(
       Boolean(
         status.compareDocumentPosition(createApp) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
+        Node.DOCUMENT_POSITION_FOLLOWING,
       ),
     ).toBe(true);
     expect(
       Boolean(
         createApp.compareDocumentPosition(status) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
+        Node.DOCUMENT_POSITION_FOLLOWING,
       ),
     ).toBe(false);
     expect(within(menu).getAllByRole("button").at(-1)).toBe(createApp);
@@ -378,13 +401,13 @@ describe("NewTabActionMenu", () => {
     expect(
       Boolean(
         status.compareDocumentPosition(createApp) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
+        Node.DOCUMENT_POSITION_FOLLOWING,
       ),
     ).toBe(true);
     expect(
       Boolean(
         createApp.compareDocumentPosition(status) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
+        Node.DOCUMENT_POSITION_FOLLOWING,
       ),
     ).toBe(false);
     expect(within(menu).getAllByRole("button").at(-1)).toBe(createApp);
@@ -442,6 +465,18 @@ describe("NewTabActionMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: /Open browser/u }));
 
     expect(calls).toEqual(["close", "open-browser"]);
+  });
+
+  it("closes the popout before starting a terminal", () => {
+    const calls: string[] = [];
+    renderActionMenu({
+      onCloseMenu: () => calls.push("close"),
+      onStartTerminal: () => calls.push("start-terminal"),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Start terminal/u }));
+
+    expect(calls).toEqual(["close", "start-terminal"]);
   });
 
   it("closes the popout before starting Create App", () => {
@@ -524,6 +559,50 @@ describe("NewTabFileSearch", () => {
       name: "File search results",
     });
     const filesGroup = within(listbox).getByRole("group", { name: "Files" });
-    expect(within(filesGroup).getByRole("option", { name: /app\.ts/u })).toBeTruthy();
+    expect(
+      within(filesGroup).getByRole("option", { name: /app\.ts/u }),
+    ).toBeTruthy();
+  });
+
+  it("uses the same path visual for file results and recent rows", () => {
+    const currentThreadId = "thr_icon_consistency";
+    localStorage.setItem(
+      getThreadRecentItemsStorageKey({ threadId: currentThreadId }),
+      JSON.stringify([
+        {
+          source: "thread-storage",
+          path: REPORT_FILE_SUGGESTION.path,
+          openedAt: 1,
+        },
+      ]),
+    );
+    setFileSearchSuggestions([REPORT_FILE_SUGGESTION]);
+
+    renderLauncher({ currentThreadId });
+
+    const listbox = screen.getByRole("listbox", {
+      name: "File search results",
+    });
+    const filesGroup = within(listbox).getByRole("group", { name: "Files" });
+    const recentGroup = within(listbox).getByRole("group", { name: "Recent" });
+    const fileRow = within(filesGroup).getByRole("option", {
+      name: /desktop-size\.html/u,
+    });
+    const recentRow = within(recentGroup).getByRole("option", {
+      name: /desktop-size\.html/u,
+    });
+
+    expect(fileRow.querySelector("[data-icon='ChartColumn']")).not.toBeNull();
+    expect(recentRow.querySelector("[data-icon='ChartColumn']")).not.toBeNull();
+    expect(within(recentRow).getByText("Report")).toBeTruthy();
+  });
+
+  it("does not pass the personal project id to workspace file search", () => {
+    renderLauncher({ projectId: PERSONAL_PROJECT_ID });
+
+    expect(fileSearchMockArgs.at(-1)?.projectId).toBeUndefined();
+    expect(
+      screen.getByRole("combobox", { name: "Search files" }),
+    ).toHaveProperty("disabled", false);
   });
 });

@@ -10,7 +10,7 @@ import {
   GitDiffToolbar,
   type GitDiffDisplayMode,
   type GitDiffSelectionOption,
-} from "./GitDiffToolbar";
+} from "../secondary-panel/GitDiffToolbar";
 import {
   parseGitDiffFiles,
   summarizeGitDiff,
@@ -21,10 +21,10 @@ import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 import { appToast } from "@/components/ui/app-toast";
 
 export default {
-  title: "secondary-panel/Diff",
+  title: "right-panel/Diff",
 };
 
-// Mirror the secondary panel: bordered, white background, toolbar at top,
+// Mirror the right panel: bordered, white background, toolbar at top,
 // cards in a scrolling region underneath. Keeps the visual context honest.
 function PanelStage({ children }: { children: ReactNode }) {
   return (

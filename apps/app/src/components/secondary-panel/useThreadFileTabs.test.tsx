@@ -474,6 +474,31 @@ describe("useThreadFileTabs", () => {
     expect(readStoredState("thr-new-tab").secondary.tabs).toEqual([]);
   });
 
+  it("clears an active new tab when fixed panel tabs are cleared", () => {
+    const { result } = renderThreadFileTabsHook({
+      environmentId: "env-one",
+      storageFiles: undefined,
+      threadId: "thr-new-tab-clear",
+    });
+
+    act(() => {
+      result.current.openNewTab();
+    });
+    expect(result.current.isNewTabActive).toBe(true);
+
+    act(() => {
+      result.current.clearActiveFileTabs();
+    });
+
+    expect(
+      result.current.fixedPanelTabsState.secondary.tabs.some(
+        (tab) => tab.kind === "new-tab",
+      ),
+    ).toBe(true);
+    expect(result.current.isNewTabActive).toBe(false);
+    expect(result.current.fixedPanelTabsState.secondary.activeTabId).toBeNull();
+  });
+
   it("replaces the new tab with a selected workspace preview", () => {
     const { result } = renderThreadFileTabsHook({
       environmentId: "env-one",

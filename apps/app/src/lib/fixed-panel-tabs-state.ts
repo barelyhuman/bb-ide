@@ -117,6 +117,7 @@ const secondaryFixedPanelTabSchema = z.discriminatedUnion("kind", [
   appFixedPanelTabSchema,
   browserFixedPanelTabSchema,
   newTabFixedPanelTabSchema,
+  terminalFixedPanelTabSchema,
 ]);
 const bottomFixedPanelTabSchema = z.discriminatedUnion("kind", [
   terminalFixedPanelTabSchema,
@@ -233,7 +234,8 @@ export type SecondaryFixedPanelTab =
   | ThreadStorageFilePreviewFixedPanelTab
   | AppFixedPanelTab
   | BrowserFixedPanelTab
-  | NewTabFixedPanelTab;
+  | NewTabFixedPanelTab
+  | TerminalFixedPanelTab;
 
 /**
  * The subset of secondary-panel tabs rendered as closable file tabs in the tab
@@ -246,7 +248,8 @@ export type SecondaryFileFixedPanelTab =
   | ThreadStorageFilePreviewFixedPanelTab
   | AppFixedPanelTab
   | BrowserFixedPanelTab
-  | NewTabFixedPanelTab;
+  | NewTabFixedPanelTab
+  | TerminalFixedPanelTab;
 
 export type BottomFixedPanelTab = TerminalFixedPanelTab;
 
@@ -472,7 +475,7 @@ function isTabSupportedInRegion(
   if (region === "bottom") {
     return tab.kind === "terminal";
   }
-  return tab.kind !== "terminal";
+  return true;
 }
 
 function isTransientFixedPanelTab(tab: FixedPanelTab): boolean {
@@ -521,13 +524,41 @@ function normalizeFixedSecondaryPanelTabGroupState(
 export function normalizeFixedPanelTabsState({
   state,
 }: NormalizeFixedPanelTabsStateArgs): FixedPanelTabsState {
+  const normalizedSecondary = normalizeFixedSecondaryPanelTabGroupState(
+    state.secondary,
+  );
+  const normalizedBottom = normalizeFixedPanelTabGroupState({
+    group: state.bottom,
+    region: "bottom",
+  });
+  const seenSecondaryTabIds = new Set(
+    normalizedSecondary.tabs.map((tab) => tab.id),
+  );
+  const migratedTerminalTabs = normalizedBottom.tabs.filter(
+    (tab) => !seenSecondaryTabIds.has(tab.id),
+  );
+  const secondaryTabs =
+    migratedTerminalTabs.length > 0
+      ? [...normalizedSecondary.tabs, ...migratedTerminalTabs]
+      : normalizedSecondary.tabs;
+  const activeTabId =
+    normalizedSecondary.activeTabId ??
+    (normalizedBottom.activeTabId !== null &&
+    secondaryTabs.some((tab) => tab.id === normalizedBottom.activeTabId)
+      ? normalizedBottom.activeTabId
+      : null);
+
   return {
     ...state,
-    secondary: normalizeFixedSecondaryPanelTabGroupState(state.secondary),
-    bottom: normalizeFixedPanelTabGroupState({
-      group: state.bottom,
-      region: "bottom",
-    }),
+    secondary: {
+      ...normalizedSecondary,
+      tabs: secondaryTabs,
+      activeTabId,
+    },
+    bottom: {
+      tabs: [],
+      activeTabId: null,
+    },
   };
 }
 

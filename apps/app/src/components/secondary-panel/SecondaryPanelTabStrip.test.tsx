@@ -15,6 +15,7 @@ import {
   SecondaryPanelTabStrip,
 } from "./SecondaryPanelTabStrip";
 import { TAB_PILL_CLOSE_BUTTON_CLASS } from "@/components/ui/tab-pill";
+import { Icon } from "@/components/ui/icon";
 
 const noop = () => {};
 
@@ -34,6 +35,7 @@ function buildTab({
     filename,
     isActive,
     isPinned: false,
+    leadingVisual: <Icon name="Code" className="size-3.5" aria-hidden />,
     statusLabel: null,
     onSelect: noop,
     onClose: noop,
@@ -128,7 +130,7 @@ afterEach(() => {
 });
 
 describe("SecondaryPanelTabStrip", () => {
-  it("only reveals tab close buttons while the tab is hovered or focused", () => {
+  it("renders a leading icon and swaps it for close while hovered or focused", () => {
     render(
       <SecondaryPanelTabStrip
         fileTabs={[buildTab({ id: "a", filename: "a.ts", isActive: true })]}
@@ -137,17 +139,48 @@ describe("SecondaryPanelTabStrip", () => {
     );
 
     const closeButton = screen.getByRole("button", { name: "Close a.ts" });
+    const leadingIcon = document.querySelector('[data-icon="Code"]');
 
+    expect(leadingIcon).not.toBeNull();
+    expect(leadingIcon?.parentElement?.className).toContain(
+      "group-hover/tab-pill:opacity-0",
+    );
+    expect(leadingIcon?.parentElement?.className).toContain(
+      "group-has-[[data-tab-pill-close]:focus-visible]/tab-pill:opacity-0",
+    );
     expect(closeButton.parentElement?.className).toContain("group/tab-pill");
+    expect(closeButton.hasAttribute("data-tab-pill-close")).toBe(true);
     expect(closeButton.className).toContain(TAB_PILL_CLOSE_BUTTON_CLASS);
     expect(closeButton.className).toContain("opacity-0");
+    expect(closeButton.className).toContain("pointer-events-none");
     expect(closeButton.className).toContain(
-      "group-hover/tab-pill:opacity-100",
+      "group-hover/tab-pill:pointer-events-auto",
     );
-    expect(closeButton.className).toContain(
-      "group-focus-within/tab-pill:opacity-100",
-    );
+    expect(closeButton.className).toContain("group-hover/tab-pill:opacity-100");
+    expect(closeButton.className).toContain("focus-visible:opacity-100");
     expect(closeButton.className).not.toContain("opacity-70");
+  });
+
+  it("keeps the leading icon visible for non-closable pinned tabs", () => {
+    render(
+      <SecondaryPanelTabStrip
+        fileTabs={[
+          {
+            ...buildTab({ id: "a", filename: "a.ts", isActive: true }),
+            isPinned: true,
+          },
+        ]}
+        usesDesktopChrome={false}
+      />,
+    );
+
+    const leadingIcon = document.querySelector('[data-icon="Code"]');
+
+    expect(screen.queryByRole("button", { name: "Close a.ts" })).toBeNull();
+    expect(leadingIcon).not.toBeNull();
+    expect(leadingIcon?.parentElement?.className).not.toContain(
+      "group-hover/tab-pill:opacity-0",
+    );
   });
 
   it("hides both scroll chevrons when every tab fits", () => {

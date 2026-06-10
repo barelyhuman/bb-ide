@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { directoryFromPath } from "@bb/thread-view";
-import { Icon, type IconName } from "@/components/ui/icon.js";
+import { Icon } from "@/components/ui/icon.js";
 import { EmptyStatePanel } from "@/components/ui/empty-state.js";
 import { Input } from "@/components/ui/input.js";
 import { Separator } from "@/components/ui/separator.js";
@@ -25,15 +25,17 @@ import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { useApps } from "@/hooks/queries/thread-queries";
 import type { FileSearchSelection } from "./useThreadFileTabs";
 import {
-  getRecentItemName,
-  resolveRecentFileKind,
   useThreadRecentItems,
   THREAD_RECENT_ITEMS_VISIBLE_LIMIT,
-  type RecentFileChip,
   type ThreadRecentItem,
 } from "./threadRecentItems";
+import {
+  getFileNameFromPath,
+  resolveRightPanelFileVisual,
+} from "./rightPanelFileVisuals";
 import { cn } from "@/lib/utils";
 import { isDesktopBrowserAvailable } from "@/lib/bb-desktop";
+import { isProjectlessProjectId } from "@/lib/app-route-paths";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { isPromptDraftEmpty, type PromptDraftState } from "@/lib/prompt-draft";
 import {
@@ -85,6 +87,7 @@ export interface NewTabActionMenuProps {
   onCreateAppPromptPrefill?: CreateAppPromptPrefillHandler;
   /** Desktop-only: open a new in-panel browser tab. Absent ⇒ no Browser entry. */
   onOpenBrowser?: () => void;
+  onStartTerminal?: () => void;
   onCloseMenu: () => void;
 }
 
@@ -129,6 +132,7 @@ type FileSearchSectionEntry =
   | { kind: "suggestion"; suggestion: FileSearchSuggestion }
   | { kind: "open-browser" }
   | { kind: "open-file" }
+  | { kind: "start-terminal" }
   | { kind: "create-app" }
   | { kind: "recent"; item: ThreadRecentItem };
 
@@ -160,6 +164,7 @@ interface GroupFileSearchSectionsArgs {
   availableSources: readonly FileSearchSource[];
   includeOpenBrowserEntry: boolean;
   includeOpenFileEntry: boolean;
+  includeStartTerminalEntry: boolean;
   includeCreateAppEntry: boolean;
   createAppPlacement: CreateAppEntryPlacement;
   recentEntries: readonly FileSearchSectionEntry[];
@@ -196,6 +201,13 @@ interface OpenFileTileProps {
   onSelect: () => void;
 }
 
+interface StartTerminalTileProps {
+  id: string;
+  isActive: boolean;
+  onActivate: () => void;
+  onSelect: () => void;
+}
+
 const FILE_SEARCH_LIMIT = 20;
 const FILE_SEARCH_SECTION_ORDER: readonly FileSearchSectionKind[] = [
   "apps",
@@ -220,20 +232,12 @@ const FILE_SEARCH_SOURCE_LABELS = {
 const CREATE_APP_ENTRY_ID = "file-search-result-create-app";
 const OPEN_BROWSER_ENTRY_ID = "file-search-result-open-browser";
 const OPEN_FILE_ENTRY_ID = "file-search-result-open-file";
+const START_TERMINAL_ENTRY_ID = "file-search-result-start-terminal";
 
 const LAUNCHER_TILE_ICON_CLASS_DASHED =
   "flex size-4 shrink-0 items-center justify-center text-muted-foreground group-hover:text-foreground";
-const NEW_TAB_ACTION_MENU_SEPARATOR_CLASS =
-  "mx-2 my-1.5 w-auto bg-border-seam";
+const NEW_TAB_ACTION_MENU_SEPARATOR_CLASS = "mx-2 my-1.5 w-auto bg-border-seam";
 
-// File-type identity comes from the glyph alone so recent rows stay as compact
-// as file-search results without per-type row coloring.
-const RECENT_CHIP_ICON_NAME = {
-  md: "File",
-  html: "AppWindow",
-  report: "ChartColumn",
-  code: "Code",
-} satisfies Record<RecentFileChip, IconName>;
 const RECENT_ENTRY_ID_PREFIX = "file-search-result-recent";
 
 function getAvailableFileSearchSources({
@@ -244,7 +248,7 @@ function getAvailableFileSearchSources({
   if (currentThreadId.length > 0) {
     sources.push("app");
   }
-  if (projectId) {
+  if (projectId && !isProjectlessProjectId(projectId)) {
     sources.push("workspace");
   }
   if (currentThreadId.length > 0) {
@@ -271,6 +275,9 @@ function getFileSearchEntryId(entry: FileSearchSectionEntry): string {
   if (entry.kind === "open-file") {
     return OPEN_FILE_ENTRY_ID;
   }
+  if (entry.kind === "start-terminal") {
+    return START_TERMINAL_ENTRY_ID;
+  }
   if (entry.kind === "recent") {
     return `${RECENT_ENTRY_ID_PREFIX}-${entry.item.source}-${encodeURIComponent(
       entry.item.path,
@@ -296,6 +303,7 @@ function groupFileSearchSections({
   availableSources,
   includeOpenBrowserEntry,
   includeOpenFileEntry,
+  includeStartTerminalEntry,
   includeCreateAppEntry,
   createAppPlacement,
   recentEntries,
@@ -347,6 +355,13 @@ function groupFileSearchSections({
   if (includeOpenFileEntry) {
     ensureSection("actions").items.push({
       entry: { kind: "open-file" },
+      index: 0,
+    });
+  }
+
+  if (includeStartTerminalEntry) {
+    ensureSection("actions").items.push({
+      entry: { kind: "start-terminal" },
       index: 0,
     });
   }
@@ -534,6 +549,30 @@ function OpenFileTile({
   );
 }
 
+function StartTerminalTile({
+  id,
+  isActive,
+  onActivate,
+  onSelect,
+}: StartTerminalTileProps) {
+  return (
+    <LauncherTile
+      id={id}
+      isActive={isActive}
+      variant="menu"
+      onActivate={onActivate}
+      onSelect={onSelect}
+    >
+      <span className={LAUNCHER_ROW_ICON_CLASS}>
+        <Icon name="Terminal" className="size-3.5" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1 truncate text-foreground">
+        Start terminal
+      </span>
+    </LauncherTile>
+  );
+}
+
 function FileResultRow({
   id,
   suggestion,
@@ -546,6 +585,7 @@ function FileResultRow({
   }, [onSelect, suggestion]);
   const directory = directoryFromPath(suggestion.path);
   const secondaryDirectory = directory || null;
+  const visual = resolveRightPanelFileVisual({ path: suggestion.path });
 
   return (
     <button
@@ -563,7 +603,7 @@ function FileResultRow({
     >
       <div className="flex min-w-0 items-center gap-1.5">
         <Icon
-          name="File"
+          name={visual.iconName}
           className="size-3.5 shrink-0 text-muted-foreground"
           aria-hidden
         />
@@ -595,8 +635,8 @@ function RecentResultRow({
   const handleSelect = useCallback(() => {
     onSelect(item);
   }, [item, onSelect]);
-  const { chip, label } = resolveRecentFileKind(item.path);
-  const name = getRecentItemName(item.path);
+  const visual = resolveRightPanelFileVisual({ path: item.path });
+  const name = getFileNameFromPath({ path: item.path });
   const directory = directoryFromPath(item.path);
   const relativeTime = formatRelativeTime({
     timestamp: item.openedAt,
@@ -609,19 +649,15 @@ function RecentResultRow({
       isActive={isActive}
       onActivate={onActivate}
       onSelect={handleSelect}
-      title={`${label}: ${item.path}`}
+      title={`${visual.label}: ${item.path}`}
     >
       <span className={LAUNCHER_ROW_ICON_CLASS}>
-        <Icon
-          name={RECENT_CHIP_ICON_NAME[chip]}
-          className="size-3.5"
-          aria-hidden
-        />
+        <Icon name={visual.iconName} className="size-3.5" aria-hidden />
       </span>
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="truncate text-foreground">{name}</span>
         <span className="shrink-0 font-medium text-muted-foreground">
-          {label}
+          {visual.label}
         </span>
         {directory ? (
           <>
@@ -663,9 +699,12 @@ export function NewTabFileSearch({
   );
   const trimmedQuery = query.trim();
   const hasQuery = trimmedQuery.length > 0;
+  const searchableWorkspaceProjectId = isProjectlessProjectId(projectId)
+    ? undefined
+    : projectId;
   const { suggestions, isLoading, fileSearchError, isDebouncing } =
     useFileSearchSuggestions({
-      projectId,
+      projectId: searchableWorkspaceProjectId,
       query,
       limit: FILE_SEARCH_LIMIT,
       environmentId,
@@ -711,6 +750,7 @@ export function NewTabFileSearch({
         availableSources: fileSearchSources,
         includeOpenBrowserEntry: false,
         includeOpenFileEntry: false,
+        includeStartTerminalEntry: false,
         includeCreateAppEntry: false,
         createAppPlacement: "none",
         recentEntries,
@@ -897,6 +937,7 @@ export function NewTabActionMenu({
   onOpenFileSearch,
   onCreateAppPromptPrefill,
   onOpenBrowser,
+  onStartTerminal,
   onCloseMenu,
 }: NewTabActionMenuProps) {
   const promptDraft = usePromptDraftStorage({
@@ -937,6 +978,8 @@ export function NewTabActionMenu({
     onOpenBrowser !== undefined &&
     isDesktopBrowserAvailable();
   const showOpenFileEntry = !isMenuUnavailable && fileSearchSources.length > 0;
+  const showStartTerminalEntry =
+    !isMenuUnavailable && onStartTerminal !== undefined;
   const showCreateAppEntry = !isMenuUnavailable && canPrefillCreateAppPrompt;
 
   const handleAppSelect = useCallback(
@@ -956,6 +999,11 @@ export function NewTabActionMenu({
     onCloseMenu();
     onOpenBrowser?.();
   }, [onCloseMenu, onOpenBrowser]);
+
+  const handleStartTerminal = useCallback(() => {
+    onCloseMenu();
+    onStartTerminal?.();
+  }, [onCloseMenu, onStartTerminal]);
 
   const handleCreateAppPromptPrefill = useCallback(() => {
     onCloseMenu();
@@ -986,7 +1034,7 @@ export function NewTabActionMenu({
 
   return (
     <div data-testid="new-tab-action-menu" className="flex min-w-0 flex-col">
-      {/* Primary open actions lead the menu: Open file, then Open browser. */}
+      {/* Primary open actions lead the menu before installed apps. */}
       <div className="flex flex-col gap-px">
         {showOpenFileEntry ? (
           <OpenFileTile
@@ -1002,6 +1050,14 @@ export function NewTabActionMenu({
             isActive={false}
             onActivate={() => undefined}
             onSelect={handleOpenBrowser}
+          />
+        ) : null}
+        {showStartTerminalEntry ? (
+          <StartTerminalTile
+            id={START_TERMINAL_ENTRY_ID}
+            isActive={false}
+            onActivate={() => undefined}
+            onSelect={handleStartTerminal}
           />
         ) : null}
       </div>
@@ -1108,7 +1164,9 @@ function NewTabResults({
   const hasSectionsAbove = showFilesSection;
   const showLoading = isLoading && !showFilesSection;
   const showError = fileSearchError && !showFilesSection && !showLoading;
-  const showFileSearchMessage = showLoading || showError;
+  const showNoFileResults =
+    hasQuery && !showFilesSection && !showLoading && !showError;
+  const showFileSearchMessage = showLoading || showError || showNoFileResults;
   const hasRecentSectionPredecessor = hasSectionsAbove || showFileSearchMessage;
   const showEmptyMessage =
     !showFilesSection && !showRecentSection && !showLoading && !showError;
@@ -1123,7 +1181,9 @@ function NewTabResults({
     return (
       <FileSearchMessage
         iconName={hasQuery ? "FileQuestion" : "File"}
-        message={hasQuery ? "No files match." : "Type to search files."}
+        message={
+          hasQuery ? "No files match your search." : "Type to search files."
+        }
       />
     );
   }
@@ -1134,9 +1194,17 @@ function NewTabResults({
           rows exist, so it leads the results just as that group would. */}
       {showFileSearchMessage ? (
         <FileSearchMessage
-          iconName={showError ? "AlertCircle" : "Spinner"}
+          iconName={
+            showError ? "AlertCircle" : showLoading ? "Spinner" : "FileQuestion"
+          }
           iconClassName={showLoading ? "animate-spin" : undefined}
-          message={showError ? "File search failed." : "Searching files..."}
+          message={
+            showError
+              ? "File search failed."
+              : showLoading
+                ? "Searching files..."
+                : "No files match your search."
+          }
         />
       ) : null}
 
@@ -1219,8 +1287,7 @@ function NewTabResults({
             className={hasRecentSectionPredecessor ? "pt-2" : undefined}
           />
           <EmptyStatePanel className="py-4 text-xs">
-            Nothing referenced yet — plans, mockups, and files you open will show
-            up here.
+            Plans, mockups, and files you open will show up here.
           </EmptyStatePanel>
         </section>
       ) : null}

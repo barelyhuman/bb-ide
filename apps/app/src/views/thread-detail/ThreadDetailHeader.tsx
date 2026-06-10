@@ -4,12 +4,10 @@ import { COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS } from "@/components/ui/coar
 import { Icon } from "@/components/ui/icon.js";
 import { SplitButton } from "@/components/ui/split-button.js";
 import { Pill } from "@/components/ui/pill.js";
-import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport.js";
 import {
   AppPageHeader,
   HEADER_ICON_BUTTON_CLASS,
 } from "@/components/layout/AppPageHeader";
-import { resolveShowPanelControl } from "@/components/secondary-panel/panelToggleControlState";
 import type { ThreadGitActionDialogTarget } from "@/components/dialogs/ThreadGitActionDialog";
 import {
   getBbDesktopInfo,
@@ -31,10 +29,8 @@ interface ThreadDetailHeaderProps {
   activeTerminalCount: number;
   isChildThread: boolean;
   isSecondaryPanelOpen: boolean;
-  isTerminalPanelOpen: boolean;
   onOpenThreadGitAction: (target: ThreadGitActionDialogTarget) => void;
   onToggleSecondaryPanel: () => void;
-  onToggleTerminalPanel: () => void;
   threadHeaderGitActions: ThreadHeaderGitAction[];
   threadTitle: string;
   workspaceOpenButton?: ReactNode;
@@ -45,26 +41,18 @@ export function ThreadDetailHeader({
   activeTerminalCount,
   isChildThread,
   isSecondaryPanelOpen,
-  isTerminalPanelOpen,
   onOpenThreadGitAction,
   onToggleSecondaryPanel,
-  onToggleTerminalPanel,
   threadHeaderGitActions,
   threadTitle,
   workspaceOpenButton,
 }: ThreadDetailHeaderProps) {
   const [primaryAction, ...secondaryActions] = threadHeaderGitActions;
-  const renderAsDrawer = useIsCompactViewport();
   const [desktopInfo] = useState(getBbDesktopInfo);
   const usesDesktopChrome = shouldUseMacosDesktopChrome(desktopInfo);
-
-  // On a wide viewport the conversation header only owns the panel-CLOSED
-  // affordance: a button that opens the secondary panel (read as "open the
-  // right side panel" via the PanelRight icon). Once the panel is open, its own
-  // header carries the expand/collapse-conversation toggle, and the collapsed
-  // rail restores the conversation. The drawer layout keeps a simple open/close
-  // toggle below.
-  const showPanelControl = resolveShowPanelControl({ onToggleSecondaryPanel });
+  const rightPanelLabel = isSecondaryPanelOpen
+    ? "Hide right panel"
+    : "Show right panel";
 
   const center = (
     <>
@@ -122,16 +110,12 @@ export function ThreadDetailHeader({
         variant="ghost"
         size="icon"
         className={`${HEADER_ICON_BUTTON_CLASS} relative`}
-        aria-label={
-          isTerminalPanelOpen ? "Hide terminal panel" : "Show terminal panel"
-        }
-        aria-pressed={isTerminalPanelOpen}
-        title={
-          isTerminalPanelOpen ? "Hide terminal panel" : "Show terminal panel"
-        }
-        onClick={onToggleTerminalPanel}
+        aria-label={rightPanelLabel}
+        aria-pressed={isSecondaryPanelOpen}
+        title={rightPanelLabel}
+        onClick={onToggleSecondaryPanel}
       >
-        <Icon name="Terminal" />
+        <Icon name="PanelRight" />
         {activeTerminalCount > 0 ? (
           <span
             aria-hidden="true"
@@ -141,49 +125,6 @@ export function ThreadDetailHeader({
           </span>
         ) : null}
       </Button>
-      {!renderAsDrawer && !isSecondaryPanelOpen ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className={HEADER_ICON_BUTTON_CLASS}
-          aria-label={showPanelControl.label}
-          aria-expanded={showPanelControl.isExpanded}
-          title={showPanelControl.label}
-          onClick={showPanelControl.onClick}
-        >
-          <Icon name={showPanelControl.iconName} />
-        </Button>
-      ) : null}
-      {/*
-        On a compact/drawer viewport the secondary panel opens as a drawer with
-        no seam, so the header keeps a simple open/close toggle here. On a wide
-        viewport the open-panel button above handles the closed state, while the
-        panel header's toggle handles collapse/expand and the rail handles
-        restore-when-collapsed.
-      */}
-      {renderAsDrawer ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className={HEADER_ICON_BUTTON_CLASS}
-          aria-label={
-            isSecondaryPanelOpen
-              ? "Hide secondary panel"
-              : "Show secondary panel"
-          }
-          aria-pressed={isSecondaryPanelOpen}
-          title={
-            isSecondaryPanelOpen
-              ? "Hide secondary panel"
-              : "Show secondary panel"
-          }
-          onClick={onToggleSecondaryPanel}
-        >
-          <Icon name="PanelBottom" />
-        </Button>
-      ) : null}
     </>
   );
 

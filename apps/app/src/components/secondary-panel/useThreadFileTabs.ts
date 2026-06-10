@@ -370,8 +370,8 @@ interface BuildOrderedSecondaryFileTabsArgs {
 
 /**
  * Flattens the secondary panel's tabs into the closable file-tab strip, in the
- * order the user opened them. Workspace, host, storage, app, browser, and new
- * tabs keep their insertion order regardless of type.
+ * order the user opened them. Workspace, host, storage, app, browser,
+ * terminal, and new tabs keep their insertion order regardless of type.
  */
 function buildOrderedSecondaryFileTabs({
   tabs,
@@ -391,6 +391,7 @@ function buildOrderedSecondaryFileTabs({
       case "host-file-preview":
       case "app":
       case "browser":
+      case "terminal":
       case "new-tab":
         displayable.push(tab);
         break;
@@ -399,7 +400,6 @@ function buildOrderedSecondaryFileTabs({
         break;
       case "thread-info":
       case "git-diff":
-      case "terminal":
         break;
     }
   }
@@ -903,7 +903,9 @@ export function useThreadFileTabs({
           activeTab.kind !== "host-file-preview" &&
           activeTab.kind !== "thread-storage-file-preview" &&
           activeTab.kind !== "app" &&
-          activeTab.kind !== "browser")
+          activeTab.kind !== "browser" &&
+          activeTab.kind !== "terminal" &&
+          activeTab.kind !== "new-tab")
       ) {
         return state;
       }

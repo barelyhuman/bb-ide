@@ -1,13 +1,13 @@
 import { type ReactNode } from "react";
-import { FilePreview } from "./FilePreview";
+import { FilePreview } from "../secondary-panel/FilePreview";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
-  title: "secondary-panel/File preview",
+  title: "right-panel/File preview",
 };
 
-// Mirror the secondary panel's surface: bg-background and the same horizontal
-// padding the panel uses for its content area (px-4 pb-3 pt-1).
+// Mirror the right panel's surface: bg-background and the same horizontal
+// padding the panel uses for file-preview content (px-4 pb-3 pt-1).
 function PreviewStage({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-[360px] w-full max-w-[640px] min-w-0 flex-col overflow-hidden bg-background px-4 pb-3 pt-1">
@@ -18,26 +18,26 @@ function PreviewStage({ children }: { children: ReactNode }) {
 
 const SAMPLE_README_MD = `# Tabbed Shell
 
-The secondary panel uses a **tabbed shell** to switch between Info, Diff, and
-dynamic file previews opened from the timeline.
+The right panel uses a **tabbed shell** to switch between Info, Diff, Terminal,
+and dynamic previews opened from the timeline.
 
 ## Features
 
 - Click a file in the diff to pin it as a tab
 - Tabs persist until you close them with the \`×\` button
-- The toggle on the right hides the entire panel
+- The right-panel toggle hides the entire panel
 
 ## Keyboard
 
 | Key | Action |
 | --- | --- |
-| \`⌘ B\` | Toggle the panel |
+| \`⌘ B\` | Toggle the right panel |
 | \`Esc\` | Close the active file tab |
 
 > Closing the last tab returns focus to the Info tab.
 
 \`\`\`ts
-import { FilePreview } from "@/components/secondary-panel/FilePreview";
+import { FilePreview } from "...";
 
 <FilePreview
   state={{
@@ -89,10 +89,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = "Button";
 `;
 
-const README_PATH = "docs/secondary-panel/README.md";
+const README_PATH = "docs/right-panel/README.md";
 const BUTTON_PATH = "apps/app/src/components/ui/button.tsx";
 const DELETED_BUTTON_PATH = "apps/app/src/components/ui/legacy-button.tsx";
-const SCREENSHOT_PATH = "docs/screenshots/secondary-panel.svg";
+const SCREENSHOT_PATH = "docs/screenshots/right-panel.svg";
 
 const SAMPLE_IMAGE_URL =
   "data:image/svg+xml;utf8," +

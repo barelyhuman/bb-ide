@@ -208,6 +208,37 @@ describe("usePathSuggestions", () => {
     expect(api.listThreadStoragePaths).not.toHaveBeenCalled();
   });
 
+  it("does not stay loading when only thread storage is searchable", async () => {
+    vi.mocked(api.listThreadStoragePaths).mockResolvedValue({
+      ...makePathResponse([]),
+      storageRootPath: "/tmp/thread-storage",
+    });
+
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        usePathSuggestions({
+          projectId: undefined,
+          query: "missing",
+          environmentId: "env-1",
+          currentThreadId: "thr-storage",
+          includeDirectories: false,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(api.listThreadStoragePaths).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.suggestions).toEqual([]);
+    expect(result.current.isError).toBe(false);
+    expect(api.searchProjectPaths).not.toHaveBeenCalled();
+  });
+
   it("does not query any source for an empty query", () => {
     const { wrapper } = createQueryClientTestHarness();
     renderHook(

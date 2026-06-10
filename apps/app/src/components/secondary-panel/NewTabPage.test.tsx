@@ -5,6 +5,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import type { WorkspacePathEntry } from "@bb/server-contract";
@@ -205,6 +206,29 @@ describe("NewTabPage", () => {
     });
   });
 
+  it("ends file-search loading in a projectless thread with no matches", async () => {
+    mockEmptySearchSources();
+    renderNewTabPage({
+      projectId: undefined,
+      currentThreadId: "thr-projectless-search",
+    });
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Search files" }), {
+      target: { value: "missing" },
+    });
+
+    await waitFor(() => {
+      expect(api.listThreadStoragePaths).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("Searching files...")).toBeNull();
+    });
+
+    expect(api.searchProjectPaths).not.toHaveBeenCalled();
+    expect(screen.queryByText("File search failed.")).toBeNull();
+    expect(screen.getByText("No files match your search.")).toBeTruthy();
+  });
+
   it("renders an unavailable state without querying", () => {
     renderNewTabPage({ currentThreadId: "" });
 
@@ -328,6 +352,38 @@ describe("NewTabPage recent section", () => {
     ).toBeNull();
   });
 
+  it("shows a no-results message above Recent when a search has no file matches", async () => {
+    mockEmptySearchSources();
+    const threadId = "thr-recent-no-search-results";
+    seedRecentItems(threadId, [
+      {
+        source: "thread-storage",
+        path: "plans/swap-model.md",
+        openedAt: Date.now() - 2 * MINUTE_MS,
+      },
+    ]);
+    renderNewTabPage({
+      projectId: "proj-1",
+      currentThreadId: threadId,
+    });
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Search files" }), {
+      target: { value: "does-not-exist" },
+    });
+
+    const noResults = await screen.findByText("No files match your search.");
+    const recent = screen.getByRole("group", { name: "Recent" });
+    expect(
+      Boolean(
+        noResults.compareDocumentPosition(recent) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    expect(
+      within(recent).getByRole("option", { name: /swap-model\.md/u }),
+    ).toBeTruthy();
+  });
+
   it("reaches a recent row via keyboard navigation", async () => {
     mockEmptySearchSources();
     const threadId = "thr-recent-keys";
@@ -361,7 +417,9 @@ describe("NewTabPage recent section", () => {
       currentThreadId: "thr-recent-empty",
     });
 
-    const hint = await screen.findByText(/Nothing referenced yet/u);
+    const hint = await screen.findByText(
+      "Plans, mockups, and files you open will show up here.",
+    );
     expect(hint.className).toContain("border-dashed");
     // The deprecated raised fill stays gone so the card never clashes on white.
     expect(hint.className).not.toContain("bg-surface-raised");

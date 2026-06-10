@@ -30,8 +30,13 @@ import {
   MACOS_WINDOW_DRAG_CLASS,
   MACOS_WINDOW_NO_DRAG_CLASS,
 } from "@/lib/bb-desktop";
+import type { SecondaryFixedPanelTab } from "@/lib/fixed-panel-tabs-state";
+import { createThreadInfoFixedPanelTab } from "@/lib/fixed-panel-tabs-state";
+import { Icon } from "@/components/ui/icon";
 
 interface RenderPanelArgs {
+  activeTab?: SecondaryFixedPanelTab | null;
+  canUseGitUi?: boolean;
   fileTabContent?: ReactNode;
   fileTabs?: SecondaryPanelFileTab[];
   browserDeck?: ReactNode;
@@ -42,6 +47,7 @@ interface RenderPanelArgs {
   onToggleConversationCollapse?: () => void;
   reserveLeftForDesktopTrafficLights?: boolean;
   renderNewTabMenu?: NewTabMenuRenderer;
+  showGitDiffTab?: boolean;
 }
 
 interface ResizeDragEndScenario {
@@ -118,6 +124,7 @@ function buildActiveFileTab({
     filename,
     isActive: true,
     isPinned,
+    leadingVisual: <Icon name="Code" className="size-3.5" aria-hidden />,
     statusLabel: null,
     onSelect: noop,
     onClose: noop,
@@ -136,6 +143,8 @@ function expectNoDragRegionOnElementOrAncestor(element: HTMLElement): void {
 }
 
 function renderPanel({
+  activeTab = createThreadInfoFixedPanelTab(),
+  canUseGitUi = false,
   fileTabContent,
   fileTabs,
   browserDeck,
@@ -146,12 +155,13 @@ function renderPanel({
   onToggleConversationCollapse = noop,
   reserveLeftForDesktopTrafficLights = false,
   renderNewTabMenu = renderEmptyNewTabMenu,
+  showGitDiffTab = false,
 }: RenderPanelArgs = {}) {
   const { wrapper } = createQueryClientTestHarness();
   const panel = (
     <ThreadSecondaryPanel
-      activePanel="thread-info"
-      canUseGitUi={false}
+      activeTab={activeTab}
+      canUseGitUi={canUseGitUi}
       environmentId={undefined}
       fileTabContent={fileTabContent}
       fileTabs={fileTabs}
@@ -168,7 +178,7 @@ function renderPanel({
       onToggleConversationCollapse={onToggleConversationCollapse}
       reserveLeftForDesktopTrafficLights={reserveLeftForDesktopTrafficLights}
       renderAsDrawer={renderAsDrawer}
-      showGitDiffTab={false}
+      showGitDiffTab={showGitDiffTab}
     />
   );
 
@@ -235,7 +245,7 @@ describe("ThreadSecondaryPanel", () => {
         screen.getByRole("button", { name: "Open tab menu" }),
       );
       expectNoDragRegionOnElementOrAncestor(
-        screen.getByRole("button", { name: "Hide secondary panel" }),
+        screen.getByRole("button", { name: "Hide right panel" }),
       );
       expectNoDragRegionOnElementOrAncestor(
         screen.getByRole("button", { name: activeTab.filename }),
@@ -278,10 +288,39 @@ describe("ThreadSecondaryPanel", () => {
     // tabs backed by tabpanels, so the control row must carry toolbar
     // semantics rather than pretending to be a tablist.
     expect(
-      screen.getByRole("toolbar", { name: "Secondary panel views" }),
+      screen.getByRole("toolbar", { name: "Right panel views" }),
     ).not.toBeNull();
     expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.queryByRole("tab")).toBeNull();
+  });
+
+  it("does not show the Diff control when git UI is unavailable", () => {
+    renderPanel({
+      canUseGitUi: false,
+      showGitDiffTab: true,
+      renderAsDrawer: false,
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "Show diff panel" }),
+    ).toBeNull();
+    expect(screen.getByText("Thread details")).not.toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "Show thread info panel" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("marks Info active when the panel falls back to thread details", () => {
+    renderPanel({ activeTab: null });
+
+    expect(screen.getByText("Thread details")).not.toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "Show thread info panel" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
   });
 
   it("opens the new-tab action popout from the plus button", () => {
@@ -363,7 +402,7 @@ describe("ThreadSecondaryPanel", () => {
     renderPanel({ renderAsDrawer: false });
 
     const handle = screen.getByRole("separator", {
-      name: "Resize thread and secondary panels",
+      name: "Resize thread and right panel",
     });
     const hairline = handle.querySelector("span");
 
@@ -419,6 +458,9 @@ describe("ThreadSecondaryPanel", () => {
         filename: "Review Board",
         isActive: true,
         isPinned: true,
+        leadingVisual: (
+          <Icon name="AppWindow" className="size-3.5" aria-hidden />
+        ),
         statusLabel: null,
         onSelect: noop,
         onClose: noop,
@@ -435,7 +477,7 @@ describe("ThreadSecondaryPanel", () => {
       );
       const aside = panel?.querySelector("aside");
       const resizeHandle = screen.getByLabelText(
-        "Resize thread and secondary panels",
+        "Resize thread and right panel",
       );
 
       expect(panel).not.toBeNull();
@@ -497,9 +539,7 @@ describe("ThreadSecondaryPanel", () => {
   it("shows the resize seam hairline while the conversation is expanded", () => {
     renderPanel({ renderAsDrawer: false, isConversationCollapsed: false });
 
-    const resizeHandle = screen.getByLabelText(
-      "Resize thread and secondary panels",
-    );
+    const resizeHandle = screen.getByLabelText("Resize thread and right panel");
     expect(resizeHandle.className).toContain("w-px");
     expect(resizeHandle.className).toContain("opacity-100");
     expect(resizeHandle.className).not.toContain("w-0");
@@ -547,9 +587,7 @@ describe("ThreadSecondaryPanel", () => {
   it("folds the resize seam to zero width while the conversation is collapsed so it does not double the rail's edge", () => {
     renderPanel({ renderAsDrawer: false, isConversationCollapsed: true });
 
-    const resizeHandle = screen.getByLabelText(
-      "Resize thread and secondary panels",
-    );
+    const resizeHandle = screen.getByLabelText("Resize thread and right panel");
     // Collapsed: the rail's recessed edge is the single seam, so the handle
     // hairline must be hidden (and non-interactive) rather than sitting flush
     // against it.
@@ -567,9 +605,9 @@ describe("ThreadSecondaryPanel", () => {
       onToggleConversationCollapse,
     });
 
-    const toggle = screen.getByRole("button", { name: "Expand panel" });
+    const toggle = screen.getByRole("button", { name: "Expand right panel" });
     const hideButton = screen.getByRole("button", {
-      name: "Hide secondary panel",
+      name: "Hide right panel",
     });
     // Expand-to-fill glyph, an explicit aria-expanded disclosure, and the hide
     // button sits immediately after it in the trailing controls.
@@ -605,7 +643,9 @@ describe("ThreadSecondaryPanel", () => {
   it("omits the conversation-collapse toggle in the drawer layout", () => {
     renderPanel({ renderAsDrawer: true });
 
-    expect(screen.queryByRole("button", { name: "Expand panel" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Expand right panel" }),
+    ).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Restore conversation" }),
     ).toBeNull();

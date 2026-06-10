@@ -51,19 +51,18 @@ function makeFixedPanelTabsState(
           source: { kind: "working-tree" },
           statusLabel: null,
         },
-      ],
-      activeTabId: workspaceFileTabId("src/app.ts"),
-      isOpen: true,
-    },
-    bottom: {
-      tabs: [
         {
           id: terminalTabId("term_1"),
           kind: "terminal",
           terminalId: "term_1",
         },
       ],
-      activeTabId: terminalTabId("term_1"),
+      activeTabId: workspaceFileTabId("src/app.ts"),
+      isOpen: true,
+    },
+    bottom: {
+      tabs: [],
+      activeTabId: null,
     },
     lastUsedAt: NOW,
     ...overrides,
@@ -110,19 +109,6 @@ describe("fixed panel tabs state storage", () => {
       JSON.stringify({ version: 1, secondary: null }),
       JSON.stringify({ ...validState, version: 2 }),
       JSON.stringify({ ...validState, lastUsedAt: -1 }),
-      JSON.stringify({
-        ...validState,
-        secondary: {
-          tabs: [
-            {
-              id: terminalTabId("term_1"),
-              kind: "terminal",
-              terminalId: "term_1",
-            },
-          ],
-          activeTabId: terminalTabId("term_1"),
-        },
-      }),
       JSON.stringify({
         ...validState,
         bottom: {
@@ -234,6 +220,11 @@ describe("fixed panel tabs normalization", () => {
               source: { kind: "head" },
               statusLabel: null,
             },
+            {
+              id: terminalTabId("term_1"),
+              kind: "terminal",
+              terminalId: "term_1",
+            },
           ],
           activeTabId: "missing",
           isOpen: true,
@@ -251,7 +242,7 @@ describe("fixed panel tabs normalization", () => {
               terminalId: "term_1",
             },
           ],
-          activeTabId: terminalTabId("term_1"),
+          activeTabId: null,
         },
         lastUsedAt: NOW,
       }),
@@ -268,17 +259,77 @@ describe("fixed panel tabs normalization", () => {
         source: { kind: "working-tree" },
         statusLabel: null,
       },
-    ]);
-    expect(normalized.secondary.activeTabId).toBeNull();
-    expect(normalized.secondary.isOpen).toBe(true);
-    expect(normalized.bottom.tabs).toEqual([
       {
         id: terminalTabId("term_1"),
         kind: "terminal",
         terminalId: "term_1",
       },
     ]);
-    expect(normalized.bottom.activeTabId).toBe(terminalTabId("term_1"));
+    expect(normalized.secondary.activeTabId).toBeNull();
+    expect(normalized.secondary.isOpen).toBe(true);
+    expect(normalized.bottom.tabs).toEqual([]);
+    expect(normalized.bottom.activeTabId).toBeNull();
+  });
+
+  it("migrates legacy bottom terminal tabs into the secondary tab group", () => {
+    const normalized = normalizeFixedPanelTabsState({
+      state: createEmptyFixedPanelTabsState({
+        secondary: {
+          tabs: [{ id: "thread-info", kind: "thread-info" }],
+          activeTabId: null,
+          isOpen: false,
+        },
+        bottom: {
+          tabs: [
+            {
+              id: terminalTabId("term_1"),
+              kind: "terminal",
+              terminalId: "term_1",
+            },
+          ],
+          activeTabId: terminalTabId("term_1"),
+        },
+        lastUsedAt: NOW,
+      }),
+    });
+
+    expect(normalized.secondary.tabs).toEqual([
+      { id: "thread-info", kind: "thread-info" },
+      {
+        id: terminalTabId("term_1"),
+        kind: "terminal",
+        terminalId: "term_1",
+      },
+    ]);
+    expect(normalized.secondary.activeTabId).toBe(terminalTabId("term_1"));
+    expect(normalized.bottom.tabs).toEqual([]);
+    expect(normalized.bottom.activeTabId).toBeNull();
+  });
+
+  it("preserves the legacy active bottom terminal when it already exists in secondary", () => {
+    const terminalTab = {
+      id: terminalTabId("term_1"),
+      kind: "terminal",
+      terminalId: "term_1",
+    } as const;
+    const normalized = normalizeFixedPanelTabsState({
+      state: createEmptyFixedPanelTabsState({
+        secondary: {
+          tabs: [terminalTab],
+          activeTabId: null,
+          isOpen: true,
+        },
+        bottom: {
+          tabs: [terminalTab],
+          activeTabId: terminalTab.id,
+        },
+        lastUsedAt: NOW,
+      }),
+    });
+
+    expect(normalized.secondary.tabs).toEqual([terminalTab]);
+    expect(normalized.secondary.activeTabId).toBe(terminalTab.id);
+    expect(normalized.bottom.tabs).toEqual([]);
   });
 
   it("removes transient new tabs from persisted state", () => {

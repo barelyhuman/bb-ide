@@ -6,10 +6,10 @@ import {
 import type { BrowserFixedPanelTab } from "@/lib/fixed-panel-tabs-state";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 import { WithDesktopBrowser } from "../../../.ladle/story-desktop";
-import { BrowserTabDeck } from "./BrowserTabDeck";
+import { BrowserTabDeck } from "../secondary-panel/BrowserTabDeck";
 
 export default {
-  title: "secondary-panel/Browser tab",
+  title: "right-panel/Browser tab",
 };
 
 const noop = () => {};
