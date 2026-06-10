@@ -39,6 +39,7 @@ import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { encodeReuseValue } from "@/components/pickers/environment-picker-value";
 import { CHROME_SECTION_LABEL_CLASS } from "@/components/ui/chromeStyleTokens";
 import { SIDEBAR_HOVER_ACTIONS_CLASS } from "@/components/ui/sidebar-hover-actions";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import {
   projectsQueryKey,
   sidebarNavigationQueryKey,
@@ -240,9 +241,11 @@ function createProjectListWrapper() {
       children: (
         <Suspense fallback={null}>
           <BrowserRouter>
-            <ProjectActionsProvider>
-              <ThreadActionsProvider>{children}</ThreadActionsProvider>
-            </ProjectActionsProvider>
+            <SidebarProvider>
+              <ProjectActionsProvider>
+                <ThreadActionsProvider>{children}</ThreadActionsProvider>
+              </ProjectActionsProvider>
+            </SidebarProvider>
           </BrowserRouter>
         </Suspense>
       ),
