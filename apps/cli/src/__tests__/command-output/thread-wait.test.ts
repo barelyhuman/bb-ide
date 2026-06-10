@@ -16,6 +16,26 @@ describe("bb thread wait command output", () => {
   const register: CommandRegistrar = (program) =>
     registerThreadCommands(program, () => "http://server");
 
+  it("bb thread wait defaults to waiting for idle", async () => {
+    const get = vi.fn(async () =>
+      fixtures.makeThread({
+        id: "thread-wait-default",
+        projectId: "proj-1",
+        providerId: "codex",
+        status: "idle",
+        createdAt: 1,
+        updatedAt: 2,
+      }),
+    );
+    stubServerApi({ "v1.threads.:id.$get": get });
+
+    await runCommand(["thread", "wait", "thread-wait-default"], register);
+
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Thread thread-wait-default reached status idle.",
+    );
+  });
+
   it("bb thread wait --status succeeds when the thread is already at the requested status", async () => {
     const get = vi.fn(async () =>
       fixtures.makeThread({

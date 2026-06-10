@@ -41,7 +41,6 @@ export function resolveWorkflowsEnabledPolicy(providerId: string): boolean {
     .supportsWorkflows;
 }
 const DEFAULT_PERMISSION_MODE: PermissionMode = "full";
-const MANAGED_CHILD_PERMISSION_MODE: PermissionMode = "workspace-write";
 const PRODUCT_DEFAULT_PROVIDER_ID = "codex";
 const PRODUCT_DEFAULT_MODEL = "gpt-5.5";
 
@@ -61,13 +60,13 @@ export interface IsManagedChildThreadArgs {
 }
 
 export interface ResolveThreadDefaultPermissionModeArgs {
-  parentThread?: ParentThread | null;
-  thread: Pick<Thread, "parentThreadId" | "projectId" | "providerId">;
+  thread: Pick<Thread, "providerId">;
 }
 
 export interface ResolveThreadExecutionPermissionModeArgs {
   lastExecutionPermissionMode?: PermissionMode;
   parentThread?: ParentThread | null;
+  parentThreadExecutionPermissionMode?: PermissionMode;
   projectExecutionPermissionMode?: PermissionMode;
   requestedPermissionMode?: PermissionMode;
   thread: Pick<Thread, "parentThreadId" | "projectId" | "providerId">;
@@ -237,13 +236,6 @@ export function resolveCreateThreadEnvironment(
 export function resolveThreadDefaultPermissionMode(
   args: ResolveThreadDefaultPermissionModeArgs,
 ): PermissionMode {
-  if (isManagedChildThread(args)) {
-    return resolveSupportedPermissionMode({
-      providerId: args.thread.providerId,
-      preferredPermissionMode: MANAGED_CHILD_PERMISSION_MODE,
-    });
-  }
-
   return resolveSupportedPermissionMode({
     providerId: args.thread.providerId,
     preferredPermissionMode: DEFAULT_PERMISSION_MODE,
@@ -260,13 +252,18 @@ export function resolveThreadExecutionPermissionMode(
     return args.lastExecutionPermissionMode;
   }
 
-  const defaultPermissionMode = resolveThreadDefaultPermissionMode({
-    parentThread: args.parentThread,
-    thread: args.thread,
-  });
-  if (isManagedChildThread(args)) {
-    return defaultPermissionMode;
+  if (
+    isManagedChildThread(args) &&
+    args.parentThreadExecutionPermissionMode !== undefined
+  ) {
+    return resolveSupportedPermissionMode({
+      providerId: args.thread.providerId,
+      preferredPermissionMode: args.parentThreadExecutionPermissionMode,
+    });
   }
 
+  const defaultPermissionMode = resolveThreadDefaultPermissionMode({
+    thread: args.thread,
+  });
   return args.projectExecutionPermissionMode ?? defaultPermissionMode;
 }

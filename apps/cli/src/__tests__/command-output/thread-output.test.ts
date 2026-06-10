@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  collectLogLines,
   setupCommandOutputTestEnvironment,
   runCommand,
   stubServerApi,
@@ -12,6 +13,22 @@ describe("bb thread output command output", () => {
 
   const register: CommandRegistrar = (program) =>
     registerThreadCommands(program, () => "http://server");
+
+  it("bb thread output defaults to BB_THREAD_ID", async () => {
+    vi.stubEnv("BB_THREAD_ID", "thread-output-context");
+    const getOutput = vi.fn(async () => ({ output: "FINAL" }));
+    stubServerApi({ "v1.threads.:id.output.$get": getOutput });
+
+    await runCommand(["thread", "output"], register);
+
+    expect(getOutput).toHaveBeenCalledWith({
+      param: { id: "thread-output-context" },
+    });
+    expect(collectLogLines(vi.mocked(console.error))).toContain(
+      "Thread thread-output-context (from BB_THREAD_ID)",
+    );
+    expect(collectLogLines(vi.mocked(console.log))).toContain("FINAL");
+  });
 
   it("bb thread output --json prints the raw output payload", async () => {
     const getOutput = vi.fn(async () => ({ output: "FINAL" }));

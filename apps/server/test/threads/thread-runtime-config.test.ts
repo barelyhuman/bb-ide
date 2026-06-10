@@ -21,6 +21,7 @@ import {
   seedHostSession,
   seedProjectWithSource,
   seedThread,
+  seedThreadRuntimeState,
 } from "../helpers/seed.js";
 import { textInput } from "../helpers/prompt-input.js";
 import { withTestHarness } from "../helpers/test-app.js";
@@ -60,16 +61,16 @@ describe("thread runtime config", () => {
     },
     {
       childProviderId: "codex",
-      expectedPermissionMode: "workspace-write",
+      expectedPermissionMode: "full",
       parentProviderId: "codex",
-      name: "defaults child execution permission mode to workspace-write when supported",
+      name: "defaults child execution permission mode to full without parent history or project defaults",
       requestedModel: "gpt-5",
     },
     {
       childProviderId: "pi",
       expectedPermissionMode: "full",
       parentProviderId: "pi",
-      name: "falls back to full for child execution when the provider does not support workspace-write",
+      name: "defaults Pi child execution permission mode to full",
       requestedModel: "openai-codex/gpt-5.4",
     },
   ])("$name", async ({ childProviderId, expectedPermissionMode, parentProviderId, requestedModel }) => {
@@ -111,7 +112,7 @@ describe("thread runtime config", () => {
     });
   });
 
-  it("uses child permission defaults instead of project defaults", async () => {
+  it("uses project permission defaults for child threads without parent execution history", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-runtime-managed-child-project-default-permission-mode",
@@ -140,7 +141,55 @@ describe("thread runtime config", () => {
           providerId: "codex",
           model: "gpt-5",
           reasoningLevel: "medium",
-          permissionMode: "full",
+          permissionMode: "readonly",
+          serviceTier: "default",
+        },
+        requestedExecution: {
+          model: "gpt-5",
+          source: "client/turn/requested",
+        },
+      });
+
+      expect(execution.permissionMode).toBe("readonly");
+    });
+  });
+
+  it("inherits live parent execution permission before project defaults", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-runtime-child-parent-execution-permission-mode",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const parentThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: parentThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-parent-permission-mode",
+        permissionMode: "workspace-write",
+      });
+      const childThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        parentThreadId: parentThread.id,
+        providerId: "codex",
+      });
+
+      const execution = await resolveExecutionOptions(harness.deps, {
+        threadId: childThread.id,
+        projectDefaults: {
+          providerId: "codex",
+          model: "gpt-5",
+          reasoningLevel: "medium",
+          permissionMode: "readonly",
           serviceTier: "default",
         },
         requestedExecution: {
