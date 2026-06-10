@@ -338,6 +338,10 @@ describe("ThreadSecondaryPanel", () => {
     );
     expect(newTabButton.className).toContain("h-7");
     expect(newTabButton.className).toContain("w-7");
+    expect(infoButton.className).toContain("[&_svg]:size-3.5");
+    expect(newTabButton.className).toContain("[&_svg]:size-3.5");
+    expect(infoButton.className).not.toContain("[&_svg]:size-4");
+    expect(newTabButton.className).not.toContain("[&_svg]:size-4");
 
     fireEvent.click(newTabButton);
 

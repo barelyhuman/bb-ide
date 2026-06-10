@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 const TAB_PILL_DEFAULT_LABEL_MAX_WIDTH_CLASS = "max-w-[180px]";
 const TAB_PILL_AFFORDANCE_BUTTON_BASE_CLASS =
   "inline-flex size-4 shrink-0 items-center justify-center rounded transition-opacity hover:bg-muted-foreground/15 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none";
-export const TAB_PILL_AFFORDANCE_ICON_CLASS = "size-3";
+export const TAB_PILL_AFFORDANCE_ICON_CLASS = "size-3.5";
 export const TAB_PILL_CLOSE_BUTTON_CLASS =
   `pointer-events-none absolute left-2 top-1/2 z-10 -translate-y-1/2 bg-inherit ${TAB_PILL_AFFORDANCE_BUTTON_BASE_CLASS} opacity-0 hover:opacity-100 group-hover/tab-pill:pointer-events-auto group-hover/tab-pill:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 disabled:opacity-30`;
 const TAB_PILL_LEADING_VISUAL_CLASS =

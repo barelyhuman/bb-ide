@@ -14,7 +14,10 @@ import {
   type SecondaryPanelFileTab,
   SecondaryPanelTabStrip,
 } from "./SecondaryPanelTabStrip";
-import { TAB_PILL_CLOSE_BUTTON_CLASS } from "@/components/ui/tab-pill";
+import {
+  TAB_PILL_AFFORDANCE_ICON_CLASS,
+  TAB_PILL_CLOSE_BUTTON_CLASS,
+} from "@/components/ui/tab-pill";
 import { Icon } from "@/components/ui/icon";
 
 const noop = () => {};
@@ -159,6 +162,9 @@ describe("SecondaryPanelTabStrip", () => {
     expect(closeButton.className).toContain("group-hover/tab-pill:opacity-100");
     expect(closeButton.className).toContain("focus-visible:opacity-100");
     expect(closeButton.className).not.toContain("opacity-70");
+    expect(
+      closeButton.querySelector("[data-icon='X']")?.getAttribute("class"),
+    ).toContain(TAB_PILL_AFFORDANCE_ICON_CLASS);
   });
 
   it("keeps the leading icon visible for non-closable pinned tabs", () => {
@@ -282,7 +288,7 @@ describe("SecondaryPanelTabStrip", () => {
     expect(rightChevron.getAttribute("tabindex")).toBe("-1");
   });
 
-  it("gives both chevrons a solid surface fill so tabs don't bleed through", () => {
+  it("gives both chevrons opaque fills so tabs don't bleed through", () => {
     render(
       <SecondaryPanelTabStrip
         fileTabs={[
@@ -296,19 +302,23 @@ describe("SecondaryPanelTabStrip", () => {
 
     simulateOverflow({ scrollLeft: 250, scrollWidth: 800, clientWidth: 300 });
 
-    // The chevrons overlap the edge tabs, so they must paint an opaque panel
-    // surface (`bg-background`) rather than the ghost variant's transparent
-    // default — otherwise the tab label beneath shows through.
-    expect(
-      screen
-        .getByRole("button", { name: "Scroll tabs left" })
-        .classList.contains("bg-background"),
-    ).toBe(true);
-    expect(
-      screen
-        .getByRole("button", { name: "Scroll tabs right" })
-        .classList.contains("bg-background"),
-    ).toBe(true);
+    const leftChevron = screen.getByRole("button", {
+      name: "Scroll tabs left",
+    });
+    const rightChevron = screen.getByRole("button", {
+      name: "Scroll tabs right",
+    });
+
+    for (const chevron of [leftChevron, rightChevron]) {
+      // The chevrons overlap the edge tabs, so both resting and hover/focus
+      // states must paint opaque surfaces rather than translucent state fills.
+      expect(chevron.classList.contains("bg-background")).toBe(true);
+      expect(chevron.classList.contains("hover:bg-muted")).toBe(true);
+      expect(chevron.classList.contains("focus-visible:bg-muted")).toBe(true);
+      expect(chevron.classList.contains("rounded-md")).toBe(true);
+      expect(chevron.classList.contains("rounded-none")).toBe(false);
+      expect(chevron.classList.contains("hover:bg-state-active")).toBe(false);
+    }
   });
 
   it("shows only the left chevron at the end of an overflowing strip", () => {

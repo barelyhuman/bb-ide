@@ -252,7 +252,7 @@ describe("NewTabPage", () => {
 });
 
 describe("NewTabPage recent section", () => {
-  it("lists recent items newest-first with type chips and relative timestamps", async () => {
+  it("lists recent items newest-first with relative timestamps", async () => {
     mockEmptySearchSources();
     const threadId = "thr-recent-render";
     const now = Date.now();
@@ -261,6 +261,11 @@ describe("NewTabPage recent section", () => {
         source: "thread-storage",
         path: "plans/swap-model.md",
         openedAt: now - 2 * MINUTE_MS,
+      },
+      {
+        source: "thread-storage",
+        path: "README.md",
+        openedAt: now - 5 * MINUTE_MS,
       },
       {
         source: "thread-storage",
@@ -284,17 +289,24 @@ describe("NewTabPage recent section", () => {
     const recentOptions = within(recentGroup).getAllByRole("option");
     expect(recentOptions.map((option) => option.textContent ?? "")).toEqual([
       expect.stringContaining("swap-model.md"),
+      expect.stringContaining("README.md"),
       expect.stringContaining("sidebar-mockup.html"),
       expect.stringContaining("NewTabFileSearch.tsx"),
     ]);
 
-    // Chip labels follow the artifact kind, not just the extension.
-    expect(within(recentGroup).getByText("Plan")).toBeTruthy();
-    expect(within(recentGroup).getByText("Mockup")).toBeTruthy();
-    expect(within(recentGroup).getByText("Source")).toBeTruthy();
+    // Recent rows keep the icon and path context, but do not render visual-kind
+    // labels or the old separator glyphs inline.
+    expect(within(recentGroup).queryByText("Plan")).toBeNull();
+    expect(within(recentGroup).queryByText("Doc")).toBeNull();
+    expect(within(recentGroup).queryByText("Mockup")).toBeNull();
+    expect(within(recentGroup).queryByText("Source")).toBeNull();
+    for (const option of recentOptions) {
+      expect(option.textContent ?? "").not.toContain(String.fromCharCode(183));
+    }
 
     // Right-aligned relative timestamps.
     expect(within(recentGroup).getByText("2m ago")).toBeTruthy();
+    expect(within(recentGroup).getByText("5m ago")).toBeTruthy();
     expect(within(recentGroup).getByText("1h ago")).toBeTruthy();
     expect(within(recentGroup).getByText("Yesterday")).toBeTruthy();
   });

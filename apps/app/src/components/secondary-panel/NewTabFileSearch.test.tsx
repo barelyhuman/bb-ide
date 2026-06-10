@@ -594,7 +594,8 @@ describe("NewTabFileSearch", () => {
 
     expect(fileRow.querySelector("[data-icon='ChartColumn']")).not.toBeNull();
     expect(recentRow.querySelector("[data-icon='ChartColumn']")).not.toBeNull();
-    expect(within(recentRow).getByText("Report")).toBeTruthy();
+    expect(within(recentRow).queryByText("Report")).toBeNull();
+    expect(recentRow.textContent ?? "").not.toContain(String.fromCharCode(183));
   });
 
   it("does not pass the personal project id to workspace file search", () => {

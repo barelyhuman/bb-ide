@@ -73,7 +73,7 @@ const SECONDARY_RESIZABLE_PANEL_STYLE: CSSProperties = {
   pointerEvents: "auto",
 };
 const SECONDARY_PANEL_CHROME_ICON_BUTTON_CLASS =
-  `h-7 w-7 shrink-0 rounded-md p-0 ${CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS}`;
+  `h-7 w-7 shrink-0 rounded-md p-0 [&_svg]:size-3.5 ${CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS}`;
 
 export interface NewTabMenuRenderProps {
   closeMenu: () => void;

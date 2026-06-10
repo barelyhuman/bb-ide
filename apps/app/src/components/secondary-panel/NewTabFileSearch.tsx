@@ -621,8 +621,8 @@ function FileResultRow({
 /**
  * A recently-opened file row. It uses the compact launcher shell so recents sit
  * at roughly the same density as file-search results, with the file-kind glyph
- * and label carried inline. Reopening routes through the same `onSelect` path
- * as a file-search result.
+ * carried inline. Reopening routes through the same `onSelect` path as a
+ * file-search result.
  */
 function RecentResultRow({
   id,
@@ -649,28 +649,17 @@ function RecentResultRow({
       isActive={isActive}
       onActivate={onActivate}
       onSelect={handleSelect}
-      title={`${visual.label}: ${item.path}`}
+      title={item.path}
     >
       <span className={LAUNCHER_ROW_ICON_CLASS}>
         <Icon name={visual.iconName} className="size-3.5" aria-hidden />
       </span>
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="truncate text-foreground">{name}</span>
-        <span className="shrink-0 font-medium text-muted-foreground">
-          {visual.label}
-        </span>
         {directory ? (
-          <>
-            <span
-              className="shrink-0 text-muted-foreground opacity-50"
-              aria-hidden
-            >
-              ·
-            </span>
-            <TruncateStart className="text-muted-foreground [flex-shrink:9999]">
-              {directory}
-            </TruncateStart>
-          </>
+          <TruncateStart className="text-muted-foreground [flex-shrink:9999]">
+            {directory}
+          </TruncateStart>
         ) : null}
       </span>
       <LauncherRowTrailing idle={relativeTime} isActive={isActive} />

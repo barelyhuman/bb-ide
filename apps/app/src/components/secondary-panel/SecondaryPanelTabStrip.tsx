@@ -231,21 +231,12 @@ function TabStripScrollChevron({
         direction === "left" ? "Scroll tabs left" : "Scroll tabs right"
       }
       className={cn(
-        // Solid panel-surface fill matching the tab strip / top-chrome
-        // (`bg-background`) and the edge fade's terminal color, so the chevron
-        // fully occludes the tab labels beneath it instead of letting them bleed
-        // through. Both tokens are opaque so the chevron stays solid in every
-        // state. Hover uses the stronger `bg-state-active` rather than the
-        // `ghost` variant's default `bg-state-hover` (which the tab pills also
-        // use), so hovering the scroll control reads as distinct from hovering
-        // the tab beneath it instead of looking like the same surface.
-        // Square (`rounded-none`) on purpose: the chevron overlays the
-        // partially-scrolled edge tab, so an opaque block with a straight inner
-        // edge truncates that tab along a clean vertical line and it reads as
-        // sliding *under* the strip edge. A corner radius would instead make the
-        // chevron a discrete pill beside the rounded tab pill — a button on a
-        // button. `rounded-none` also beats the Button base `rounded-md`.
-        "absolute z-50 h-7 w-7 shrink-0 rounded-none bg-background p-0 hover:bg-state-active",
+        // Solid panel-surface fills, so the chevron fully occludes the tab
+        // labels beneath it instead of letting them bleed through. The normal
+        // state matches the fade edge; hover/focus use `bg-muted` rather than
+        // translucent state overlays because these controls sit on top of
+        // partially hidden tab content.
+        "absolute z-50 h-7 w-7 shrink-0 rounded-md bg-background p-0 hover:bg-muted focus-visible:bg-muted",
         // Revealed only while the strip is hovered (or the chevron itself is
         // focused) so the chevrons don't permanently cover the edge tabs;
         // `pointer-events` follow visibility so a hidden chevron never
