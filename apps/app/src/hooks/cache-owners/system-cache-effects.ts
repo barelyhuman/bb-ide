@@ -73,25 +73,6 @@ export function refetchErroredRealtimeQueriesOnInitialConnect({
   });
 }
 
-export function invalidateHostAvailabilityQueries({
-  queryClient,
-}: QueryClientArg): void {
-  queryClient.invalidateQueries({ queryKey: hostsQueryKey() });
-  queryClient.invalidateQueries({ queryKey: allHostQueryKeyPrefix() });
-}
-
-export function invalidateHostChangeDependentQueries({
-  queryClient,
-}: QueryClientArg): void {
-  invalidateHostAvailabilityQueries({ queryClient });
-  queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
-  queryClient.invalidateQueries({ queryKey: sidebarNavigationQueryKey() });
-  queryClient.invalidateQueries({ queryKey: systemProvidersQueryKey() });
-  queryClient.invalidateQueries({
-    queryKey: allSystemExecutionOptionsQueryKeyPrefix(),
-  });
-}
-
 export function invalidateReplayCaptures({
   queryClient,
 }: QueryClientArg): void {

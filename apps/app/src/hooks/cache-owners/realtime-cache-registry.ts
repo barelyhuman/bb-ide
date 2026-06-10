@@ -1,3 +1,37 @@
+/**
+ * Declarative map from realtime change kinds to the query state they dirty.
+ *
+ * This module IS the "change kind → query keys" table. The realtime protocol
+ * delivers coarse `ChangedMessage`s (entity + change kinds + optional metadata);
+ * each `REALTIME_*_CHANGE_REGISTRY` entry lists the dirty handlers that turn one
+ * change kind into the precise set of queries to invalidate. New change kinds
+ * are added here, in one place, and the `satisfies *Registry` constraints force
+ * every kind to be mapped (verified by `realtime-cache-effects.test.ts`).
+ *
+ * Why this isn't a flat `invalidateQueries(prefix)` table:
+ * - Scoping uses notification metadata, not just the change kind. Thread changes
+ *   carry `projectId`, `eventTypes`, and `hasPendingInteraction` so we invalidate
+ *   only the affected project's lists, only refresh prompt history when an
+ *   appended batch actually contained a turn request, and patch the sidebar
+ *   pending-interaction badge from metadata instead of refetching.
+ * - Some handlers do surgical `setQueryData` rather than invalidation
+ *   (`patchThreadListPendingInteractionState`) or mark queries stale without an
+ *   active refetch (`mark*Stale` for read-state changes), which a uniform
+ *   invalidate-by-prefix table cannot express.
+ * - Some handlers enumerate the live cache to find the exact keys to touch
+ *   (cached thread lists for an environment, ref-derived diff/work-status keys),
+ *   avoiding broad prefix invalidation of unrelated queries.
+ * - The `flush` priority ("immediate" for `status-changed`, "debounced" for the
+ *   rest) is consumed by `realtime-cache-effects.ts`, which batches thread
+ *   invalidations to absorb the event storm of an active agent turn while still
+ *   flushing status changes instantly so controls/banners react without lag.
+ *
+ * Handlers run through `executeRealtimeDirtyHandlers`; a handler returns query
+ * keys to invalidate, or performs its own cache write and returns `void`. Raw
+ * cache writes live exclusively in `cache-owners/` (enforced by
+ * `cache-owner-registry.test.ts`), so this registry and the per-owner helpers
+ * are the single sanctioned path between the realtime protocol and query state.
+ */
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import type {
   AppChangeKind,

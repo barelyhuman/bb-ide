@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createAppQueryClient } from "@/lib/query-client";
 import {
-  allSystemExecutionOptionsQueryKeyPrefix,
   sidebarNavigationQueryKey,
   systemExecutionOptionsQueryKey,
   threadDefaultExecutionOptionsQueryKey,
@@ -9,10 +8,7 @@ import {
   threadPromptHistoryQueryKey,
   threadQueuedMessagesQueryKey,
 } from "./queries/query-keys";
-import {
-  invalidateHostChangeDependentQueries,
-  invalidateRealtimeQueriesAfterServerReconnect,
-} from "./cache-owners/system-cache-effects";
+import { invalidateRealtimeQueriesAfterServerReconnect } from "./cache-owners/system-cache-effects";
 
 function createCacheEffectQueryClient() {
   return createAppQueryClient({
@@ -86,32 +82,6 @@ describe("system cache effects", () => {
     expect(
       queryClient.getQueryState(defaultExecutionOptionsKey)?.isInvalidated,
     ).toBe(true);
-    expect(queryClient.getQueryState(executionOptionsKey)?.isInvalidated).toBe(
-      true,
-    );
-    expect(queryClient.getQueryState(sidebarNavigationKey)?.isInvalidated).toBe(
-      true,
-    );
-  });
-
-  it("invalidates all execution options after host changes", () => {
-    const queryClient = createCacheEffectQueryClient();
-    const executionOptionsKey = scopedSystemExecutionOptionsKey({
-      environmentId: "env-1",
-    });
-    const sidebarNavigationKey = sidebarNavigationQueryKey();
-    queryClient.setQueryData(executionOptionsKey, EMPTY_EXECUTION_OPTIONS);
-    queryClient.setQueryData(sidebarNavigationKey, {
-      projects: [],
-      personalProject: { threads: [] },
-    });
-
-    invalidateHostChangeDependentQueries({ queryClient });
-
-    expect(
-      queryClient.getQueryState(allSystemExecutionOptionsQueryKeyPrefix())
-        ?.isInvalidated,
-    ).toBeUndefined();
     expect(queryClient.getQueryState(executionOptionsKey)?.isInvalidated).toBe(
       true,
     );
