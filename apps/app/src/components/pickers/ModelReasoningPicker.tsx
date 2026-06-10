@@ -320,7 +320,7 @@ export function ModelReasoningPicker({
         {/* Model list */}
         <div
           className={cn(
-            "overflow-y-auto px-1 pb-1",
+            "overflow-y-auto p-1",
             !isCompactViewport &&
               "max-h-[min(250px,var(--radix-popover-content-available-height,250px)-80px)]",
           )}
