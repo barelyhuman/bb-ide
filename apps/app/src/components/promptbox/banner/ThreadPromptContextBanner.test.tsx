@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, screen } from "@testing-library/react";
-import type { WorkspaceFileStatus } from "@bb/domain";
+import type { ThreadRuntimeDisplayStatus, WorkspaceFileStatus } from "@bb/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import {
+  isThreadDisplayStatusBannerActive,
   ThreadPromptContextBanner,
   type ThreadPromptContextBannerProps,
   type ThreadPromptGitSection,
@@ -87,6 +88,31 @@ afterEach(() => {
 });
 
 describe("ThreadPromptContextBanner", () => {
+  it("counts child statuses with live lifecycle work as banner-active", () => {
+    const activeStatuses = [
+      "active",
+      "created",
+      "host-reconnecting",
+      "provisioning",
+      "waiting-for-host",
+    ] satisfies readonly ThreadRuntimeDisplayStatus[];
+
+    for (const status of activeStatuses) {
+      expect(isThreadDisplayStatusBannerActive(status)).toBe(true);
+    }
+  });
+
+  it("excludes terminal child statuses from banner-active count", () => {
+    const inactiveStatuses = [
+      "error",
+      "idle",
+    ] satisfies readonly ThreadRuntimeDisplayStatus[];
+
+    for (const status of inactiveStatuses) {
+      expect(isThreadDisplayStatusBannerActive(status)).toBe(false);
+    }
+  });
+
   it("keeps a single context segment label visible in compact markup", () => {
     renderBanner({ todoSection });
 

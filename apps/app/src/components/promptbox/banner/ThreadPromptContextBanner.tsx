@@ -81,7 +81,13 @@ export interface ThreadPromptArchivedSection {
  * one place so future status additions don't drift across callers.
  */
 const THREAD_BANNER_ACTIVE_CHILD_RUNTIME_STATUSES: ReadonlySet<ThreadRuntimeDisplayStatus> =
-  new Set(["active", "host-reconnecting", "waiting-for-host"]);
+  new Set([
+    "active",
+    "created",
+    "host-reconnecting",
+    "provisioning",
+    "waiting-for-host",
+  ]);
 
 export function isThreadDisplayStatusBannerActive(
   status: ThreadRuntimeDisplayStatus,
