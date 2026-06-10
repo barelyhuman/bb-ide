@@ -240,9 +240,25 @@ export function RootComposeView() {
     () => currentProject?.sources ?? [],
     [currentProject?.sources],
   );
+  // Seed the picker with the project's stored execution defaults so the
+  // visible default matches what the server will use when the user submits
+  // without touching anything. Without this, the picker would show the
+  // system-wide first-provider/default-model (e.g. Codex / GPT-5.5) while
+  // the server falls back to the project's stored provider (e.g. Claude
+  // Code) — see resolveRequestedCreateExecutionValue, which discards
+  // submitted values that the client hasn't claimed in `executionInputSources`.
+  // Values ride along with the sidebar bootstrap so there's no extra
+  // round-trip per visit.
+  const projectDefaultExecutionOptions =
+    currentProject?.defaultExecutionOptions ?? null;
   const creationOptions = useThreadCreationOptions({
     scope: "new-thread",
     projectId,
+    initialProviderId: projectDefaultExecutionOptions?.providerId,
+    initialModel: projectDefaultExecutionOptions?.model,
+    initialServiceTier: projectDefaultExecutionOptions?.serviceTier,
+    initialReasoningLevel: projectDefaultExecutionOptions?.reasoningLevel,
+    initialPermissionMode: projectDefaultExecutionOptions?.permissionMode,
   });
   const {
     selectedProviderId,

@@ -101,6 +101,7 @@ function makeProjectWithThreadsResponse(
 ): ProjectWithThreadsResponse {
   return {
     ...makeProjectResponse(overrides),
+    defaultExecutionOptions: overrides.defaultExecutionOptions ?? null,
     threads: overrides.threads ?? [],
   };
 }
@@ -228,6 +229,7 @@ function buildSidebarNavigationResponse(args: {
     projects: args.projects.map((project) => ({
       ...project,
       threads: args.threadsByProjectId?.get(project.id) ?? [],
+      defaultExecutionOptions: null,
     })),
     personalProject: args.personalProject,
   };

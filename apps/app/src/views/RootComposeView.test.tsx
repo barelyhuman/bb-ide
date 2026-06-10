@@ -205,6 +205,7 @@ function makeProjectWithThreadsResponse(
 ): ProjectWithThreadsResponse {
   return {
     createdAt: 1,
+    defaultExecutionOptions: null,
     id: PERSONAL_PROJECT_ID,
     kind: "personal",
     name: "Personal",
