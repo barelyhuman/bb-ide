@@ -1202,7 +1202,6 @@ export function ThreadDetailView() {
       isSecondaryPanelOpen={isSecondaryPanelOpen}
       activeTerminalCount={activeTerminalCount}
       isTerminalPanelOpen={terminalPanelState.isOpen}
-      isThreadGitActionPending={gitActions.isThreadGitActionPending}
       onOpenThreadGitAction={gitActions.threadGitActionDialog.onOpen}
       onToggleSecondaryPanel={toggleSecondaryPanel}
       onToggleTerminalPanel={toggleTerminalPanel}
