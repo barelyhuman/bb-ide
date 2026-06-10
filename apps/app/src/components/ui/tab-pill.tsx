@@ -1,15 +1,16 @@
 import { Icon } from "@/components/ui/icon.js";
+import { COARSE_POINTER_TEXT_SM_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 
 const TAB_PILL_DEFAULT_LABEL_MAX_WIDTH_CLASS = "max-w-[180px]";
 const TAB_PILL_AFFORDANCE_BUTTON_BASE_CLASS =
-  "inline-flex size-4 shrink-0 items-center justify-center rounded transition-opacity hover:bg-muted-foreground/15 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none";
-export const TAB_PILL_AFFORDANCE_ICON_CLASS = "size-3.5";
-export const TAB_PILL_CLOSE_BUTTON_CLASS =
-  `pointer-events-none absolute left-2 top-1/2 z-10 -translate-y-1/2 bg-inherit ${TAB_PILL_AFFORDANCE_BUTTON_BASE_CLASS} opacity-0 hover:opacity-100 group-hover/tab-pill:pointer-events-auto group-hover/tab-pill:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 disabled:opacity-30`;
+  "inline-flex size-4 shrink-0 items-center justify-center rounded transition-opacity hover:bg-muted-foreground/15 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none max-md:pointer-coarse:size-5";
+export const TAB_PILL_AFFORDANCE_ICON_CLASS =
+  "size-3.5 max-md:pointer-coarse:size-5";
+export const TAB_PILL_CLOSE_BUTTON_CLASS = `pointer-events-none absolute left-2 top-1/2 z-10 -translate-y-1/2 bg-inherit ${TAB_PILL_AFFORDANCE_BUTTON_BASE_CLASS} opacity-0 hover:opacity-100 group-hover/tab-pill:pointer-events-auto group-hover/tab-pill:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 disabled:opacity-30 max-md:pointer-coarse:pointer-events-auto max-md:pointer-coarse:opacity-100`;
 const TAB_PILL_LEADING_VISUAL_CLASS =
-  "mr-1.5 inline-flex size-4 shrink-0 items-center justify-center transition-opacity";
+  "mr-1.5 inline-flex size-4 shrink-0 items-center justify-center transition-opacity [&_svg]:size-3.5 max-md:pointer-coarse:size-5 max-md:pointer-coarse:[&_svg]:size-5";
 
 export interface TabPillCloseAction {
   onClose: () => void;
@@ -45,7 +46,8 @@ export function TabPill({
   return (
     <div
       className={cn(
-        "group/tab-pill relative inline-flex h-7 shrink-0 items-center rounded-md text-xs transition-colors",
+        "group/tab-pill relative inline-flex h-7 shrink-0 items-center rounded-md transition-colors",
+        COARSE_POINTER_TEXT_SM_CLASS,
         isActive
           ? "bg-muted text-foreground"
           : "text-muted-foreground hover:bg-state-hover",
@@ -62,7 +64,7 @@ export function TabPill({
           className={cn(
             TAB_PILL_LEADING_VISUAL_CLASS,
             closeAction
-              ? "group-hover/tab-pill:opacity-0 group-has-[[data-tab-pill-close]:focus-visible]/tab-pill:opacity-0"
+              ? "group-hover/tab-pill:opacity-0 group-has-[[data-tab-pill-close]:focus-visible]/tab-pill:opacity-0 max-md:pointer-coarse:opacity-0"
               : null,
           )}
         >

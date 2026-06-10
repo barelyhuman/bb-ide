@@ -17,6 +17,7 @@ import type {
 } from "@pierre/diffs";
 import type { UrlTransform } from "react-markdown";
 import { Button } from "@/components/ui/button.js";
+import { COARSE_POINTER_TEXT_SM_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { EmptyStatePanel } from "@/components/ui/empty-state.js";
 import { CopyButton } from "@/components/ui/copy-button.js";
 import { OpenInEditorButton } from "@/components/ui/open-in-editor-button.js";
@@ -29,6 +30,7 @@ import type {
   FilePreviewLineRange,
   WorkspaceFilePreviewStatusLabel,
 } from "@/lib/file-preview";
+import { cn } from "@/lib/utils";
 
 export interface FilePreviewFile {
   name: string;
@@ -353,13 +355,21 @@ function FilePreviewHeader({
       <div className="flex h-9 items-center gap-2 border-b border-border-seam bg-background px-4">
         <div className="flex min-w-0 items-center gap-1">
           <TruncateStart
-            className="min-w-0 font-mono text-xs font-medium leading-5 text-foreground"
+            className={cn(
+              "min-w-0 font-mono font-medium leading-5 text-foreground",
+              COARSE_POINTER_TEXT_SM_CLASS,
+            )}
             title={path}
           >
             {path}
           </TruncateStart>
           {statusLabel === null ? null : (
-            <span className="shrink-0 text-xs leading-5 text-muted-foreground">
+            <span
+              className={cn(
+                "shrink-0 leading-5 text-muted-foreground",
+                COARSE_POINTER_TEXT_SM_CLASS,
+              )}
+            >
               ({statusLabel})
             </span>
           )}
@@ -384,7 +394,10 @@ function FilePreviewHeader({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-5 rounded-sm px-2 text-xs text-muted-foreground"
+              className={cn(
+                "h-5 rounded-sm px-2 text-muted-foreground max-md:pointer-coarse:h-9",
+                COARSE_POINTER_TEXT_SM_CLASS,
+              )}
               onClick={() => onViewModeChange("preview")}
               aria-pressed={viewMode === "preview"}
               title="Rendered preview"
@@ -395,7 +408,10 @@ function FilePreviewHeader({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-5 rounded-sm px-2 text-xs text-muted-foreground"
+              className={cn(
+                "h-5 rounded-sm px-2 text-muted-foreground max-md:pointer-coarse:h-9",
+                COARSE_POINTER_TEXT_SM_CLASS,
+              )}
               onClick={() => onViewModeChange("source")}
               aria-pressed={viewMode === "source"}
               title={getRawToggleTitle(toggleKind)}

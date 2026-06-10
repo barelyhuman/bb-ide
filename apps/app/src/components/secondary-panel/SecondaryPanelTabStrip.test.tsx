@@ -133,7 +133,7 @@ afterEach(() => {
 });
 
 describe("SecondaryPanelTabStrip", () => {
-  it("renders a leading icon and swaps it for close while hovered or focused", () => {
+  it("renders a leading icon and swaps it for close while hovered, focused, or on mobile touch", () => {
     render(
       <SecondaryPanelTabStrip
         fileTabs={[buildTab({ id: "a", filename: "a.ts", isActive: true })]}
@@ -151,6 +151,9 @@ describe("SecondaryPanelTabStrip", () => {
     expect(leadingIcon?.parentElement?.className).toContain(
       "group-has-[[data-tab-pill-close]:focus-visible]/tab-pill:opacity-0",
     );
+    expect(leadingIcon?.parentElement?.className).toContain(
+      "max-md:pointer-coarse:opacity-0",
+    );
     expect(closeButton.parentElement?.className).toContain("group/tab-pill");
     expect(closeButton.hasAttribute("data-tab-pill-close")).toBe(true);
     expect(closeButton.className).toContain(TAB_PILL_CLOSE_BUTTON_CLASS);
@@ -161,6 +164,13 @@ describe("SecondaryPanelTabStrip", () => {
     );
     expect(closeButton.className).toContain("group-hover/tab-pill:opacity-100");
     expect(closeButton.className).toContain("focus-visible:opacity-100");
+    expect(closeButton.className).toContain(
+      "max-md:pointer-coarse:pointer-events-auto",
+    );
+    expect(closeButton.className).toContain(
+      "max-md:pointer-coarse:opacity-100",
+    );
+    expect(closeButton.className).toContain("max-md:pointer-coarse:size-5");
     expect(closeButton.className).not.toContain("opacity-70");
     expect(
       closeButton.querySelector("[data-icon='X']")?.getAttribute("class"),

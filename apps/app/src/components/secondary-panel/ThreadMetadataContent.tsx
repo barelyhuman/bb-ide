@@ -18,7 +18,12 @@ import {
 } from "@bb/core-ui";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button.js";
-import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
+import {
+  COARSE_POINTER_COMPACT_ICON_BUTTON_CLASS,
+  COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
+  COARSE_POINTER_ICON_SIZE_CLASS,
+  COARSE_POINTER_TEXT_SM_CLASS,
+} from "@/components/ui/coarse-pointer-sizing.js";
 import { CopyableInlineLabel } from "@/components/ui/copy-button.js";
 import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
 import {
@@ -91,12 +96,7 @@ export function ParentSelectorRow({
         parentThreadDisplayName,
         parentThreadId,
       }),
-    [
-      parentThreads,
-      parentThreadDisplayName,
-      parentThreadId,
-      thread.id,
-    ],
+    [parentThreads, parentThreadDisplayName, parentThreadId, thread.id],
   );
   const parentSelectorValue = parentThreadId ?? "none";
   const selectedParentOptionLabel = parentSelectorOptions.find(
@@ -110,10 +110,18 @@ export function ParentSelectorRow({
   return (
     <DetailRow label="Parent" valueClassName="min-w-0">
       {parentThreadId ? (
-        <div className="inline-flex max-w-full min-w-0 items-center gap-1 text-xs text-foreground">
+        <div
+          className={cn(
+            "inline-flex max-w-full min-w-0 items-center gap-1 text-foreground",
+            COARSE_POINTER_TEXT_SM_CLASS,
+          )}
+        >
           <Link
             to={getThreadRoutePath({ projectId, threadId: parentThreadId })}
-            className="min-w-0 truncate text-xs text-foreground no-underline transition-[text-decoration-color] duration-150 hover:underline hover:underline-offset-2"
+            className={cn(
+              "min-w-0 truncate text-foreground no-underline transition-[text-decoration-color] duration-150 hover:underline hover:underline-offset-2",
+              COARSE_POINTER_TEXT_SM_CLASS,
+            )}
           >
             {selectedParentOptionLabel ?? "Parent thread"}
           </Link>
@@ -121,7 +129,7 @@ export function ParentSelectorRow({
             type="button"
             variant="ghost"
             size="icon"
-            className="size-3.5 shrink-0 rounded-full p-0 text-muted-foreground hover:bg-transparent hover:text-foreground [&_svg]:size-3"
+            className="size-3.5 shrink-0 rounded-full p-0 text-muted-foreground hover:bg-transparent hover:text-foreground [&_svg]:size-3 max-md:pointer-coarse:h-9 max-md:pointer-coarse:w-9 max-md:pointer-coarse:[&_svg]:size-5"
             disabled={updateThreadPending}
             onClick={() => {
               onAssignParent(null);
@@ -143,14 +151,25 @@ export function ParentSelectorRow({
                   ? -1
                   : 0
               }
-              className="inline-flex w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-0 text-xs leading-tight text-foreground outline-none ring-sidebar-ring transition-colors hover:text-foreground focus-visible:ring-2"
+              className={cn(
+                "inline-flex w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-0 leading-tight text-foreground outline-none ring-sidebar-ring transition-colors hover:text-foreground focus-visible:ring-2",
+                COARSE_POINTER_TEXT_SM_CLASS,
+              )}
             >
-              <span className="min-w-0 truncate text-xs text-foreground">
+              <span
+                className={cn(
+                  "min-w-0 truncate text-foreground",
+                  COARSE_POINTER_TEXT_SM_CLASS,
+                )}
+              >
                 {selectedParentOptionLabel ?? "None"}
               </span>
               <Icon
                 name="ChevronDown"
-                className="size-3.5 shrink-0 text-muted-foreground"
+                className={cn(
+                  COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
+                  "text-muted-foreground",
+                )}
               />
             </div>
           </DropdownMenuTrigger>
@@ -160,9 +179,7 @@ export function ParentSelectorRow({
               <DropdownMenuItem
                 key={option.value}
                 onSelect={() => {
-                  onAssignParent(
-                    option.value === "none" ? null : option.value,
-                  );
+                  onAssignParent(option.value === "none" ? null : option.value);
                 }}
                 className="flex items-center justify-between gap-3"
               >
@@ -486,10 +503,7 @@ export function ArchivedRow({ thread }: ArchivedRowProps) {
   if (thread.archivedAt == null) return null;
   return (
     <DetailRow label="Archived" valueClassName="min-w-0 truncate">
-      <ThreadUnarchiveButton
-        isPending={isPending}
-        onUnarchive={onUnarchive}
-      />
+      <ThreadUnarchiveButton isPending={isPending} onUnarchive={onUnarchive} />
     </DetailRow>
   );
 }
@@ -642,11 +656,14 @@ export function ThreadStorageRow({
               type="button"
               variant="ghost"
               size="icon"
-              className="h-5 w-5 shrink-0 rounded-md p-0 text-muted-foreground"
+              className={cn(
+                COARSE_POINTER_COMPACT_ICON_BUTTON_CLASS,
+                "shrink-0 text-muted-foreground",
+              )}
               aria-label="Search files"
               onClick={openSearch}
             >
-              <Icon name="Search" className="size-3.5" />
+              <Icon name="Search" />
             </Button>
           )}
         </>

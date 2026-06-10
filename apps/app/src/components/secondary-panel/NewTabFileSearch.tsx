@@ -9,6 +9,12 @@ import {
   type ReactNode,
 } from "react";
 import { directoryFromPath } from "@bb/thread-view";
+import {
+  COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
+  COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
+  COARSE_POINTER_ICON_SIZE_CLASS,
+  COARSE_POINTER_TEXT_SM_CLASS,
+} from "@/components/ui/coarse-pointer-sizing.js";
 import { Icon } from "@/components/ui/icon.js";
 import { EmptyStatePanel } from "@/components/ui/empty-state.js";
 import { Input } from "@/components/ui/input.js";
@@ -234,8 +240,7 @@ const OPEN_BROWSER_ENTRY_ID = "file-search-result-open-browser";
 const OPEN_FILE_ENTRY_ID = "file-search-result-open-file";
 const START_TERMINAL_ENTRY_ID = "file-search-result-start-terminal";
 
-const LAUNCHER_TILE_ICON_CLASS_DASHED =
-  "flex size-4 shrink-0 items-center justify-center text-muted-foreground group-hover:text-foreground";
+const LAUNCHER_TILE_ICON_CLASS_DASHED = `flex shrink-0 items-center justify-center text-muted-foreground group-hover:text-foreground ${COARSE_POINTER_ICON_SIZE_CLASS}`;
 const NEW_TAB_ACTION_MENU_SEPARATOR_CLASS = "mx-2 my-1.5 w-auto bg-border-seam";
 
 const RECENT_ENTRY_ID_PREFIX = "file-search-result-recent";
@@ -402,9 +407,13 @@ function FileSearchMessage({
       <div className="flex max-w-64 items-center justify-center gap-1.5">
         <Icon
           name={iconName}
-          className={cn("size-4 shrink-0", iconClassName)}
+          className={cn(
+            COARSE_POINTER_ICON_SIZE_CLASS,
+            "shrink-0",
+            iconClassName,
+          )}
         />
-        <p>{message}</p>
+        <p className={COARSE_POINTER_TEXT_SM_CLASS}>{message}</p>
       </div>
     </EmptyStatePanel>
   );
@@ -469,7 +478,10 @@ function AppResultRow({
       <span className={LAUNCHER_ROW_ICON_CLASS}>
         <ResolvedAppIcon
           icon={suggestion.app.icon}
-          className="size-3.5 text-muted-foreground"
+          className={cn(
+            COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
+            "text-muted-foreground",
+          )}
         />
       </span>
       <span className="min-w-0 flex-1 truncate text-foreground">
@@ -494,7 +506,11 @@ function CreateAppTile({
       onSelect={onSelect}
     >
       <span className={LAUNCHER_TILE_ICON_CLASS_DASHED}>
-        <Icon name="Plus" className="size-3.5" aria-hidden />
+        <Icon
+          name="Plus"
+          className={COARSE_POINTER_COMPACT_ICON_SIZE_CLASS}
+          aria-hidden
+        />
       </span>
       <span className="min-w-0 flex-1 truncate text-foreground">
         Create App...
@@ -518,7 +534,11 @@ function OpenBrowserTile({
       onSelect={onSelect}
     >
       <span className={LAUNCHER_ROW_ICON_CLASS}>
-        <Icon name="Globe" className="size-3.5" aria-hidden />
+        <Icon
+          name="Globe"
+          className={COARSE_POINTER_COMPACT_ICON_SIZE_CLASS}
+          aria-hidden
+        />
       </span>
       <span className="min-w-0 flex-1 truncate text-foreground">
         Open browser
@@ -542,7 +562,11 @@ function OpenFileTile({
       onSelect={onSelect}
     >
       <span className={LAUNCHER_ROW_ICON_CLASS}>
-        <Icon name="File" className="size-3.5" aria-hidden />
+        <Icon
+          name="File"
+          className={COARSE_POINTER_COMPACT_ICON_SIZE_CLASS}
+          aria-hidden
+        />
       </span>
       <span className="min-w-0 flex-1 truncate text-foreground">Open file</span>
     </LauncherTile>
@@ -564,7 +588,11 @@ function StartTerminalTile({
       onSelect={onSelect}
     >
       <span className={LAUNCHER_ROW_ICON_CLASS}>
-        <Icon name="Terminal" className="size-3.5" aria-hidden />
+        <Icon
+          name="Terminal"
+          className={COARSE_POINTER_COMPACT_ICON_SIZE_CLASS}
+          aria-hidden
+        />
       </span>
       <span className="min-w-0 flex-1 truncate text-foreground">
         Start terminal
@@ -597,14 +625,18 @@ function FileResultRow({
       onMouseEnter={onActivate}
       title={getFileSearchResultTitle(suggestion)}
       className={cn(
-        "w-full scroll-mt-7 rounded px-2 py-1.5 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        "w-full scroll-mt-7 rounded px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        COARSE_POINTER_TEXT_SM_CLASS,
         isActive ? "bg-state-active" : "hover:bg-state-hover",
       )}
     >
       <div className="flex min-w-0 items-center gap-1.5">
         <Icon
           name={visual.iconName}
-          className="size-3.5 shrink-0 text-muted-foreground"
+          className={cn(
+            COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
+            "text-muted-foreground",
+          )}
           aria-hidden
         />
         <span className="truncate">{suggestion.name}</span>
@@ -652,7 +684,11 @@ function RecentResultRow({
       title={item.path}
     >
       <span className={LAUNCHER_ROW_ICON_CLASS}>
-        <Icon name={visual.iconName} className="size-3.5" aria-hidden />
+        <Icon
+          name={visual.iconName}
+          className={COARSE_POINTER_COMPACT_ICON_SIZE_CLASS}
+          aria-hidden
+        />
       </span>
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="truncate text-foreground">{name}</span>
@@ -855,7 +891,10 @@ export function NewTabFileSearch({
       <div className="relative min-w-0">
         <Icon
           name="Search"
-          className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          className={cn(
+            "pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground",
+            COARSE_POINTER_ICON_SIZE_CLASS,
+          )}
         />
         <Input
           ref={inputRef}
@@ -875,12 +914,18 @@ export function NewTabFileSearch({
           placeholder={
             isSearchDisabled ? "No searchable file source" : "Search files"
           }
-          className="h-8 pl-8 pr-8 text-xs focus-visible:ring-0"
+          className={cn(
+            "h-8 pl-8 pr-8 focus-visible:ring-0 max-md:pointer-coarse:h-10",
+            COARSE_POINTER_TEXT_SM_CLASS,
+          )}
         />
         {isDebouncing ? (
           <Icon
             name="Spinner"
-            className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 animate-spin text-muted-foreground"
+            className={cn(
+              "pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground",
+              COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
+            )}
           />
         ) : null}
       </div>
@@ -1086,12 +1131,22 @@ export function NewTabActionMenu({
           />
         ))}
         {canSearchApps && apps.isLoading && appSuggestions.length === 0 ? (
-          <p className="px-2 py-1 text-xs text-muted-foreground">
+          <p
+            className={cn(
+              "px-2 py-1 text-muted-foreground",
+              COARSE_POINTER_TEXT_SM_CLASS,
+            )}
+          >
             Loading apps...
           </p>
         ) : null}
         {canSearchApps && apps.isError ? (
-          <p className="px-2 py-1 text-xs text-muted-foreground">
+          <p
+            className={cn(
+              "px-2 py-1 text-muted-foreground",
+              COARSE_POINTER_TEXT_SM_CLASS,
+            )}
+          >
             Couldn't load apps.
           </p>
         ) : null}
@@ -1275,7 +1330,7 @@ function NewTabResults({
             sticky
             className={hasRecentSectionPredecessor ? "pt-2" : undefined}
           />
-          <EmptyStatePanel className="py-4 text-xs">
+          <EmptyStatePanel className={cn("py-4", COARSE_POINTER_TEXT_SM_CLASS)}>
             Plans, mockups, and files you open will show up here.
           </EmptyStatePanel>
         </section>
@@ -1286,12 +1341,16 @@ function NewTabResults({
           type="button"
           aria-expanded={recent.isExpanded}
           onClick={recent.onToggleExpanded}
-          className="ml-1.5 mt-0.5 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground"
+          className={cn(
+            "ml-1.5 mt-0.5 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground",
+            COARSE_POINTER_TEXT_SM_CLASS,
+          )}
         >
           <Icon
             name="ChevronDown"
             className={cn(
-              "size-3.5 transition-transform",
+              COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
+              "transition-transform",
               recent.isExpanded && "rotate-180",
             )}
             aria-hidden

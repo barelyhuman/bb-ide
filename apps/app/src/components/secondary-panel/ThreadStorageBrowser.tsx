@@ -1,10 +1,22 @@
-import { useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { FileTree } from "@pierre/trees/react";
 import { Button } from "@/components/ui/button.js";
+import {
+  COARSE_POINTER_COMPACT_ICON_BUTTON_CLASS,
+  COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
+  COARSE_POINTER_TEXT_SM_CLASS,
+} from "@/components/ui/coarse-pointer-sizing.js";
 import { EmptyState } from "@/components/ui/empty-state.js";
 import { Icon } from "@/components/ui/icon.js";
 import { Input } from "@/components/ui/input.js";
 import { usePreferredTheme } from "@/hooks/useTheme";
+import { cn } from "@/lib/utils";
 import {
   describeLifecycleError,
   formatLifecycleErrorDescription,
@@ -136,13 +148,22 @@ export function ThreadStorageBrowser({
   return (
     <div className="flex h-full min-h-0 flex-col gap-1">
       {isSearchOpen ? (
-        <div className="flex h-7 shrink-0 items-center gap-2">
+        <div className="flex h-7 shrink-0 items-center gap-2 max-md:pointer-coarse:h-10">
           <div className="relative min-w-0 flex-1">
-            <Icon name="Search" className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Icon
+              name="Search"
+              className={cn(
+                "pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground",
+                COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
+              )}
+            />
             <Input
               ref={searchInputRef}
               aria-label="Search files"
-              className="h-7 pl-7 pr-2 text-xs focus-visible:ring-0"
+              className={cn(
+                "h-7 pl-7 pr-2 focus-visible:ring-0 max-md:pointer-coarse:h-10",
+                COARSE_POINTER_TEXT_SM_CLASS,
+              )}
               placeholder="Search files"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
@@ -158,11 +179,14 @@ export function ThreadStorageBrowser({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-7 w-7 shrink-0 rounded-md p-0 text-muted-foreground"
+            className={cn(
+              COARSE_POINTER_COMPACT_ICON_BUTTON_CLASS,
+              "shrink-0 text-muted-foreground",
+            )}
             aria-label="Close search"
             onClick={closeSearch}
           >
-            <Icon name="X" className="size-3.5" />
+            <Icon name="X" />
           </Button>
         </div>
       ) : null}

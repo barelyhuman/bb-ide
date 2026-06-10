@@ -1,6 +1,7 @@
 import { memo, useCallback, type ReactNode } from "react";
 import type { ThreadGitDiffResponse } from "@bb/domain";
 import type { MarkdownLinkRouting } from "@/components/ui/markdown-link-routing.js";
+import { COARSE_POINTER_TEXT_SM_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
 import { EmptyStatePanel } from "@/components/ui/empty-state.js";
 import { useEnvironmentFilePreview } from "@/hooks/queries/environment-queries";
@@ -222,7 +223,12 @@ export function GitDiffTabContent({
       {isPreparingGitDiff ? (
         <ThreadDiffSkeleton />
       ) : gitDiffError ? (
-        <div className="rounded-lg border border-surface-destructive-border bg-surface-destructive px-3 py-2 text-xs text-destructive">
+        <div
+          className={cn(
+            "rounded-lg border border-surface-destructive-border bg-surface-destructive px-3 py-2 text-destructive",
+            COARSE_POINTER_TEXT_SM_CLASS,
+          )}
+        >
           {gitDiffLifecycleErrorDescription ? (
             <p className="font-medium">
               {gitDiffLifecycleErrorDescription.title}
@@ -237,7 +243,12 @@ export function GitDiffTabContent({
           </p>
         </div>
       ) : gitDiffUnavailableMessage ? (
-        <div className="rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs text-muted-foreground">
+        <div
+          className={cn(
+            "rounded-lg border border-border bg-surface-raised px-3 py-2 text-muted-foreground",
+            COARSE_POINTER_TEXT_SM_CLASS,
+          )}
+        >
           <p className="font-medium text-foreground">Workspace unavailable</p>
           <p className="mt-1 leading-5">{gitDiffUnavailableMessage}</p>
         </div>
@@ -284,7 +295,12 @@ export function GitDiffTabContent({
             </pre>
           )}
           {threadGitDiff.truncated ? (
-            <p className="pt-2 text-xs text-muted-foreground">
+            <p
+              className={cn(
+                "pt-2 text-muted-foreground",
+                COARSE_POINTER_TEXT_SM_CLASS,
+              )}
+            >
               Diff output was truncated for display.
             </p>
           ) : null}

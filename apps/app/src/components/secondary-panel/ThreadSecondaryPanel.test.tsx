@@ -340,6 +340,16 @@ describe("ThreadSecondaryPanel", () => {
     expect(newTabButton.className).toContain("w-7");
     expect(infoButton.className).toContain("[&_svg]:size-3.5");
     expect(newTabButton.className).toContain("[&_svg]:size-3.5");
+    expect(infoButton.className).toContain("max-md:pointer-coarse:h-9");
+    expect(infoButton.className).toContain("max-md:pointer-coarse:w-9");
+    expect(infoButton.className).toContain(
+      "max-md:pointer-coarse:[&_svg]:size-5",
+    );
+    expect(newTabButton.className).toContain("max-md:pointer-coarse:h-9");
+    expect(newTabButton.className).toContain("max-md:pointer-coarse:w-9");
+    expect(newTabButton.className).toContain(
+      "max-md:pointer-coarse:[&_svg]:size-5",
+    );
     expect(infoButton.className).not.toContain("[&_svg]:size-4");
     expect(newTabButton.className).not.toContain("[&_svg]:size-4");
 

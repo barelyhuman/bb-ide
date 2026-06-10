@@ -13,6 +13,7 @@ import { EmptyStatePanel } from "@/components/ui/empty-state.js";
 import { Panel, PanelResizeHandle } from "react-resizable-panels";
 import { Button } from "@/components/ui/button.js";
 import { CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS } from "@/components/ui/chromeStyleTokens";
+import { COARSE_POINTER_COMPACT_ICON_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import {
   Popover,
   PopoverContent,
@@ -72,8 +73,7 @@ const PANEL_SCROLL_SLOT_CLASS =
 const SECONDARY_RESIZABLE_PANEL_STYLE: CSSProperties = {
   pointerEvents: "auto",
 };
-const SECONDARY_PANEL_CHROME_ICON_BUTTON_CLASS =
-  `h-7 w-7 shrink-0 rounded-md p-0 [&_svg]:size-3.5 ${CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS}`;
+const SECONDARY_PANEL_CHROME_ICON_BUTTON_CLASS = `${COARSE_POINTER_COMPACT_ICON_BUTTON_CLASS} shrink-0 ${CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS}`;
 
 export interface NewTabMenuRenderProps {
   closeMenu: () => void;
@@ -199,7 +199,8 @@ export function ThreadSecondaryPanel({
 }: ThreadSecondaryPanelProps) {
   const activeFileTab = fileTabs?.find((tab) => tab.isActive);
   const hasActiveFileTab = activeFileTab !== undefined;
-  const isTerminalTabActive = activeTab?.kind === "terminal" && hasActiveFileTab;
+  const isTerminalTabActive =
+    activeTab?.kind === "terminal" && hasActiveFileTab;
   const togglePanelIconName = renderAsDrawer ? "X" : "PanelRight";
   // The conversation-collapse toggle only exists on a wide viewport; the drawer
   // layout fills the screen and cannot collapse the conversation.
@@ -388,7 +389,8 @@ export function ThreadSecondaryPanel({
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "h-7 w-7 shrink-0 rounded-md p-0",
+                  COARSE_POINTER_COMPACT_ICON_BUTTON_CLASS,
+                  "shrink-0",
                   usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
                 )}
                 onClick={conversationCollapseControl.onClick}
@@ -404,20 +406,15 @@ export function ThreadSecondaryPanel({
               variant="ghost"
               size="icon"
               className={cn(
-                "h-7 w-7 shrink-0 rounded-md p-0",
+                COARSE_POINTER_COMPACT_ICON_BUTTON_CLASS,
+                "shrink-0",
                 usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
               )}
               onClick={onClose}
               aria-label={
-                renderAsDrawer
-                  ? "Close right panel"
-                  : "Hide right panel"
+                renderAsDrawer ? "Close right panel" : "Hide right panel"
               }
-              title={
-                renderAsDrawer
-                  ? "Close right panel"
-                  : "Hide right panel"
-              }
+              title={renderAsDrawer ? "Close right panel" : "Hide right panel"}
             >
               <Icon name={togglePanelIconName} />
             </Button>

@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import { Button } from "@/components/ui/button.js";
+import { COARSE_POINTER_COMPACT_ICON_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { Icon } from "@/components/ui/icon.js";
 import { OverflowFade } from "@/components/ui/overflow-fade";
 import { TabPill } from "@/components/ui/tab-pill";
@@ -236,7 +237,8 @@ function TabStripScrollChevron({
         // state matches the fade edge; hover/focus use `bg-muted` rather than
         // translucent state overlays because these controls sit on top of
         // partially hidden tab content.
-        "absolute z-50 h-7 w-7 shrink-0 rounded-md bg-background p-0 hover:bg-muted focus-visible:bg-muted",
+        "absolute z-50 shrink-0 bg-background hover:bg-muted focus-visible:bg-muted",
+        COARSE_POINTER_COMPACT_ICON_BUTTON_CLASS,
         // Revealed only while the strip is hovered (or the chevron itself is
         // focused) so the chevrons don't permanently cover the edge tabs;
         // `pointer-events` follow visibility so a hidden chevron never

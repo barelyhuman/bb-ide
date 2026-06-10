@@ -100,6 +100,7 @@ import { BrowserTabDeck } from "@/components/secondary-panel/BrowserTabDeck";
 import { NewTabActionMenu } from "@/components/secondary-panel/NewTabFileSearch";
 import { NewTabPage } from "@/components/secondary-panel/NewTabPage";
 import { resolveRightPanelFileVisual } from "@/components/secondary-panel/rightPanelFileVisuals";
+import { COARSE_POINTER_COMPACT_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { Icon } from "@/components/ui/icon.js";
 import {
   getDesktopBrowserApi,
@@ -184,7 +185,13 @@ interface RightPanelFileTabIconProps {
 
 function RightPanelFileTabIcon({ path }: RightPanelFileTabIconProps) {
   const visual = resolveRightPanelFileVisual({ path });
-  return <Icon name={visual.iconName} className="size-3.5" aria-hidden />;
+  return (
+    <Icon
+      name={visual.iconName}
+      className={COARSE_POINTER_COMPACT_ICON_SIZE_CLASS}
+      aria-hidden
+    />
+  );
 }
 
 interface BuildMarkdownPreviewLinkRoutingArgs {
@@ -808,9 +815,16 @@ export function ThreadDetailView() {
             filename: appName,
             isActive: tab.id === activeFixedSecondaryTabId,
             leadingVisual: app ? (
-              <ResolvedAppIcon icon={app.icon} className="size-3.5" />
+              <ResolvedAppIcon
+                icon={app.icon}
+                className={COARSE_POINTER_COMPACT_ICON_SIZE_CLASS}
+              />
             ) : (
-              <Icon name="AppWindow" className="size-3.5" aria-hidden />
+              <Icon
+                name="AppWindow"
+                className={COARSE_POINTER_COMPACT_ICON_SIZE_CLASS}
+                aria-hidden
+              />
             ),
             statusLabel: null,
             onSelect: () => activateAppTab(tab.applicationId),
@@ -825,7 +839,11 @@ export function ThreadDetailView() {
             filename: browserLabel.length > 0 ? browserLabel : "Browser",
             isActive: tab.id === activeFixedSecondaryTabId,
             leadingVisual: (
-              <Icon name="Globe" className="size-3.5" aria-hidden />
+              <Icon
+                name="Globe"
+                className={COARSE_POINTER_COMPACT_ICON_SIZE_CLASS}
+                aria-hidden
+              />
             ),
             statusLabel: null,
             onSelect: () => activateBrowserTab(tab.id),
@@ -839,7 +857,11 @@ export function ThreadDetailView() {
             filename: session?.title ?? "Terminal",
             isActive: tab.id === activeFixedSecondaryTabId,
             leadingVisual: (
-              <Icon name="Terminal" className="size-3.5" aria-hidden />
+              <Icon
+                name="Terminal"
+                className={COARSE_POINTER_COMPACT_ICON_SIZE_CLASS}
+                aria-hidden
+              />
             ),
             statusLabel:
               session === undefined || session.status === "running"
@@ -886,7 +908,11 @@ export function ThreadDetailView() {
             filename: "New tab",
             isActive: tab.id === activeFixedSecondaryTabId,
             leadingVisual: (
-              <Icon name="NewTab" className="size-3.5" aria-hidden />
+              <Icon
+                name="NewTab"
+                className={COARSE_POINTER_COMPACT_ICON_SIZE_CLASS}
+                aria-hidden
+              />
             ),
             statusLabel: null,
             onSelect: activateNewTab,

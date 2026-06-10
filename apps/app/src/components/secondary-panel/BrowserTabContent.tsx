@@ -14,8 +14,14 @@ import type {
   BbDesktopBrowserViewBounds,
 } from "@bb/server-contract";
 import { clampBbDesktopBrowserViewBounds } from "@bb/server-contract";
+import {
+  COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
+  COARSE_POINTER_HEADER_ICON_BUTTON_CLASS,
+  COARSE_POINTER_TEXT_SM_CLASS,
+} from "@/components/ui/coarse-pointer-sizing.js";
 import { Icon } from "@/components/ui/icon.js";
 import { getDesktopBrowserApi } from "@/lib/bb-desktop";
+import { cn } from "@/lib/utils";
 import {
   getBrowserUrlSecurity,
   resolveBrowserAddressInput,
@@ -145,9 +151,12 @@ function NavButton({ icon, label, disabled, onClick }: NavButtonProps) {
       disabled={disabled}
       aria-label={label}
       title={label}
-      className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground transition-colors hover:bg-state-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+      className={cn(
+        "flex shrink-0 items-center justify-center text-foreground transition-colors hover:bg-state-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40",
+        COARSE_POINTER_HEADER_ICON_BUTTON_CLASS,
+      )}
     >
-      <Icon name={icon} className="size-4" aria-hidden />
+      <Icon name={icon} aria-hidden />
     </button>
   );
 }
@@ -192,23 +201,32 @@ function BrowserChrome({
         onClick={onReloadOrStop}
       />
       <form onSubmit={onSubmit} className="min-w-0 flex-1">
-        <div className="flex h-8 items-center gap-2 rounded-full border border-border bg-background px-3">
+        <div className="flex h-8 items-center gap-2 rounded-full border border-border bg-background px-3 max-md:pointer-coarse:h-10">
           {security === "secure" ? (
             <Icon
               name="Lock"
-              className="size-3.5 shrink-0 text-success"
+              className={cn(
+                COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
+                "text-success",
+              )}
               aria-label="Secure connection"
             />
           ) : security === "insecure" ? (
             <Icon
               name="AlertTriangle"
-              className="size-3.5 shrink-0 text-warning"
+              className={cn(
+                COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
+                "text-warning",
+              )}
               aria-label="Connection not secure"
             />
           ) : (
             <Icon
               name="Search"
-              className="size-3.5 shrink-0 text-muted-foreground"
+              className={cn(
+                COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
+                "text-muted-foreground",
+              )}
               aria-hidden
             />
           )}
@@ -222,7 +240,10 @@ function BrowserChrome({
             aria-label="Address and search bar"
             autoComplete="off"
             spellCheck={false}
-            className="min-w-0 flex-1 bg-transparent font-mono text-xs text-foreground outline-none placeholder:font-sans placeholder:text-muted-foreground"
+            className={cn(
+              "min-w-0 flex-1 bg-transparent font-mono text-foreground outline-none placeholder:font-sans placeholder:text-muted-foreground",
+              COARSE_POINTER_TEXT_SM_CLASS,
+            )}
           />
         </div>
       </form>
@@ -244,7 +265,12 @@ function BrowserUnavailable() {
       <div className="text-sm font-medium text-foreground">
         Browser tabs need the desktop app
       </div>
-      <p className="max-w-xs text-xs text-muted-foreground">
+      <p
+        className={cn(
+          "max-w-xs text-muted-foreground",
+          COARSE_POINTER_TEXT_SM_CLASS,
+        )}
+      >
         The in-app web browser runs in the bb desktop app. Open this thread
         there to browse the web.
       </p>
@@ -456,7 +482,10 @@ export function BrowserTabContent({
       return;
     }
 
-    window.addEventListener(BROWSER_VIEW_BOUNDS_SYNC_EVENT, syncBoundsIfChanged);
+    window.addEventListener(
+      BROWSER_VIEW_BOUNDS_SYNC_EVENT,
+      syncBoundsIfChanged,
+    );
     window.addEventListener("resize", syncBoundsIfChanged);
 
     return () => {
@@ -548,7 +577,12 @@ export function BrowserTabContent({
         onReloadOrStop={handleReloadOrStop}
       />
       {state?.errorText != null && hasPage ? (
-        <div className="border-b border-border bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <div
+          className={cn(
+            "border-b border-border bg-destructive/10 px-3 py-2 text-destructive",
+            COARSE_POINTER_TEXT_SM_CLASS,
+          )}
+        >
           {state.errorText}
         </div>
       ) : null}
