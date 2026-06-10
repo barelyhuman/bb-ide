@@ -103,6 +103,7 @@ function ShellRow({
             onPanelChange={noop}
             onCollapse={noop}
             onClose={noop}
+            onFileTabReorder={noop}
             renderNewTabMenu={() => <div>New tab actions</div>}
             isConversationCollapsed={false}
             onToggleConversationCollapse={noop}
@@ -224,6 +225,7 @@ function FileTabsShellInner({
         }}
         onCollapse={noop}
         onClose={noop}
+        onFileTabReorder={noop}
         renderNewTabMenu={() => <div>New tab actions</div>}
         isConversationCollapsed={false}
         onToggleConversationCollapse={noop}
@@ -333,6 +335,7 @@ function TerminalTabsShellInner({
         }}
         onCollapse={noop}
         onClose={noop}
+        onFileTabReorder={noop}
         renderNewTabMenu={() => <div>New tab actions</div>}
         isConversationCollapsed={false}
         onToggleConversationCollapse={noop}

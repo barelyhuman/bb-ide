@@ -27,7 +27,10 @@ import {
 import { SECONDARY_PANEL_TOP_CHROME_BACKGROUND_CLASS } from "./panelChromeClasses";
 import { resolveConversationCollapseControl } from "./panelToggleControlState";
 import { SecondaryPanelTabStrip } from "./SecondaryPanelTabStrip";
-import type { SecondaryPanelFileTab } from "./secondaryPanelFileTab";
+import type {
+  SecondaryPanelFileTab,
+  SecondaryPanelTabReorderHandler,
+} from "./secondaryPanelFileTab";
 import { type ThreadSecondaryPanel as ThreadSecondaryPanelTab } from "@/lib/thread-secondary-panel";
 import { GIT_DIFF_VIEW_BASE_OPTIONS } from "../git-diff/GitDiffCard";
 import { usePreferredTheme } from "@/hooks/useTheme";
@@ -94,6 +97,7 @@ export interface ThreadSecondaryPanelProps {
   metadataContent: ReactNode;
   fileTabs?: SecondaryPanelFileTab[];
   fileTabContent?: ReactNode;
+  onFileTabReorder: SecondaryPanelTabReorderHandler;
   /**
    * The persistent browser-tab deck. Rendered in the content region and kept
    * mounted across tab switches so each browser tab's native view (and page)
@@ -180,6 +184,7 @@ export function ThreadSecondaryPanel({
   metadataContent,
   fileTabs,
   fileTabContent,
+  onFileTabReorder,
   browserDeck,
   isBrowserTabActive = false,
   isOpen,
@@ -374,6 +379,7 @@ export function ThreadSecondaryPanel({
             {fileTabs && fileTabs.length > 0 ? (
               <SecondaryPanelTabStrip
                 fileTabs={fileTabs}
+                onReorderTab={onFileTabReorder}
                 usesDesktopChrome={usesDesktopChrome}
               />
             ) : null}

@@ -456,6 +456,7 @@ export function ThreadDetailView() {
     openStorageFile: openPersistedStorageFile,
     openWorkspaceFile: openPersistedWorkspaceFile,
     orderedSecondaryFileTabs,
+    reorderFileTab,
     selectFileSearchResult,
     updateBrowserTab,
   } = useThreadFileTabs({
@@ -1586,6 +1587,7 @@ export function ThreadDetailView() {
           onClose: closeSecondaryPanel,
           onCollapse: closeSecondaryPanel,
           onOpenFileInEditor: handleOpenFileInEditor,
+          onFileTabReorder: reorderFileTab,
           renderNewTabMenu,
           onOpenFilePreview: (relativePath: string) => {
             openWorkspaceFile({

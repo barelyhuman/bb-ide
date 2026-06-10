@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useSetAtom } from "jotai";
+import { arrayMove } from "@dnd-kit/sortable";
 import {
   useFixedPanelTabsState,
   useUpdateFixedPanelTabsState,
@@ -31,6 +32,10 @@ import {
 } from "@/lib/file-preview";
 import { getThreadSecondaryPanelOpenAtom } from "./threadSecondaryPanelAtoms";
 import { useRecordThreadRecentItem } from "./threadRecentItems";
+import type {
+  SecondaryPanelTabReorderHandler,
+  SecondaryPanelTabReorderRequest,
+} from "./secondaryPanelFileTab";
 
 interface AppTabDescriptor {
   applicationId: string;
@@ -52,6 +57,11 @@ interface SetSecondaryTabsArgs {
 
 interface ReplaceNewTabArgs {
   nextTab: FixedPanelTab;
+  state: FixedPanelTabsState;
+}
+
+interface ReorderSecondaryFileTabStateArgs
+  extends SecondaryPanelTabReorderRequest {
   state: FixedPanelTabsState;
 }
 
@@ -111,6 +121,22 @@ function isNewTab(tab: FixedPanelTab): tab is NewTabFixedPanelTab {
   return tab.kind === "new-tab";
 }
 
+function isSecondaryFileTab(tab: FixedPanelTab): tab is SecondaryFileFixedPanelTab {
+  switch (tab.kind) {
+    case "workspace-file-preview":
+    case "host-file-preview":
+    case "thread-storage-file-preview":
+    case "app":
+    case "browser":
+    case "terminal":
+    case "new-tab":
+      return true;
+    case "thread-info":
+    case "git-diff":
+      return false;
+  }
+}
+
 function getActiveSecondaryTab(
   state: FixedPanelTabsState,
 ): FixedPanelTab | null {
@@ -168,6 +194,31 @@ function removeSecondaryTab(
 ): readonly FixedPanelTab[] {
   const nextTabs = tabs.filter((tab) => tab.id !== tabId);
   return nextTabs.length === tabs.length ? tabs : nextTabs;
+}
+
+function reorderSecondaryFileTabInState({
+  activeTabId,
+  overTabId,
+  state,
+}: ReorderSecondaryFileTabStateArgs): FixedPanelTabsState {
+  if (activeTabId === overTabId) {
+    return state;
+  }
+  const activeIndex = state.secondary.tabs.findIndex(
+    (tab) => tab.id === activeTabId && isSecondaryFileTab(tab),
+  );
+  const overIndex = state.secondary.tabs.findIndex(
+    (tab) => tab.id === overTabId && isSecondaryFileTab(tab),
+  );
+  if (activeIndex === -1 || overIndex === -1) {
+    return state;
+  }
+  return setSecondaryTabs({
+    activeTabId: state.secondary.activeTabId,
+    isOpen: state.secondary.isOpen,
+    state,
+    tabs: arrayMove([...state.secondary.tabs], activeIndex, overIndex),
+  });
 }
 
 function removeWorkspaceTabsForOtherEnvironments(
@@ -936,6 +987,15 @@ export function useThreadFileTabs({
     });
   }, [updateFixedPanelTabsState]);
 
+  const reorderFileTab = useCallback<SecondaryPanelTabReorderHandler>(
+    (request) => {
+      updateFixedPanelTabsState((state) =>
+        reorderSecondaryFileTabInState({ ...request, state }),
+      );
+    },
+    [updateFixedPanelTabsState],
+  );
+
   const activeTab = getActiveSecondaryTab(fixedPanelTabsState);
   const orderedSecondaryFileTabs = buildOrderedSecondaryFileTabs({
     tabs: fixedPanelTabsState.secondary.tabs,
@@ -996,6 +1056,7 @@ export function useThreadFileTabs({
     openHostFile,
     openStorageFile,
     openWorkspaceFile,
+    reorderFileTab,
     selectFileSearchResult,
     updateBrowserTab,
   };

@@ -1,4 +1,14 @@
 import type { ReactNode } from "react";
+
+export interface SecondaryPanelTabReorderRequest {
+  activeTabId: string;
+  overTabId: string;
+}
+
+export type SecondaryPanelTabReorderHandler = (
+  request: SecondaryPanelTabReorderRequest,
+) => void;
+
 /**
  * A single closable tab rendered in the right panel's scrolling tab strip.
  */

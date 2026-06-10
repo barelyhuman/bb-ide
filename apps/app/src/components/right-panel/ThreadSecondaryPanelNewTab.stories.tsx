@@ -530,6 +530,7 @@ function NewTabPanelStory({
         metadataContent={null}
         onCollapse={noop}
         onClose={noop}
+        onFileTabReorder={noop}
         renderNewTabMenu={({ closeMenu }) => (
           <QueryClientProvider client={queryClient}>
             <NewTabActionMenu

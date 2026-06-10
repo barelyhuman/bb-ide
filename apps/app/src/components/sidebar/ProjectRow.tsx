@@ -78,7 +78,7 @@ import {
 import {
   type SidebarSortableDragBindings,
 } from "./sortableMotion";
-import type { ConsumeDragClickSuppression } from "./useDragClickSuppression";
+import type { ConsumeDragClickSuppression } from "@/components/ui/use-drag-click-suppression";
 
 // Pin the project row plus this many parent levels (parent threads,
 // worktree group headers); rows deeper than the cap render non-sticky so a deep

@@ -1,21 +1,47 @@
 import {
+  type CSSProperties,
+  type MouseEventHandler,
+  type RefObject,
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
+import {
+  closestCenter,
+  DndContext,
+  DragOverlay,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  horizontalListSortingStrategy,
+  SortableContext,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button.js";
 import { COARSE_POINTER_COMPACT_ICON_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { Icon } from "@/components/ui/icon.js";
 import { OverflowFade } from "@/components/ui/overflow-fade";
 import { TabPill } from "@/components/ui/tab-pill";
+import { useDragClickSuppression } from "@/components/ui/use-drag-click-suppression";
 import { cn } from "@/lib/utils";
 import {
   MACOS_APP_REGION_NO_DRAG_CLASS,
   MACOS_WINDOW_NO_DRAG_CLASS,
 } from "@/lib/bb-desktop";
-import type { SecondaryPanelFileTab } from "./secondaryPanelFileTab";
+import type {
+  SecondaryPanelFileTab,
+  SecondaryPanelTabReorderHandler,
+} from "./secondaryPanelFileTab";
 export type { SecondaryPanelFileTab } from "./secondaryPanelFileTab";
 
 // How far a chevron click nudges the strip, in CSS pixels. Roughly one wide
@@ -40,7 +66,15 @@ const INITIAL_OVERFLOW_STATE: TabStripOverflowState = {
 
 export interface SecondaryPanelTabStripProps {
   fileTabs: SecondaryPanelFileTab[];
+  onReorderTab: SecondaryPanelTabReorderHandler;
   usesDesktopChrome: boolean;
+}
+
+interface SortableFileTabProps {
+  activeTabRef: RefObject<HTMLDivElement | null>;
+  dragDisabled: boolean;
+  noDragClass: string | null;
+  tab: SecondaryPanelFileTab;
 }
 
 /**
@@ -54,6 +88,7 @@ export interface SecondaryPanelTabStripProps {
  */
 export function SecondaryPanelTabStrip({
   fileTabs,
+  onReorderTab,
   usesDesktopChrome,
 }: SecondaryPanelTabStripProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -61,6 +96,24 @@ export function SecondaryPanelTabStrip({
   const [overflow, setOverflow] = useState<TabStripOverflowState>(
     INITIAL_OVERFLOW_STATE,
   );
+  const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
+  const {
+    beginDragClickSuppression,
+    clearDragClickSuppressionSoon,
+    consumeDragClickSuppression,
+  } = useDragClickSuppression();
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 6 },
+    }),
+  );
+  const tabIds = useMemo(() => fileTabs.map((tab) => tab.id), [fileTabs]);
+  const dragDisabled = fileTabs.length < 2;
+  const draggingTab =
+    draggingTabId === null
+      ? null
+      : (fileTabs.find((tab) => tab.id === draggingTabId) ?? null);
 
   const recomputeOverflow = useCallback(() => {
     const viewport = viewportRef.current;
@@ -155,6 +208,43 @@ export function SecondaryPanelTabStrip({
       behavior: "smooth",
     });
   };
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      setDraggingTabId(String(event.active.id));
+      beginDragClickSuppression();
+    },
+    [beginDragClickSuppression],
+  );
+  const handleDragCancel = useCallback(() => {
+    setDraggingTabId(null);
+    clearDragClickSuppressionSoon();
+  }, [clearDragClickSuppressionSoon]);
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      setDraggingTabId(null);
+      clearDragClickSuppressionSoon();
+      if (!event.over) {
+        return;
+      }
+      const activeTabId = String(event.active.id);
+      const overTabId = String(event.over.id);
+      if (activeTabId === overTabId) {
+        return;
+      }
+      onReorderTab({ activeTabId, overTabId });
+    },
+    [clearDragClickSuppressionSoon, onReorderTab],
+  );
+  const handleClickCapture = useCallback<MouseEventHandler<HTMLDivElement>>(
+    (event) => {
+      if (!consumeDragClickSuppression()) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    [consumeDragClickSuppression],
+  );
 
   const noDragClass = usesDesktopChrome ? MACOS_WINDOW_NO_DRAG_CLASS : null;
   const chevronNoDragClass = usesDesktopChrome
@@ -178,17 +268,41 @@ export function SecondaryPanelTabStrip({
       ) : null}
       <div
         ref={viewportRef}
+        onClickCapture={handleClickCapture}
         className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden scroll-smooth"
       >
-        {fileTabs.map((tab) => (
-          <div
-            key={tab.id}
-            ref={tab.isActive ? activeTabRef : undefined}
-            className={cn("shrink-0", noDragClass)}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragCancel={handleDragCancel}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={tabIds}
+            strategy={horizontalListSortingStrategy}
           >
-            <FileTab tab={tab} />
-          </div>
-        ))}
+            {fileTabs.map((tab) => (
+              <SortableFileTab
+                key={tab.id}
+                activeTabRef={activeTabRef}
+                dragDisabled={dragDisabled}
+                noDragClass={noDragClass}
+                tab={tab}
+              />
+            ))}
+          </SortableContext>
+          {/* The lifted tab follows the pointer on both axes and must not be
+              clipped by the viewport's `overflow` or stretch its scroll width,
+              so render it as a fixed-position clone portaled out of the strip
+              rather than translating the in-place tab. */}
+          {createPortal(
+            <DragOverlay className="cursor-grabbing">
+              {draggingTab === null ? null : <FileTab tab={draggingTab} />}
+            </DragOverlay>,
+            document.body,
+          )}
+        </DndContext>
       </div>
       {overflow.canScrollLeft ? (
         <TabStripScrollChevron
@@ -204,6 +318,58 @@ export function SecondaryPanelTabStrip({
           onClick={() => scrollByStep(1)}
         />
       ) : null}
+    </div>
+  );
+}
+
+function SortableFileTab({
+  activeTabRef,
+  dragDisabled,
+  noDragClass,
+  tab,
+}: SortableFileTabProps) {
+  const {
+    isDragging,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({
+    id: tab.id,
+    disabled: dragDisabled,
+  });
+  const setTabRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      setNodeRef(element);
+      if (tab.isActive) {
+        activeTabRef.current = element;
+      }
+    },
+    [activeTabRef, setNodeRef, tab.isActive],
+  );
+  const style = useMemo<CSSProperties>(
+    () => ({
+      transform: CSS.Translate.toString(transform),
+      transition,
+    }),
+    [transform, transition],
+  );
+
+  return (
+    <div
+      ref={setTabRef}
+      style={style}
+      className={cn(
+        "shrink-0",
+        !dragDisabled && "cursor-grab active:cursor-grabbing",
+        // The lifted clone renders in the DragOverlay; fade the in-place source
+        // to a placeholder marking where the tab will land.
+        isDragging && "opacity-40",
+        noDragClass,
+      )}
+      {...listeners}
+    >
+      <FileTab tab={tab} />
     </div>
   );
 }

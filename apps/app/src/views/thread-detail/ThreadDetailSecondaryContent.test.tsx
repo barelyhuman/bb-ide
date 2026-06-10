@@ -289,6 +289,7 @@ function buildSecondaryContentProps({
       workspaceRootPath: undefined,
       onClose: noop,
       onCollapse: noop,
+      onFileTabReorder: noop,
       onOpenFileInEditor: noopOpenFile,
       onOpenFilePreview: noopOpenFile,
       renderNewTabMenu: () => <div>New tab menu</div>,

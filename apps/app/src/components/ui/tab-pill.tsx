@@ -82,6 +82,8 @@ export function TabPill({
       {closeAction ? (
         <button
           type="button"
+          onMouseDown={(event) => event.stopPropagation()}
+          onTouchStart={(event) => event.stopPropagation()}
           onClick={closeAction.onClose}
           disabled={closeAction.isClosing}
           aria-label={closeAction.closeLabel}

@@ -54,7 +54,7 @@ import {
   SIDEBAR_UNREAD_DOT_CLASS,
   getSidebarThreadRowPaddingLeft,
 } from "./sidebarRowClasses";
-import type { ConsumeDragClickSuppression } from "./useDragClickSuppression";
+import type { ConsumeDragClickSuppression } from "@/components/ui/use-drag-click-suppression";
 import type { SidebarSortableDragBindings } from "./sortableMotion";
 
 interface ThreadRowBaseOptions {

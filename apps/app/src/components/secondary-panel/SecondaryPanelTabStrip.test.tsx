@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import {
   afterEach,
   beforeEach,
@@ -12,8 +13,9 @@ import {
 } from "vitest";
 import {
   type SecondaryPanelFileTab,
-  SecondaryPanelTabStrip,
+  SecondaryPanelTabStrip as BaseSecondaryPanelTabStrip,
 } from "./SecondaryPanelTabStrip";
+import type { SecondaryPanelTabReorderHandler } from "./secondaryPanelFileTab";
 import {
   TAB_PILL_AFFORDANCE_ICON_CLASS,
   TAB_PILL_CLOSE_BUTTON_CLASS,
@@ -21,6 +23,16 @@ import {
 import { Icon } from "@/components/ui/icon";
 
 const noop = () => {};
+const noopReorder: SecondaryPanelTabReorderHandler = () => {};
+
+type TestSecondaryPanelTabStripProps = Omit<
+  ComponentProps<typeof BaseSecondaryPanelTabStrip>,
+  "onReorderTab"
+>;
+
+function SecondaryPanelTabStrip(props: TestSecondaryPanelTabStripProps) {
+  return <BaseSecondaryPanelTabStrip {...props} onReorderTab={noopReorder} />;
+}
 
 interface BuildTabArgs {
   id: string;

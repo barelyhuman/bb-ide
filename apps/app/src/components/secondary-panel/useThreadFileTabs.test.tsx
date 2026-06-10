@@ -288,6 +288,10 @@ function getStoredAppIds(state: FixedPanelTabsState): string[] {
   return state.secondary.tabs.filter(isAppTab).map((tab) => tab.applicationId);
 }
 
+function getStoredSecondaryTabIds(state: FixedPanelTabsState): string[] {
+  return state.secondary.tabs.map((tab) => tab.id);
+}
+
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
@@ -505,6 +509,49 @@ describe("useThreadFileTabs", () => {
       storageFileTabId("notes.md"),
       hostFileTabId("/tmp/host.md"),
     ]);
+  });
+
+  it("persists reordered file tabs", () => {
+    const threadId = "thr-manager-reorder";
+    const { result } = renderThreadFileTabsHook({
+      apps: [{ applicationId: "review" }],
+      environmentId: "env-one",
+      storageFiles: [{ path: "notes.md" }],
+      threadId,
+    });
+
+    act(() => {
+      result.current.selectFileSearchResult({
+        source: "app",
+        applicationId: "review",
+      });
+      result.current.openWorkspaceFile(
+        buildWorkspaceFileTab({ lineRange: null, path: "src/app.ts" }),
+      );
+      result.current.openStorageFile(buildStorageFileTab({ path: "notes.md" }));
+      result.current.openHostFile({ lineRange: null, path: "/tmp/host.md" });
+    });
+
+    act(() => {
+      result.current.reorderFileTab({
+        activeTabId: hostFileTabId("/tmp/host.md"),
+        overTabId: workspaceFileTabId("src/app.ts"),
+      });
+    });
+
+    expect(tabIds(result.current.orderedSecondaryFileTabs)).toEqual([
+      appTabId("review"),
+      hostFileTabId("/tmp/host.md"),
+      workspaceFileTabId("src/app.ts"),
+      storageFileTabId("notes.md"),
+    ]);
+    expect(getStoredSecondaryTabIds(readStoredState(threadId))).toEqual([
+      appTabId("review"),
+      hostFileTabId("/tmp/host.md"),
+      workspaceFileTabId("src/app.ts"),
+      storageFileTabId("notes.md"),
+    ]);
+    expect(result.current.activeHostFilePath).toBe("/tmp/host.md");
   });
 
   it("opens the transient new tab once and does not persist it", () => {

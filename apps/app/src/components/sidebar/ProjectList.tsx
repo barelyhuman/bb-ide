@@ -107,7 +107,7 @@ import {
   type SidebarSortableDragBindings,
 } from "./sortableMotion";
 import { useSidebarReorderDnd } from "./useSidebarReorderDnd";
-import type { ConsumeDragClickSuppression } from "./useDragClickSuppression";
+import type { ConsumeDragClickSuppression } from "@/components/ui/use-drag-click-suppression";
 import {
   useNeighborReorderSortable,
   type UseNeighborReorderSortableArgs,

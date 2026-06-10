@@ -171,6 +171,7 @@ function renderPanel({
       metadataContent={<div>Thread details</div>}
       onCollapse={noop}
       onClose={noop}
+      onFileTabReorder={noop}
       renderNewTabMenu={renderNewTabMenu}
       onPanelChange={noop}
       onPanelFocus={noop}
