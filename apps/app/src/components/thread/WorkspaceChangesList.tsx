@@ -8,11 +8,73 @@ import { formatWorkspaceFileStatus } from "@/components/workspace/workspace-chan
 export type WorkspaceChangedFile =
   WorkspaceStatus["workingTree"]["files"][number];
 
+export type WorkspaceChangedFileClickHandler = (
+  file: WorkspaceChangedFile,
+) => void;
+
 export interface WorkspaceChangesListProps {
   files: readonly WorkspaceChangedFile[];
   className?: string;
   emptyMessage?: string;
-  onFileClick?: (file: WorkspaceChangedFile) => void;
+  onFileClick?: WorkspaceChangedFileClickHandler;
+}
+
+interface WorkspaceChangesListItemProps {
+  file: WorkspaceChangedFile;
+  onFileClick?: WorkspaceChangedFileClickHandler;
+}
+
+const WORKSPACE_CHANGE_ROW_CLASS =
+  "grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-start gap-x-3";
+
+function WorkspaceChangesListItem({
+  file,
+  onFileClick,
+}: WorkspaceChangesListItemProps) {
+  const rowContent = (
+    <>
+      <span className="text-xs leading-5 text-muted-foreground">
+        {formatWorkspaceFileStatus(file.status)}
+      </span>
+      <FilePathLink
+        path={file.path}
+        className={onFileClick ? "group-hover:underline" : undefined}
+      />
+      {file.insertions !== null && file.deletions !== null ? (
+        <DiffStatsTally
+          insertions={file.insertions}
+          deletions={file.deletions}
+          hideZero
+          className="text-xs leading-5"
+        />
+      ) : null}
+    </>
+  );
+
+  if (!onFileClick) {
+    return (
+      <li className={WORKSPACE_CHANGE_ROW_CLASS}>
+        {rowContent}
+      </li>
+    );
+  }
+
+  return (
+    <li>
+      <button
+        type="button"
+        className={cn(
+          WORKSPACE_CHANGE_ROW_CLASS,
+          "group w-full rounded px-1 text-left transition-colors hover:bg-state-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        )}
+        title={file.path}
+        aria-label={`Open ${file.path}`}
+        onClick={() => onFileClick(file)}
+      >
+        {rowContent}
+      </button>
+    </li>
+  );
 }
 
 export function WorkspaceChangesList({
@@ -28,26 +90,11 @@ export function WorkspaceChangesList({
   return (
     <ul className={cn("space-y-1 overflow-auto", className)}>
       {files.map((file) => (
-        <li
+        <WorkspaceChangesListItem
           key={`${file.status}:${file.path}`}
-          className="grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-start gap-x-3"
-        >
-          <span className="text-xs leading-5 text-muted-foreground">
-            {formatWorkspaceFileStatus(file.status)}
-          </span>
-          <FilePathLink
-            path={file.path}
-            onClick={onFileClick ? () => onFileClick(file) : undefined}
-          />
-          {file.insertions !== null && file.deletions !== null ? (
-            <DiffStatsTally
-              insertions={file.insertions}
-              deletions={file.deletions}
-              hideZero
-              className="text-xs leading-5"
-            />
-          ) : null}
-        </li>
+          file={file}
+          onFileClick={onFileClick}
+        />
       ))}
     </ul>
   );

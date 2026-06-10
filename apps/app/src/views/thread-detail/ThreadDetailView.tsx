@@ -452,9 +452,9 @@ export function ThreadDetailView() {
     isNewTabActive,
     openBrowserTab,
     openNewTab,
-    openHostFile,
-    openStorageFile,
-    openWorkspaceFile,
+    openHostFile: openPersistedHostFile,
+    openStorageFile: openPersistedStorageFile,
+    openWorkspaceFile: openPersistedWorkspaceFile,
     orderedSecondaryFileTabs,
     selectFileSearchResult,
     updateBrowserTab,
@@ -464,48 +464,6 @@ export function ThreadDetailView() {
     environmentId: thread?.environmentId,
     storageFiles: threadStorageFiles?.files,
   });
-  // Click handler for inserted mention pills in the follow-up composer: threads
-  // navigate, files open an in-app preview (workspace files need an
-  // environment; thread-storage files need thread storage). Returning null
-  // leaves the pill non-interactive.
-  const resolveMentionLink = useCallback<PromptMentionLinkResolver>(
-    (resource) => {
-      if (resource.kind === "thread") {
-        const targetProjectId = resource.projectId ?? projectId;
-        if (!targetProjectId) return null;
-        return () =>
-          navigate(
-            getThreadRoutePath({
-              projectId: targetProjectId,
-              threadId: resource.threadId,
-            }),
-          );
-      }
-      if (resource.entryKind !== "file") return null;
-      if (resource.source === "thread-storage") {
-        return () =>
-          openStorageFile({
-            lineRange: null,
-            path: resource.path,
-          });
-      }
-      if (!thread?.environmentId) return null;
-      return () =>
-        openWorkspaceFile({
-          lineRange: null,
-          path: resource.path,
-          source: { kind: "working-tree" },
-          statusLabel: null,
-        });
-    },
-    [
-      navigate,
-      openStorageFile,
-      openWorkspaceFile,
-      projectId,
-      thread?.environmentId,
-    ],
-  );
   const [openLinksInAppBrowser] = useOpenLinksInAppBrowserPreference();
   // The in-app browser surface only exists on desktop; on web this stays false
   // and chat links keep their external-open behavior.
@@ -521,21 +479,6 @@ export function ThreadDetailView() {
       openBrowserTab(url);
     });
   }, [openBrowserTab]);
-  const handleSelectStorageBrowserPath =
-    useCallback<ThreadStoragePathSelectHandler>(
-      (path) => {
-        openStorageFile({
-          lineRange: null,
-          path,
-        });
-      },
-      [openStorageFile],
-    );
-  const storageBrowserController = useThreadStorageBrowser({
-    files: threadStorageFiles?.files,
-    onSelectPath: handleSelectStorageBrowserPath,
-    selectedPath: activeStorageFilePath,
-  });
   const isThreadRoot = isRootThread(thread);
   const shouldLoadParentThreads =
     threadQueryState.status === "ready" && isThreadRoot;
@@ -653,7 +596,10 @@ export function ThreadDetailView() {
     openCommitDiff: openSecondaryPanelCommitDiff,
     openDiffFile: openSecondaryPanelDiffFile,
     openDiffPanel: openSecondaryPanelDiffPanel,
+    openHostFile,
     openPanel: openSecondaryPanel,
+    openStorageFile,
+    openWorkspaceFile,
     togglePanel: toggleSecondaryPanel,
   } = useThreadSecondaryPanelVisibility({
     closePersistedPanel: closeThreadSecondaryPanel,
@@ -662,9 +608,27 @@ export function ThreadDetailView() {
     openPersistedCommitDiff,
     openPersistedDiffFile,
     openPersistedDiffPanel,
+    openPersistedHostFile,
     openPersistedPanel: openPersistedSecondaryPanel,
+    openPersistedStorageFile,
+    openPersistedWorkspaceFile,
     threadId,
     togglePersistedPanel: toggleDefaultPersistedSecondaryPanel,
+  });
+  const handleSelectStorageBrowserPath =
+    useCallback<ThreadStoragePathSelectHandler>(
+      (path) => {
+        openStorageFile({
+          lineRange: null,
+          path,
+        });
+      },
+      [openStorageFile],
+    );
+  const storageBrowserController = useThreadStorageBrowser({
+    files: threadStorageFiles?.files,
+    onSelectPath: handleSelectStorageBrowserPath,
+    selectedPath: activeStorageFilePath,
   });
   const [storedConversationCollapsed, setStoredConversationCollapsed] = useAtom(
     getThreadConversationCollapsedAtom(threadId),
@@ -694,6 +658,48 @@ export function ThreadDetailView() {
   const handleSecondaryPanelFocus = useCallback(() => {
     touchFixedPanelTabsState();
   }, [touchFixedPanelTabsState]);
+  // Click handler for inserted mention pills in the follow-up composer: threads
+  // navigate, files open an in-app preview (workspace files need an
+  // environment; thread-storage files need thread storage). Returning null
+  // leaves the pill non-interactive.
+  const resolveMentionLink = useCallback<PromptMentionLinkResolver>(
+    (resource) => {
+      if (resource.kind === "thread") {
+        const targetProjectId = resource.projectId ?? projectId;
+        if (!targetProjectId) return null;
+        return () =>
+          navigate(
+            getThreadRoutePath({
+              projectId: targetProjectId,
+              threadId: resource.threadId,
+            }),
+          );
+      }
+      if (resource.entryKind !== "file") return null;
+      if (resource.source === "thread-storage") {
+        return () =>
+          openStorageFile({
+            lineRange: null,
+            path: resource.path,
+          });
+      }
+      if (!thread?.environmentId) return null;
+      return () =>
+        openWorkspaceFile({
+          lineRange: null,
+          path: resource.path,
+          source: { kind: "working-tree" },
+          statusLabel: null,
+        });
+    },
+    [
+      navigate,
+      openStorageFile,
+      openWorkspaceFile,
+      projectId,
+      thread?.environmentId,
+    ],
+  );
   const handleOpenFileSearch = useCallback(() => {
     openNewTab();
     setNewTabFocusRequest((current) => current + 1);

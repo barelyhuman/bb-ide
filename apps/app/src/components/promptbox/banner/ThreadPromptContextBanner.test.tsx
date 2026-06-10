@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ThreadRuntimeDisplayStatus, WorkspaceFileStatus } from "@bb/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -98,6 +98,7 @@ function renderBanner(overrides: BannerOverrides): void {
 
 afterEach(() => {
   cleanup();
+  vi.clearAllMocks();
 });
 
 describe("ThreadPromptContextBanner", () => {
@@ -244,5 +245,27 @@ describe("ThreadPromptContextBanner", () => {
         .getByText("Merge base:")
         .parentElement?.hasAttribute("data-promptbox-hide-compact"),
     ).toBe(true);
+  });
+
+  it("opens changed files from the expanded git row", () => {
+    const onPromptBannerFileClick = vi.fn();
+    renderBanner({
+      gitSection: {
+        ...gitSection,
+        onPromptBannerFileClick,
+      },
+      expandedSection: "git",
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /ThreadPromptContextBanner\.tsx/,
+      }),
+    );
+
+    expect(onPromptBannerFileClick).toHaveBeenCalledWith({
+      file: changedFile,
+      section: gitSection.changedFiles,
+    });
   });
 });
