@@ -1,5 +1,6 @@
 import {
   getBuiltInAgentProviderInfo,
+  getBuiltInAgentProviderServerCapabilities,
   isAgentProviderId,
 } from "@bb/agent-providers";
 import type {
@@ -21,13 +22,18 @@ export const DEFAULT_REASONING_LEVEL: ReasoningLevel = "medium";
 
 /**
  * Whether provider sessions get the Workflows feature (dynamic multi-agent
- * orchestration). Server-owned product policy: enabled for claude-code — the
- * Workflow tool's own opt-in rules govern when the model actually uses it —
- * and meaningless for providers without the concept. Host-level user/org
- * disables still win inside the CLI.
+ * orchestration). Server-owned product policy that reads the provider's
+ * `supportsWorkflows` capability fact: the Workflow tool's own opt-in rules
+ * govern when the model actually uses it, and the feature is meaningless for
+ * providers without the concept. Host-level user/org disables still win inside
+ * the CLI.
  */
 export function resolveWorkflowsEnabledPolicy(providerId: string): boolean {
-  return providerId === "claude-code";
+  if (!isAgentProviderId(providerId)) {
+    return false;
+  }
+  return getBuiltInAgentProviderServerCapabilities(providerId)
+    .supportsWorkflows;
 }
 const DEFAULT_PERMISSION_MODE: PermissionMode = "full";
 const MANAGED_CHILD_PERMISSION_MODE: PermissionMode = "workspace-write";
