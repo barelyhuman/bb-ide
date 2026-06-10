@@ -86,6 +86,7 @@ function MobileRecentThreadStatus({ thread }: MobileRecentThreadStatusProps) {
       showUnreadBadge={
         !thread.hasPendingInteraction && !isBusy && isUnreadDoneThread(thread)
       }
+      unreadBadgeTone={thread.status === "error" ? "error" : "default"}
     />
   );
 }
