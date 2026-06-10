@@ -26,6 +26,14 @@ function workspaceFileTabId(path: string): string {
   return `workspace-file-preview:${encodeURIComponent(path)}`;
 }
 
+function storageFileTabId(path: string): string {
+  return `thread-storage-file-preview:${encodeURIComponent(path)}`;
+}
+
+function hostFileTabId(path: string): string {
+  return `host-file-preview:${encodeURIComponent(path)}`;
+}
+
 function appTabId(appId: string): string {
   return `app:${encodeURIComponent(appId)}`;
 }
@@ -46,7 +54,7 @@ function makeFixedPanelTabsState(
           environmentId: "env-current",
           id: workspaceFileTabId("src/app.ts"),
           kind: "workspace-file-preview",
-          lineNumber: 12,
+          lineRange: { startLineNumber: 12, endLineNumber: 14 },
           path: "src/app.ts",
           source: { kind: "working-tree" },
           statusLabel: null,
@@ -72,6 +80,17 @@ function makeFixedPanelTabsState(
 describe("fixed panel tabs state storage", () => {
   it("round-trips valid state", () => {
     const state = makeFixedPanelTabsState();
+    const restoredState: FixedPanelTabsState = {
+      ...state,
+      secondary: {
+        ...state.secondary,
+        tabs: state.secondary.tabs.map((tab) =>
+          tab.kind === "workspace-file-preview"
+            ? { ...tab, lineRange: null }
+            : tab,
+        ),
+      },
+    };
     const storedValue = serializeFixedPanelTabsState({ state });
 
     expect(
@@ -80,7 +99,7 @@ describe("fixed panel tabs state storage", () => {
         now: NOW,
         storedValue,
       }),
-    ).toEqual(state);
+    ).toEqual(restoredState);
   });
 
   it("round-trips app tabs", () => {
@@ -100,6 +119,127 @@ describe("fixed panel tabs state storage", () => {
         storedValue: serializeFixedPanelTabsState({ state }),
       }),
     ).toEqual(state);
+  });
+
+  it("normalizes legacy storage tabs without line numbers", () => {
+    const path = "notes.md";
+    const storageTabId = storageFileTabId(path);
+    const storedValue = JSON.stringify({
+      version: 1,
+      secondary: {
+        tabs: [
+          {
+            id: storageTabId,
+            isPinned: false,
+            kind: "thread-storage-file-preview",
+            lineNumber: 17,
+            path,
+          },
+        ],
+        activeTabId: storageTabId,
+        isOpen: true,
+      },
+      bottom: {
+        tabs: [],
+        activeTabId: null,
+      },
+      lastUsedAt: NOW,
+    });
+
+    expect(
+      parseFixedPanelTabsState({
+        initialValue: EMPTY_FIXED_PANEL_TABS_STATE,
+        now: NOW,
+        storedValue,
+      }),
+    ).toEqual({
+      version: 1,
+      secondary: {
+        tabs: [
+          {
+            id: storageTabId,
+            isPinned: false,
+            kind: "thread-storage-file-preview",
+            lineRange: null,
+            path,
+          },
+        ],
+        activeTabId: storageTabId,
+        isOpen: true,
+      },
+      bottom: {
+        tabs: [],
+        activeTabId: null,
+      },
+      lastUsedAt: NOW,
+    });
+  });
+
+  it("does not persist file preview line targets", () => {
+    const workspacePath = "src/app.ts";
+    const hostPath = "/Users/me/notes.md";
+    const storagePath = "plans/notes.md";
+    const state = makeFixedPanelTabsState({
+      secondary: {
+        tabs: [
+          {
+            environmentId: "env-current",
+            id: workspaceFileTabId(workspacePath),
+            kind: "workspace-file-preview",
+            lineRange: { startLineNumber: 12, endLineNumber: 14 },
+            path: workspacePath,
+            source: { kind: "working-tree" },
+            statusLabel: null,
+          },
+          {
+            id: hostFileTabId(hostPath),
+            kind: "host-file-preview",
+            lineRange: { startLineNumber: 27, endLineNumber: 30 },
+            path: hostPath,
+          },
+          {
+            id: storageFileTabId(storagePath),
+            isPinned: false,
+            kind: "thread-storage-file-preview",
+            lineRange: { startLineNumber: 34, endLineNumber: 36 },
+            path: storagePath,
+          },
+        ],
+        activeTabId: storageFileTabId(storagePath),
+        isOpen: true,
+      },
+    });
+
+    expect(
+      parseFixedPanelTabsState({
+        initialValue: EMPTY_FIXED_PANEL_TABS_STATE,
+        now: NOW,
+        storedValue: serializeFixedPanelTabsState({ state }),
+      }).secondary.tabs,
+    ).toEqual([
+      {
+        environmentId: "env-current",
+        id: workspaceFileTabId(workspacePath),
+        kind: "workspace-file-preview",
+        lineRange: null,
+        path: workspacePath,
+        source: { kind: "working-tree" },
+        statusLabel: null,
+      },
+      {
+        id: hostFileTabId(hostPath),
+        kind: "host-file-preview",
+        lineRange: null,
+        path: hostPath,
+      },
+      {
+        id: storageFileTabId(storagePath),
+        isPinned: false,
+        kind: "thread-storage-file-preview",
+        lineRange: null,
+        path: storagePath,
+      },
+    ]);
   });
 
   it("falls back for invalid JSON, invalid shapes, and unsupported regions", () => {
@@ -125,7 +265,7 @@ describe("fixed panel tabs state storage", () => {
               environmentId: "env-current",
               id: workspaceFileTabId("src/app.ts"),
               kind: "workspace-file-preview",
-              lineNumber: 0,
+              lineRange: { startLineNumber: 0, endLineNumber: 0 },
               path: "src/app.ts",
               source: { kind: "working-tree" },
               statusLabel: null,
@@ -206,7 +346,7 @@ describe("fixed panel tabs normalization", () => {
               environmentId: "env-current",
               id: workspaceFileTabId("src/app.ts"),
               kind: "workspace-file-preview",
-              lineNumber: 12,
+              lineRange: { startLineNumber: 12, endLineNumber: 14 },
               path: "src/app.ts",
               source: { kind: "working-tree" },
               statusLabel: null,
@@ -215,7 +355,7 @@ describe("fixed panel tabs normalization", () => {
               environmentId: "env-current",
               id: workspaceFileTabId("src/app.ts"),
               kind: "workspace-file-preview",
-              lineNumber: 13,
+              lineRange: { startLineNumber: 13, endLineNumber: 15 },
               path: "src/app.ts",
               source: { kind: "head" },
               statusLabel: null,
@@ -254,7 +394,7 @@ describe("fixed panel tabs normalization", () => {
         environmentId: "env-current",
         id: workspaceFileTabId("src/app.ts"),
         kind: "workspace-file-preview",
-        lineNumber: 12,
+        lineRange: { startLineNumber: 12, endLineNumber: 14 },
         path: "src/app.ts",
         source: { kind: "working-tree" },
         statusLabel: null,
@@ -338,7 +478,7 @@ describe("fixed panel tabs normalization", () => {
       environmentId: "env-current",
       id: workspaceFileTabId("src/app.ts"),
       kind: "workspace-file-preview",
-      lineNumber: 12,
+      lineRange: { startLineNumber: 12, endLineNumber: 14 },
       path: "src/app.ts",
       source: { kind: "working-tree" },
       statusLabel: null,
@@ -369,7 +509,7 @@ describe("fixed panel tabs normalization", () => {
     ).toEqual({
       ...state,
       secondary: {
-        tabs: [workspaceTab],
+        tabs: [{ ...workspaceTab, lineRange: null }],
         activeTabId: null,
         isOpen: true,
       },

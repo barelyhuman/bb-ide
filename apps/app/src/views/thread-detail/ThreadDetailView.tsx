@@ -107,9 +107,13 @@ import {
   resolveChatLinkOpenTarget,
   useOpenLinksInAppBrowserPreference,
 } from "@/lib/in-app-browser-link-preference";
+import { getFilePreviewLineRangeStart } from "@/lib/file-preview";
 import { getBrowserUrlHost } from "@/lib/browser-url";
 import { ResolvedAppIcon } from "@/components/secondary-panel/AppIcon";
-import { useThreadStorageBrowser } from "@/components/secondary-panel/useThreadStorageBrowser";
+import {
+  useThreadStorageBrowser,
+  type ThreadStoragePathSelectHandler,
+} from "@/components/secondary-panel/useThreadStorageBrowser";
 import { useThreadFileTabs } from "@/components/secondary-panel/useThreadFileTabs";
 import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/prompt-mention-link";
 import type {
@@ -420,10 +424,11 @@ export function ThreadDetailView() {
     activateWorkspaceFileTab,
     activeAppId,
     activeBrowserTab,
-    activeHostFileLineNumber,
+    activeHostFileLineRange,
     activeHostFilePath,
+    activeStorageFileLineRange,
     activeStorageFilePath,
-    activeWorkspaceFileLineNumber,
+    activeWorkspaceFileLineRange,
     activeWorkspaceFilePath,
     activeWorkspaceFileSource,
     activeWorkspaceFileStatusLabel,
@@ -469,12 +474,16 @@ export function ThreadDetailView() {
       }
       if (resource.entryKind !== "file") return null;
       if (resource.source === "thread-storage") {
-        return () => openStorageFile(resource.path);
+        return () =>
+          openStorageFile({
+            lineRange: null,
+            path: resource.path,
+          });
       }
       if (!thread?.environmentId) return null;
       return () =>
         openWorkspaceFile({
-          lineNumber: null,
+          lineRange: null,
           path: resource.path,
           source: { kind: "working-tree" },
           statusLabel: null,
@@ -503,9 +512,19 @@ export function ThreadDetailView() {
       openBrowserTab(url);
     });
   }, [openBrowserTab]);
+  const handleSelectStorageBrowserPath =
+    useCallback<ThreadStoragePathSelectHandler>(
+      (path) => {
+        openStorageFile({
+          lineRange: null,
+          path,
+        });
+      },
+      [openStorageFile],
+    );
   const storageBrowserController = useThreadStorageBrowser({
     files: threadStorageFiles?.files,
-    onSelectPath: openStorageFile,
+    onSelectPath: handleSelectStorageBrowserPath,
     selectedPath: activeStorageFilePath,
   });
   const isThreadRoot = isRootThread(thread);
@@ -752,7 +771,7 @@ export function ThreadDetailView() {
       const openTarget = resolveWorkspaceChangedFileOpenTarget(selection);
       if (openTarget.kind === "preview") {
         openWorkspaceFile({
-          lineNumber: null,
+          lineRange: null,
           path: selection.file.path,
           source: openTarget.source,
           statusLabel: openTarget.statusLabel,
@@ -1074,7 +1093,7 @@ export function ThreadDetailView() {
 
       if (resolution.kind === "open-workspace-path") {
         openWorkspaceFile({
-          lineNumber: resolution.request.lineNumber,
+          lineRange: resolution.request.lineRange,
           path: resolution.request.relativePath,
           source: { kind: "working-tree" },
           statusLabel: null,
@@ -1083,12 +1102,15 @@ export function ThreadDetailView() {
       }
 
       if (resolution.kind === "open-thread-storage-path") {
-        openStorageFile(resolution.request.relativePath);
+        openStorageFile({
+          lineRange: resolution.request.lineRange,
+          path: resolution.request.relativePath,
+        });
         return true;
       }
 
       openHostFile({
-        lineNumber: resolution.request.lineNumber,
+        lineRange: resolution.request.lineRange,
         path: resolution.request.path,
       });
       return true;
@@ -1351,7 +1373,9 @@ export function ThreadDetailView() {
     threadEnvironmentIsLocal && canOpenPreferredFileTarget
       ? (path: string) => {
           void openPathInPreferredFileTarget({
-            lineNumber: activeHostFileLineNumber,
+            lineNumber: getFilePreviewLineRangeStart({
+              lineRange: activeHostFileLineRange,
+            }),
             path,
           });
         }
@@ -1426,7 +1450,7 @@ export function ThreadDetailView() {
       activePath={activeWorkspaceFilePath}
       copyPath={workspaceFileCopyPath}
       environmentId={thread.environmentId}
-      lineNumber={activeWorkspaceFileLineNumber}
+      lineRange={activeWorkspaceFileLineRange}
       markdownLinkRouting={workspaceMarkdownLinkRouting}
       onOpenInEditor={handleOpenFileInEditor}
       source={activeWorkspaceFileSource}
@@ -1437,7 +1461,7 @@ export function ThreadDetailView() {
     <HostFilePreviewTabContent
       activePath={activeHostFilePath}
       environmentId={thread.environmentId}
-      lineNumber={activeHostFileLineNumber}
+      lineRange={activeHostFileLineRange}
       markdownLinkRouting={hostMarkdownLinkRouting}
       onOpenInEditor={handleOpenHostFileInEditor}
       threadId={thread.id}
@@ -1446,6 +1470,7 @@ export function ThreadDetailView() {
     <ThreadStorageFilePreviewTabContent
       activePath={activeStorageFilePath}
       copyPath={storageFileCopyPath}
+      lineRange={activeStorageFileLineRange}
       markdownLinkRouting={storageMarkdownLinkRouting}
       onOpenInEditor={handleOpenStorageFileInEditor}
       threadId={thread.id}
@@ -1521,7 +1546,7 @@ export function ThreadDetailView() {
           renderNewTabMenu,
           onOpenFilePreview: (relativePath: string) => {
             openWorkspaceFile({
-              lineNumber: null,
+              lineRange: null,
               path: relativePath,
               source: { kind: "working-tree" },
               statusLabel: null,

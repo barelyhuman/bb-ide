@@ -7,7 +7,9 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   EnvironmentFilePreviewSource,
+  FilePreviewLineRange,
   HostFileTabState,
+  ThreadStorageFileTabState,
   WorkspaceFileTabState,
   WorkspaceFilePreviewStatusLabel,
 } from "@/lib/file-preview";
@@ -50,23 +52,62 @@ interface HookProps {
 }
 
 interface BuildWorkspaceFileTabArgs {
-  lineNumber: number | null;
+  lineRange: FilePreviewLineRange | null;
   path: string;
   source?: EnvironmentFilePreviewSource;
   statusLabel?: WorkspaceFilePreviewStatusLabel | null;
 }
 
+interface BuildStorageFileTabArgs {
+  lineRange?: FilePreviewLineRange | null;
+  path: string;
+}
+
+interface BuildTestLineRangeArgs {
+  endLineNumber?: number;
+  startLineNumber: number;
+}
+
+function buildTestLineRange({
+  endLineNumber,
+  startLineNumber,
+}: BuildTestLineRangeArgs): FilePreviewLineRange {
+  return {
+    endLineNumber: endLineNumber ?? startLineNumber,
+    startLineNumber,
+  };
+}
+
 function buildWorkspaceFileTab({
-  lineNumber,
+  lineRange,
   path,
   source = WORKING_TREE_SOURCE,
   statusLabel = null,
 }: BuildWorkspaceFileTabArgs): WorkspaceFileTabState {
   return {
-    lineNumber,
+    lineRange,
     path,
     source,
     statusLabel,
+  };
+}
+
+function clearWorkspaceFileTabLineRange(
+  tab: WorkspaceFileTabState,
+): WorkspaceFileTabState {
+  return {
+    ...tab,
+    lineRange: null,
+  };
+}
+
+function buildStorageFileTab({
+  lineRange = null,
+  path,
+}: BuildStorageFileTabArgs): ThreadStorageFileTabState {
+  return {
+    lineRange,
+    path,
   };
 }
 
@@ -123,7 +164,7 @@ function workspaceFileStates(
   tabs: readonly SecondaryFileFixedPanelTab[],
 ): WorkspaceFileTabState[] {
   return tabs.filter(isWorkspaceFilePreviewTab).map((tab) => ({
-    lineNumber: tab.lineNumber,
+    lineRange: tab.lineRange,
     path: tab.path,
     source: tab.source,
     statusLabel: tab.statusLabel,
@@ -134,7 +175,7 @@ function hostFileStates(
   tabs: readonly SecondaryFileFixedPanelTab[],
 ): HostFileTabState[] {
   return tabs.filter(isHostFilePreviewTab).map((tab) => ({
-    lineNumber: tab.lineNumber,
+    lineRange: tab.lineRange,
     path: tab.path,
   }));
 }
@@ -143,6 +184,15 @@ function storageFilePaths(
   tabs: readonly SecondaryFileFixedPanelTab[],
 ): string[] {
   return tabs.filter(isStorageFilePreviewTab).map((tab) => tab.path);
+}
+
+function storageFileStates(
+  tabs: readonly SecondaryFileFixedPanelTab[],
+): ThreadStorageFileTabState[] {
+  return tabs.filter(isStorageFilePreviewTab).map((tab) => ({
+    lineRange: tab.lineRange,
+    path: tab.path,
+  }));
 }
 
 function appTabIds(tabs: readonly SecondaryFileFixedPanelTab[]): string[] {
@@ -181,7 +231,7 @@ function createStoredWorkspaceTab(
     environmentId,
     id: workspaceFileTabId(tab.path),
     kind: "workspace-file-preview",
-    lineNumber: tab.lineNumber,
+    lineRange: tab.lineRange,
     path: tab.path,
     source: tab.source,
     statusLabel: tab.statusLabel,
@@ -195,6 +245,7 @@ function createStoredStorageTab(
     id: storageFileTabId(path),
     isPinned: false,
     kind: "thread-storage-file-preview",
+    lineRange: null,
     path,
   };
 }
@@ -220,7 +271,7 @@ function getStoredWorkspaceTabs(
   state: FixedPanelTabsState,
 ): WorkspaceFileTabState[] {
   return state.secondary.tabs.filter(isWorkspaceFilePreviewTab).map((tab) => ({
-    lineNumber: tab.lineNumber,
+    lineRange: tab.lineRange,
     path: tab.path,
     source: tab.source,
     statusLabel: tab.statusLabel,
@@ -253,11 +304,13 @@ describe("useThreadFileTabs", () => {
 
     act(() => {
       result.current.openWorkspaceFile(
-        buildWorkspaceFileTab({ lineNumber: null, path: "src/app.ts" }),
+        buildWorkspaceFileTab({ lineRange: null, path: "src/app.ts" }),
       );
     });
     act(() => {
-      result.current.openStorageFile("plans/swap-model.md");
+      result.current.openStorageFile(
+        buildStorageFileTab({ path: "plans/swap-model.md" }),
+      );
     });
 
     // Newest-first, deduped, tagged by panel source.
@@ -279,7 +332,7 @@ describe("useThreadFileTabs", () => {
     act(() => {
       result.current.openWorkspaceFile(
         buildWorkspaceFileTab({
-          lineNumber: null,
+          lineRange: null,
           path: "src/diff.ts",
           source: MERGE_BASE_SOURCE,
         }),
@@ -296,7 +349,7 @@ describe("useThreadFileTabs", () => {
       threadId: "thr-one",
     });
     const workspaceTab = buildWorkspaceFileTab({
-      lineNumber: 42,
+      lineRange: buildTestLineRange({ startLineNumber: 42 }),
       path: "src/app.ts",
     });
 
@@ -313,7 +366,7 @@ describe("useThreadFileTabs", () => {
     );
     expect(result.current.activeWorkspaceFileStatusLabel).toBeNull();
     expect(getStoredWorkspaceTabs(readStoredState("thr-one"))).toEqual([
-      workspaceTab,
+      clearWorkspaceFileTabLineRange(workspaceTab),
     ]);
     expect(readStoredState("thr-one").secondary.isOpen).toBe(true);
   });
@@ -325,7 +378,7 @@ describe("useThreadFileTabs", () => {
       threadId: "thr-one",
     });
     const workspaceTab = buildWorkspaceFileTab({
-      lineNumber: null,
+      lineRange: null,
       path: "src/one.ts",
     });
 
@@ -366,7 +419,7 @@ describe("useThreadFileTabs", () => {
     act(() => {
       result.current.openWorkspaceFile(
         buildWorkspaceFileTab({
-          lineNumber: null,
+          lineRange: null,
           path: "src/workspace.ts",
         }),
       );
@@ -375,7 +428,7 @@ describe("useThreadFileTabs", () => {
     expect(result.current.activeStorageFilePath).toBeNull();
 
     act(() => {
-      result.current.openStorageFile("notes.md");
+      result.current.openStorageFile(buildStorageFileTab({ path: "notes.md" }));
     });
     expect(result.current.activeWorkspaceFilePath).toBeNull();
     expect(result.current.activeStorageFilePath).toBe("notes.md");
@@ -388,11 +441,11 @@ describe("useThreadFileTabs", () => {
       threadId: "thr-host-files",
     });
     const firstTab = {
-      lineNumber: 12,
+      lineRange: buildTestLineRange({ startLineNumber: 12 }),
       path: "/Users/me/notes/plan.md",
     };
     const secondTab = {
-      lineNumber: null,
+      lineRange: null,
       path: "/Users/me/notes/todo.md",
     };
 
@@ -406,14 +459,16 @@ describe("useThreadFileTabs", () => {
       secondTab,
     ]);
     expect(result.current.activeHostFilePath).toBe(secondTab.path);
-    expect(result.current.activeHostFileLineNumber).toBeNull();
+    expect(result.current.activeHostFileLineRange).toBeNull();
     expect(readStoredState("thr-host-files").secondary.isOpen).toBe(true);
 
     act(() => {
       result.current.activateHostFileTab(firstTab.path);
     });
     expect(result.current.activeHostFilePath).toBe(firstTab.path);
-    expect(result.current.activeHostFileLineNumber).toBe(12);
+    expect(result.current.activeHostFileLineRange).toEqual(
+      buildTestLineRange({ startLineNumber: 12 }),
+    );
 
     act(() => {
       result.current.closeHostFileTab(firstTab.path);
@@ -438,10 +493,10 @@ describe("useThreadFileTabs", () => {
         applicationId: "review",
       });
       result.current.openWorkspaceFile(
-        buildWorkspaceFileTab({ lineNumber: null, path: "src/app.ts" }),
+        buildWorkspaceFileTab({ lineRange: null, path: "src/app.ts" }),
       );
-      result.current.openStorageFile("notes.md");
-      result.current.openHostFile({ lineNumber: null, path: "/tmp/host.md" });
+      result.current.openStorageFile(buildStorageFileTab({ path: "notes.md" }));
+      result.current.openHostFile({ lineRange: null, path: "/tmp/host.md" });
     });
 
     expect(tabIds(result.current.orderedSecondaryFileTabs)).toEqual([
@@ -520,7 +575,7 @@ describe("useThreadFileTabs", () => {
         environmentId: "env-one",
         id: workspaceFileTabId("src/open.ts"),
         kind: "workspace-file-preview",
-        lineNumber: null,
+        lineRange: null,
         path: "src/open.ts",
         source: WORKING_TREE_SOURCE,
         statusLabel: null,
@@ -535,7 +590,7 @@ describe("useThreadFileTabs", () => {
       threadId: "thr-new-tab-dedupe",
     });
     const workspaceTab = buildWorkspaceFileTab({
-      lineNumber: 7,
+      lineRange: buildTestLineRange({ startLineNumber: 7 }),
       path: "src/existing.ts",
     });
 
@@ -549,7 +604,9 @@ describe("useThreadFileTabs", () => {
     });
 
     expect(result.current.activeWorkspaceFilePath).toBe("src/existing.ts");
-    expect(result.current.activeWorkspaceFileLineNumber).toBe(7);
+    expect(result.current.activeWorkspaceFileLineRange).toEqual(
+      buildTestLineRange({ startLineNumber: 7 }),
+    );
     expect(result.current.fixedPanelTabsState.secondary.tabs).toHaveLength(1);
   });
 
@@ -562,14 +619,55 @@ describe("useThreadFileTabs", () => {
     const path = "/Users/me/notes/plan.md";
 
     act(() => {
-      result.current.openHostFile({ lineNumber: 12, path });
-      result.current.openHostFile({ lineNumber: 20, path });
+      result.current.openHostFile({
+        lineRange: buildTestLineRange({ startLineNumber: 12 }),
+        path,
+      });
+      result.current.openHostFile({
+        lineRange: buildTestLineRange({ startLineNumber: 20 }),
+        path,
+      });
     });
 
     expect(hostFileStates(result.current.orderedSecondaryFileTabs)).toEqual([
-      { lineNumber: 20, path },
+      { lineRange: buildTestLineRange({ startLineNumber: 20 }), path },
     ]);
-    expect(result.current.activeHostFileLineNumber).toBe(20);
+    expect(result.current.activeHostFileLineRange).toEqual(
+      buildTestLineRange({ startLineNumber: 20 }),
+    );
+  });
+
+  it("updates storage-file line numbers without duplicating tabs", () => {
+    const { result } = renderThreadFileTabsHook({
+      environmentId: "env-one",
+      storageFiles: [{ path: "notes.md" }],
+      threadId: "thr-storage-file-dedupe",
+    });
+
+    act(() => {
+      result.current.openStorageFile(
+        buildStorageFileTab({
+          lineRange: buildTestLineRange({ startLineNumber: 12 }),
+          path: "notes.md",
+        }),
+      );
+      result.current.openStorageFile(
+        buildStorageFileTab({
+          lineRange: buildTestLineRange({ startLineNumber: 20 }),
+          path: "notes.md",
+        }),
+      );
+    });
+
+    expect(storageFileStates(result.current.orderedSecondaryFileTabs)).toEqual([
+      {
+        lineRange: buildTestLineRange({ startLineNumber: 20 }),
+        path: "notes.md",
+      },
+    ]);
+    expect(result.current.activeStorageFileLineRange).toEqual(
+      buildTestLineRange({ startLineNumber: 20 }),
+    );
   });
 
   it("clears workspace tabs when the environment changes", async () => {
@@ -581,7 +679,7 @@ describe("useThreadFileTabs", () => {
     act(() => {
       result.current.openWorkspaceFile(
         buildWorkspaceFileTab({
-          lineNumber: null,
+          lineRange: null,
           path: "src/app.ts",
         }),
       );
@@ -609,8 +707,8 @@ describe("useThreadFileTabs", () => {
     });
 
     act(() => {
-      result.current.openStorageFile("notes.md");
-      result.current.openStorageFile("plan.md");
+      result.current.openStorageFile(buildStorageFileTab({ path: "notes.md" }));
+      result.current.openStorageFile(buildStorageFileTab({ path: "plan.md" }));
     });
     expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual([
       "notes.md",
@@ -686,7 +784,7 @@ describe("useThreadFileTabs", () => {
     vi.spyOn(Date, "now").mockReturnValue(NOW);
     const threadId = "thr-workspace-cold-load";
     const workspaceTab = buildWorkspaceFileTab({
-      lineNumber: 7,
+      lineRange: buildTestLineRange({ startLineNumber: 7 }),
       path: "src/app.ts",
     });
     seedStoredState(
@@ -710,7 +808,7 @@ describe("useThreadFileTabs", () => {
       workspaceFileStates(result.current.orderedSecondaryFileTabs),
     ).toEqual([]);
     expect(getStoredWorkspaceTabs(readStoredState(threadId))).toEqual([
-      workspaceTab,
+      clearWorkspaceFileTabLineRange(workspaceTab),
     ]);
     expect(readStoredState(threadId).secondary.activeTabId).toBe(
       workspaceFileTabId("src/app.ts"),
@@ -725,7 +823,7 @@ describe("useThreadFileTabs", () => {
     await waitFor(() => {
       expect(
         workspaceFileStates(result.current.orderedSecondaryFileTabs),
-      ).toEqual([workspaceTab]);
+      ).toEqual([clearWorkspaceFileTabLineRange(workspaceTab)]);
     });
     expect(result.current.activeWorkspaceFilePath).toBe("src/app.ts");
   });
@@ -766,7 +864,7 @@ describe("useThreadFileTabs", () => {
     });
 
     act(() => {
-      result.current.openStorageFile("notes.md");
+      result.current.openStorageFile(buildStorageFileTab({ path: "notes.md" }));
     });
     expect(result.current.activeStorageFilePath).toBe("notes.md");
 
@@ -837,7 +935,7 @@ describe("useThreadFileTabs", () => {
     const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(NOW);
     const threadId = "thr-workspace-no-op";
     const workspaceTab = buildWorkspaceFileTab({
-      lineNumber: 3,
+      lineRange: null,
       path: "src/app.ts",
       source: MERGE_BASE_SOURCE,
       statusLabel: DELETED_STATUS_LABEL,
@@ -901,7 +999,7 @@ describe("useThreadFileTabs", () => {
     dateNowSpy.mockReturnValue(NOW + 60_000);
 
     act(() => {
-      result.current.openStorageFile("notes.md");
+      result.current.openStorageFile(buildStorageFileTab({ path: "notes.md" }));
       result.current.activateStorageFileTab("notes.md");
       result.current.closeStorageFileTab("missing.md");
     });

@@ -453,6 +453,9 @@ export function ThreadSecondaryPanel({
                 ? "min-h-0 flex-1 overflow-hidden"
                 : cn(PANEL_SCROLL_SLOT_CLASS, "pb-3")
             }
+            data-file-preview-scroll-container={
+              isTerminalTabActive ? undefined : ""
+            }
           >
             {fileTabContent ?? (
               <EmptyStatePanel className="mx-4 rounded-lg">

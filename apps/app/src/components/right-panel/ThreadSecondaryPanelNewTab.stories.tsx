@@ -217,7 +217,7 @@ function createStoryActiveTab(
       environmentId: ENVIRONMENT_ID,
       id: `workspace:${selection.path}`,
       kind: "workspace-file-preview",
-      lineNumber: null,
+      lineRange: null,
       path: selection.path,
       source: { kind: "working-tree" },
       statusLabel: null,
@@ -228,6 +228,7 @@ function createStoryActiveTab(
     id: `thread-storage:${selection.path}`,
     isPinned: false,
     kind: "thread-storage-file-preview",
+    lineRange: null,
     path: selection.path,
   };
 }

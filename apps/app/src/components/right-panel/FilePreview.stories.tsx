@@ -11,7 +11,9 @@ export default {
 function PreviewStage({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-[360px] w-full max-w-[640px] min-w-0 flex-col overflow-hidden bg-background px-4 pb-3 pt-1">
-      <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto" data-file-preview-scroll-container>
+        {children}
+      </div>
     </div>
   );
 }
@@ -42,7 +44,7 @@ import { FilePreview } from "...";
 <FilePreview
   state={{
     kind: "ready",
-    lineNumber: null,
+    lineRange: null,
     showMarkdownModeToggle: true,
     file,
   }}
@@ -130,7 +132,7 @@ export function Overview() {
             onOpenInEditor={noopOpenInEditor}
             state={{
               kind: "ready",
-              lineNumber: null,
+              lineRange: null,
               showMarkdownModeToggle: true,
               file: { name: "README.md", contents: SAMPLE_README_MD },
             }}
@@ -147,7 +149,7 @@ export function Overview() {
             onOpenInEditor={noopOpenInEditor}
             state={{
               kind: "ready",
-              lineNumber: null,
+              lineRange: null,
               showMarkdownModeToggle: true,
               file: {
                 name: "Button.tsx",
@@ -169,7 +171,7 @@ export function Overview() {
             statusLabel="deleted"
             state={{
               kind: "ready",
-              lineNumber: null,
+              lineRange: null,
               showMarkdownModeToggle: true,
               file: {
                 name: "legacy-button.tsx",

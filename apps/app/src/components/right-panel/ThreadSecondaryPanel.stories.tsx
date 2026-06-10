@@ -42,7 +42,7 @@ function createStoryFileTab(filename: string): HostFilePreviewFixedPanelTab {
   return {
     id: `host-file-preview:${encodeURIComponent(filename)}`,
     kind: "host-file-preview",
-    lineNumber: null,
+    lineRange: null,
     path: filename,
   };
 }

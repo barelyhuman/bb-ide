@@ -5,8 +5,16 @@ import {
   useRef,
   useState,
 } from "react";
-import { File as PierreFile } from "@pierre/diffs/react";
-import type { SelectedLineRange, SupportedLanguages } from "@pierre/diffs";
+import { CodeView as PierreCodeView } from "@pierre/diffs/react";
+import type { CodeViewHandle } from "@pierre/diffs/react";
+import type {
+  CodeViewItem,
+  CodeViewLineSelection,
+  CodeViewOptions,
+  CodeViewScrollTarget,
+  SelectedLineRange,
+  SupportedLanguages,
+} from "@pierre/diffs";
 import type { UrlTransform } from "react-markdown";
 import { Button } from "@/components/ui/button.js";
 import { EmptyStatePanel } from "@/components/ui/empty-state.js";
@@ -17,7 +25,10 @@ import { MarkdownPreview } from "@/components/ui/markdown-preview.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
 import { TruncateStart } from "@/components/ui/truncate-start.js";
 import { usePreferredTheme } from "@/hooks/useTheme";
-import type { WorkspaceFilePreviewStatusLabel } from "@/lib/file-preview";
+import type {
+  FilePreviewLineRange,
+  WorkspaceFilePreviewStatusLabel,
+} from "@/lib/file-preview";
 
 export interface FilePreviewFile {
   name: string;
@@ -44,12 +55,12 @@ export type FilePreviewState =
       kind: "html";
       file: FilePreviewFile;
       iframe: IframeFilePreviewTarget;
-      lineNumber: number | null;
+      lineRange: FilePreviewLineRange | null;
     }
   | {
       kind: "ready";
       file: FilePreviewFile;
-      lineNumber: number | null;
+      lineRange: FilePreviewLineRange | null;
       showMarkdownModeToggle: boolean;
       markdownUrlTransform?: UrlTransform;
     };
@@ -99,7 +110,13 @@ interface FilePreviewMessageProps {
 
 interface FilePreviewCodeProps {
   file: FilePreviewFile;
-  lineNumber: number | null;
+  lineRange: FilePreviewLineRange | null;
+}
+
+interface BuildCodeViewFileVersionArgs {
+  contents: string;
+  lang: SupportedLanguages | undefined;
+  name: string;
 }
 
 type FilePreviewViewMode = "preview" | "source";
@@ -122,6 +139,14 @@ const FILE_PREVIEW_VIEW_STYLE = {
   "--diffs-gap-block": "16px",
 } as CSSProperties;
 
+const FILE_PREVIEW_CODE_VIEW_STYLE = {
+  ...FILE_PREVIEW_VIEW_STYLE,
+  height: "100%",
+  minHeight: 0,
+  overflowX: "hidden",
+  overflowY: "auto",
+} as CSSProperties;
+
 // `--md-content-w` tells MarkdownPreview the surrounding text-column width so
 // narrow tables sit flush with the prose on the left instead of centering in
 // the panel. `100cqi` resolves against the `@container/page` scope on the
@@ -136,6 +161,7 @@ const HTML_FILE_PREVIEW_IFRAME_STYLE = {
   border: 0,
 } as CSSProperties;
 const IFRAME_LOADING_INDICATOR_DELAY_MS = 160;
+const FILE_PREVIEW_CODE_VIEW_ITEM_ID = "file-preview";
 
 function isMarkdownFile(name: string): boolean {
   const extension = name.split(".").pop()?.toLowerCase();
@@ -166,6 +192,30 @@ function getRawToggleTitle(kind: FilePreviewToggleKind): string {
   return kind === "html" ? "HTML source" : "Markdown source";
 }
 
+function getFilePreviewLineRange(
+  state: FilePreviewState,
+): FilePreviewLineRange | null {
+  if (state.kind === "html" || state.kind === "ready") {
+    return state.lineRange;
+  }
+  return null;
+}
+
+function usesCodeViewLayout(
+  state: FilePreviewState,
+  viewMode: FilePreviewViewMode,
+): boolean {
+  if (state.kind === "html") {
+    return viewMode === "source";
+  }
+
+  if (state.kind !== "ready") {
+    return false;
+  }
+
+  return !isMarkdownFile(state.file.name) || viewMode === "source";
+}
+
 export function FilePreview({
   state,
   path,
@@ -176,23 +226,28 @@ export function FilePreview({
   statusLabel = null,
 }: FilePreviewProps) {
   const toggleKind = getFilePreviewToggleKind(state);
-  const [viewMode, setViewMode] = useState<FilePreviewViewMode>("preview");
+  const filePreviewLineRange = getFilePreviewLineRange(state);
+  const [viewMode, setViewMode] = useState<FilePreviewViewMode>(
+    filePreviewLineRange === null ? "preview" : "source",
+  );
   // Each new file opens in rendered preview by default; the user re-toggles per
   // file rather than carrying their last choice across unrelated files.
   useEffect(() => {
-    setViewMode("preview");
-  }, [path]);
+    setViewMode(filePreviewLineRange === null ? "preview" : "source");
+  }, [filePreviewLineRange, path]);
 
   const usesIframeLayout =
     state.kind === "iframe" ||
     (state.kind === "html" && viewMode === "preview");
+  const usesFullHeightLayout =
+    usesIframeLayout || usesCodeViewLayout(state, viewMode);
 
   // Establish a `@container/page` scope so MarkdownPreview's `100cqw`-based
   // table breakout sizes against this panel, not the viewport.
   return (
     <div
       className={
-        usesIframeLayout
+        usesFullHeightLayout
           ? "@container/page flex h-full min-h-0 flex-col"
           : "@container/page"
       }
@@ -264,7 +319,7 @@ function FilePreviewBody({
         />
       );
     }
-    return <FilePreviewCode file={state.file} lineNumber={state.lineNumber} />;
+    return <FilePreviewCode file={state.file} lineRange={state.lineRange} />;
   }
   if (isMarkdownFile(state.file.name) && viewMode === "preview") {
     return (
@@ -276,7 +331,7 @@ function FilePreviewBody({
     );
   }
   return (
-    <FilePreviewCode file={state.file} lineNumber={state.lineNumber ?? null} />
+    <FilePreviewCode file={state.file} lineRange={state.lineRange ?? null} />
   );
 }
 
@@ -441,34 +496,6 @@ function IframeFilePreview({ sandbox, title, url }: IframeFilePreviewTarget) {
   );
 }
 
-function clearPreviewTargetLine(container: HTMLElement) {
-  const targetLines = container.querySelectorAll(
-    "[data-file-preview-target-line]",
-  );
-  for (const targetLine of targetLines) {
-    targetLine.removeAttribute("data-file-preview-target-line");
-    targetLine.removeAttribute("data-selected-line");
-  }
-}
-
-function findPreviewTargetLine(
-  container: HTMLElement,
-  lineNumber: number,
-): HTMLElement | null {
-  const lines = container.querySelectorAll(`[data-line="${lineNumber}"]`);
-  for (const line of lines) {
-    if (line instanceof HTMLElement && line.dataset.lineIndex !== undefined) {
-      return line;
-    }
-  }
-  for (const line of lines) {
-    if (line instanceof HTMLElement) {
-      return line;
-    }
-  }
-  return null;
-}
-
 function FilePreviewLoading() {
   return (
     <div className="space-y-2 px-4 pt-4" aria-busy>
@@ -490,85 +517,100 @@ function FilePreviewMessage({ message, role }: FilePreviewMessageProps) {
   );
 }
 
-function FilePreviewCode({ file, lineNumber }: FilePreviewCodeProps) {
+function buildCodeViewFileVersion({
+  contents,
+  lang,
+  name,
+}: BuildCodeViewFileVersionArgs): number {
+  const input = `${name}\u0000${lang ?? ""}\u0000${contents}`;
+  let hash = 0;
+  for (let index = 0; index < input.length; index += 1) {
+    hash = (Math.imul(31, hash) + input.charCodeAt(index)) | 0;
+  }
+  return hash;
+}
+
+function FilePreviewCode({ file, lineRange }: FilePreviewCodeProps) {
   const preferredTheme = usePreferredTheme();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const options = useMemo(
+  const codeViewRef = useRef<CodeViewHandle<undefined> | null>(null);
+  const fileVersion = useMemo(
+    () =>
+      buildCodeViewFileVersion({
+        contents: file.contents,
+        lang: file.lang,
+        name: file.name,
+      }),
+    [file.contents, file.lang, file.name],
+  );
+  const options = useMemo<CodeViewOptions<undefined>>(
     () => ({
       themeType: preferredTheme,
-      overflow: "scroll" as const,
+      overflow: "scroll",
       disableFileHeader: true,
-      enableLineSelection: lineNumber !== null,
+      enableLineSelection: lineRange !== null,
+      controlledSelection: true,
+      layout: {
+        paddingTop: 0,
+        paddingBottom: 0,
+        gap: 0,
+      },
     }),
-    [lineNumber, preferredTheme],
+    [lineRange, preferredTheme],
   );
-  const selectedLines = useMemo<SelectedLineRange | null>(
+  const selectedRange = useMemo<SelectedLineRange | null>(
     () =>
-      lineNumber === null
+      lineRange === null
         ? null
         : {
-            start: lineNumber,
-            end: lineNumber,
+            start: lineRange.startLineNumber,
+            end: lineRange.endLineNumber,
           },
-    [lineNumber],
+    [lineRange],
+  );
+  const selectedLines = useMemo<CodeViewLineSelection | null>(
+    () =>
+      selectedRange === null
+        ? null
+        : {
+            id: FILE_PREVIEW_CODE_VIEW_ITEM_ID,
+            range: selectedRange,
+          },
+    [selectedRange],
+  );
+  const items = useMemo<CodeViewItem<undefined>[]>(
+    () => [
+      {
+        id: FILE_PREVIEW_CODE_VIEW_ITEM_ID,
+        type: "file",
+        file,
+        version: fileVersion,
+      },
+    ],
+    [file, fileVersion],
   );
 
   useEffect(() => {
-    const cleanupContainer = containerRef.current;
-    let animationFrame: number | null = null;
-    let retryTimer: number | null = null;
-    let attempts = 0;
-
-    function scheduleRetry() {
-      animationFrame = window.requestAnimationFrame(scrollToLine);
-      retryTimer = window.setTimeout(scrollToLine, 16);
+    if (selectedRange === null) {
+      return;
     }
 
-    function scrollToLine() {
-      const container = containerRef.current;
-      if (!container) return;
-      clearPreviewTargetLine(container);
-      clearPreviewTargetLine(container.ownerDocument.body);
-      if (lineNumber === null) return;
-
-      const line =
-        findPreviewTargetLine(container, lineNumber) ??
-        findPreviewTargetLine(container.ownerDocument.body, lineNumber);
-      if (line) {
-        line.setAttribute("data-file-preview-target-line", "");
-        line.setAttribute("data-selected-line", "single");
-        line.scrollIntoView?.({ block: "center" });
-        return;
-      }
-
-      attempts += 1;
-      if (attempts < 8) {
-        scheduleRetry();
-      }
-    }
-
-    scrollToLine();
-    return () => {
-      if (cleanupContainer) {
-        clearPreviewTargetLine(cleanupContainer);
-        clearPreviewTargetLine(cleanupContainer.ownerDocument.body);
-      }
-      if (animationFrame !== null) {
-        window.cancelAnimationFrame(animationFrame);
-      }
-      if (retryTimer !== null) {
-        window.clearTimeout(retryTimer);
-      }
+    const scrollTarget: CodeViewScrollTarget = {
+      type: "range",
+      id: FILE_PREVIEW_CODE_VIEW_ITEM_ID,
+      range: selectedRange,
+      align: "start",
     };
-  }, [file.contents, file.name, lineNumber]);
+    codeViewRef.current?.scrollTo(scrollTarget);
+  }, [fileVersion, selectedRange]);
 
   return (
-    <div
-      ref={containerRef}
-      style={FILE_PREVIEW_VIEW_STYLE}
-      data-file-preview-line-number={lineNumber ?? undefined}
-    >
-      <PierreFile file={file} options={options} selectedLines={selectedLines} />
-    </div>
+    <PierreCodeView
+      ref={codeViewRef}
+      className="min-h-0 flex-1"
+      style={FILE_PREVIEW_CODE_VIEW_STYLE}
+      items={items}
+      options={options}
+      selectedLines={selectedLines}
+    />
   );
 }

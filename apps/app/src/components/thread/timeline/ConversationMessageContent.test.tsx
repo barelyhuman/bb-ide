@@ -51,6 +51,29 @@ describe("ConversationMessageContent", () => {
     expect(notDefaultPrevented).toBe(false);
   });
 
+  it("routes assistant local file links with line fragments through onOpenLocalFileLink", () => {
+    const onOpenLocalFileLink = vi.fn(() => true);
+    render(
+      <ConversationMessageContent
+        role="assistant"
+        attachments={null}
+        text="[File](file:///Users/michael/.bb-dev/projects-bb-492f14c06eb6/worktrees/env_ncc55uc2cs/bb/apps/app/src/components/sidebar/ProjectList.test.tsx#L327-L330)"
+        turnRequest={null}
+        onOpenLocalFileLink={onOpenLocalFileLink}
+      />,
+    );
+
+    const notDefaultPrevented = fireEvent.click(
+      screen.getByRole("link", { name: "File" }),
+    );
+
+    expect(onOpenLocalFileLink).toHaveBeenCalledWith({
+      lineRange: { startLineNumber: 327, endLineNumber: 330 },
+      path: "/Users/michael/.bb-dev/projects-bb-492f14c06eb6/worktrees/env_ncc55uc2cs/bb/apps/app/src/components/sidebar/ProjectList.test.tsx",
+    });
+    expect(notDefaultPrevented).toBe(false);
+  });
+
   it("renders user message content as plain text with no link surface", () => {
     render(
       <ConversationMessageContent
