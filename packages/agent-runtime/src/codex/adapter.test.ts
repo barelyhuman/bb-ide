@@ -1662,7 +1662,8 @@ describe("codex provider adapter", () => {
       providerThreadId: "codex-thread-1",
       activeTurnId: "turn-1",
     });
-    expect(cmd).toMatchObject({
+    expect(cmd).toEqual({
+      kind: "request",
       method: "turn/interrupt",
       params: {
         threadId: "codex-thread-1",

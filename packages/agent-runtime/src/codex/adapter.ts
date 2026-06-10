@@ -1320,10 +1320,8 @@ export function createCodexProviderAdapter(
     id: providerInfo.id,
     displayName: providerInfo.displayName,
     capabilities,
-    // The Codex app-server accepts new turns after turn/interrupt, but the
-    // next turn can sit idle for ~30s while the interrupted session drains.
-    // Restarting forces the next command through thread/resume on a fresh
-    // app-server process.
+    // One Codex app-server process is shared by all loaded threads in an
+    // environment, so thread stops must remain turn-scoped.
     process: {
       command: opts?.processCommand ?? "codex",
       args: opts?.processArgs ?? ["app-server"],
@@ -1487,7 +1485,6 @@ export function createCodexProviderAdapter(
           return {
             kind: "request",
             method: "turn/interrupt",
-            processEffect: "restart-provider",
             params: {
               threadId: command.providerThreadId,
               turnId: command.activeTurnId,

@@ -41,13 +41,10 @@ export type ProviderAdapterFactory = (
   options: ProviderAdapterFactoryOptions,
 ) => ProviderAdapter;
 
-export type ProviderCommandProcessEffect = "restart-provider";
-
 export interface ProviderRequestCommandPlan {
   kind: "request";
   method: string;
   params?: object;
-  processEffect?: ProviderCommandProcessEffect;
 }
 
 export interface ProviderNoopCommandPlan {

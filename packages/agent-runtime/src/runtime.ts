@@ -33,7 +33,6 @@ import {
   type RuntimeProviderRequestKind,
 } from "./runtime-provider-requests.js";
 import {
-  ProviderProcessExitedError,
   RuntimeProviderProcessManager,
   type RuntimeProviderProcess,
 } from "./runtime-provider-process.js";
@@ -1135,41 +1134,20 @@ function createAgentRuntimeInternal(
         return;
       }
 
-      // A restart-provider stop expects the provider process to exit during or
-      // after the interrupt. Mark that exit expected before sending the request,
-      // then tolerate only request rejection caused by that process exit.
-      const restartsProvider = cmd.processEffect === "restart-provider";
-      const markedShutdownExpected = restartsProvider
-        ? providerProcesses.markProviderShutdownExpected({ providerId: pid })
-        : false;
-      try {
-        await sendCommand({
-          proc,
-          message: cmd,
-          resultSchema: ignoredJsonRpcResultSchema,
-        });
-        emitAcceptedCommandEvents({
-          command: adapterCommand,
-          proc,
-          providerId: pid,
-          rawMethod: cmd.method,
-          sourceThreadId: threadId,
-        });
-      } catch (error) {
-        if (!(restartsProvider && error instanceof ProviderProcessExitedError)) {
-          if (markedShutdownExpected) {
-            providerProcesses.clearProviderShutdownExpected({
-              providerId: pid,
-            });
-          }
-          throw error;
-        }
-      }
+      await sendCommand({
+        proc,
+        message: cmd,
+        resultSchema: ignoredJsonRpcResultSchema,
+      });
+      emitAcceptedCommandEvents({
+        command: adapterCommand,
+        proc,
+        providerId: pid,
+        rawMethod: cmd.method,
+        sourceThreadId: threadId,
+      });
       turnState.clearThread(threadId);
       turnReplayFilter.clearThread(threadId);
-      if (restartsProvider) {
-        await providerProcesses.shutdownProvider({ providerId: pid });
-      }
     },
 
     async renameThread({ threadId, title }) {

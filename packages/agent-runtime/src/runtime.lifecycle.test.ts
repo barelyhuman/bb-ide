@@ -5,9 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ThreadEvent } from "@bb/domain";
 import type {
   AdapterCommand,
-  ProviderAdapter,
   ProviderCommandPlan,
-  ProviderCommandProcessEffect,
 } from "./provider-adapter.js";
 import { promptTextInput } from "./test/prompt-input.js";
 import { createAgentRuntimeWithAdapters } from "./runtime.js";
@@ -18,29 +16,10 @@ import {
   findLastRecordedCommand,
   fullRuntimeOptions,
   wait,
-  waitForRuntimeState,
   waitForThreadAgentMessageText,
   waitForThreadTurnCompleted,
   waitForThreadTurnStarted,
 } from "./test/runtime-test-harness.js";
-import type { AgentRuntimeProcessExitInfo } from "./types.js";
-
-interface RestartProviderScriptArgs {
-  globalScript: string;
-  scriptPath: string;
-  threadStartScript: string;
-  threadStopScript: string;
-}
-
-interface SingleThreadRestartProviderScriptArgs {
-  scriptName: string;
-  threadStopScript: string;
-}
-
-interface RestartOnStopRuntimeArgs {
-  exits: AgentRuntimeProcessExitInfo[];
-  scriptPath: string;
-}
 
 describe("createAgentRuntime lifecycle", () => {
   let tmpDir: string;
@@ -54,78 +33,6 @@ describe("createAgentRuntime lifecycle", () => {
   afterEach(() => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
-
-  function writeRestartProviderScript(args: RestartProviderScriptArgs): string {
-    writeFileSync(
-      args.scriptPath,
-      `const rl = require("readline").createInterface({ input: process.stdin });
-${args.globalScript}
-
-rl.on("line", (line) => {
-  const msg = JSON.parse(line);
-  if (msg.method === "initialize") {
-    process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: {} }) + "\\n");
-  } else if (msg.method === "thread/start") {
-${args.threadStartScript}
-  } else if (msg.method === "thread/stop") {
-${args.threadStopScript}
-  }
-});`,
-    );
-    return args.scriptPath;
-  }
-
-  function writeSingleThreadRestartProviderScript(
-    args: SingleThreadRestartProviderScriptArgs,
-  ): string {
-    return writeRestartProviderScript({
-      globalScript: "",
-      scriptPath: join(tmpDir, args.scriptName),
-      threadStartScript: `
-    process.stdout.write(JSON.stringify({
-      jsonrpc: "2.0", id: msg.id,
-      result: { providerThreadId: "prov-stop" }
-    }) + "\\n");
-    process.stdout.write(JSON.stringify({
-      jsonrpc: "2.0", method: "thread/identity",
-      params: { threadId: msg.params?.threadId, providerThreadId: "prov-stop" }
-    }) + "\\n");`,
-      threadStopScript: args.threadStopScript,
-    });
-  }
-
-  function createRestartOnStopAdapter(
-    adapter: ProviderAdapter,
-  ): ProviderAdapter {
-    return {
-      ...adapter,
-      buildCommandPlan(command): ProviderCommandPlan {
-        const plan = adapter.buildCommandPlan(command);
-        if (command.type === "thread/stop" && plan.kind === "request") {
-          const processEffect: ProviderCommandProcessEffect =
-            "restart-provider";
-          return { ...plan, processEffect };
-        }
-        return plan;
-      },
-    };
-  }
-
-  function createRestartOnStopRuntime(args: RestartOnStopRuntimeArgs) {
-    const adapter = createFakeAdapter(args.scriptPath);
-    return createAgentRuntimeWithAdapters({
-      workspacePath: tmpDir,
-      onEvent: () => {},
-      onToolCall: async () => ({
-        contentItems: [{ type: "inputText", text: "ok" }],
-        success: true,
-      }),
-      onProcessExit: (info) => {
-        args.exits.push(info);
-      },
-      adapterFactory: () => createRestartOnStopAdapter(adapter),
-    });
-  }
 
   describe("thread setup and configuration", () => {
     it("starts a thread and receives a providerThreadId", async () => {
@@ -1252,7 +1159,7 @@ rl.on("line", (line) => {
       await runtime.shutdown();
     });
 
-    it("restarts providers that require a restart after thread stop", async () => {
+    it("keeps the provider running after thread stop", async () => {
       const events: ThreadEvent[] = [];
       const adapter = createFakeAdapter(scriptPath);
       const runtime = createAgentRuntimeWithAdapters({
@@ -1262,18 +1169,7 @@ rl.on("line", (line) => {
           contentItems: [{ type: "inputText", text: "ok" }],
           success: true,
         }),
-        adapterFactory: () => ({
-          ...adapter,
-          buildCommandPlan(command): ProviderCommandPlan {
-            const plan = adapter.buildCommandPlan(command);
-            if (command.type === "thread/stop" && plan.kind === "request") {
-              const processEffect: ProviderCommandProcessEffect =
-                "restart-provider";
-              return { ...plan, processEffect };
-            }
-            return plan;
-          },
-        }),
+        adapterFactory: () => adapter,
       });
 
       const startResult = await runtime.startThread({
@@ -1287,7 +1183,7 @@ rl.on("line", (line) => {
       expect(runtime.listRunningProviders()).toEqual(["fake"]);
 
       await runtime.stopThread({ threadId: "t1" });
-      expect(runtime.listRunningProviders()).toEqual([]);
+      expect(runtime.listRunningProviders()).toEqual(["fake"]);
 
       await runtime.resumeThread({
         environmentId: "env-1",
@@ -1300,208 +1196,16 @@ rl.on("line", (line) => {
       await runtime.runTurn({
         clientRequestId: "creq_222222223s",
         threadId: "t1",
-        input: [promptTextInput({ text: "after restart" })],
+        input: [promptTextInput({ text: "after stop" })],
         options: fullRuntimeOptions,
       });
       await waitForThreadAgentMessageText({
         events,
         providerId: "fake",
         runtime,
-        text: "after restart",
+        text: "after stop",
         threadId: "t1",
       });
-
-      await runtime.shutdown();
-    });
-
-    it("treats a provider exit during a restart-provider stop as an expected shutdown", async () => {
-      const exits: AgentRuntimeProcessExitInfo[] = [];
-      const runtime = createRestartOnStopRuntime({
-        exits,
-        scriptPath: writeSingleThreadRestartProviderScript({
-          scriptName: "stop-exit-provider.cjs",
-          threadStopScript: `
-    setTimeout(() => process.exit(0), 10);`,
-        }),
-      });
-
-      await runtime.startThread({
-        sessionKind: "thread",
-        environmentId: "env-1",
-        threadId: "t1",
-        projectId: "p1",
-        providerId: "fake",
-        options: fullRuntimeOptions,
-      });
-
-      // The stop must resolve even though the provider exits mid-interrupt
-      // instead of replying — the restart is the intended outcome, not a crash.
-      await expect(
-        runtime.stopThread({ threadId: "t1" }),
-      ).resolves.toBeUndefined();
-      expect(runtime.listRunningProviders()).toEqual([]);
-
-      await waitForRuntimeState({
-        label: "provider process exit callback",
-        predicate: () => exits.length === 1,
-      });
-      // The exit is reported as expected, so the runtime manager does not raise a
-      // provider-crash error for an intentional stop.
-      expect(exits[0]).toEqual(
-        expect.objectContaining({ providerId: "fake", expected: true }),
-      );
-
-      await runtime.shutdown();
-    });
-
-    it("treats a signal-killed provider during a restart-provider stop as expected", async () => {
-      const exits: AgentRuntimeProcessExitInfo[] = [];
-      const runtime = createRestartOnStopRuntime({
-        exits,
-        scriptPath: writeSingleThreadRestartProviderScript({
-          scriptName: "stop-signal-provider.cjs",
-          threadStopScript: `
-    setTimeout(() => process.kill(process.pid, "SIGKILL"), 10);`,
-        }),
-      });
-
-      await runtime.startThread({
-        sessionKind: "thread",
-        environmentId: "env-1",
-        threadId: "t1",
-        projectId: "p1",
-        providerId: "fake",
-        options: fullRuntimeOptions,
-      });
-
-      await expect(
-        runtime.stopThread({ threadId: "t1" }),
-      ).resolves.toBeUndefined();
-      expect(runtime.listRunningProviders()).toEqual([]);
-
-      await waitForRuntimeState({
-        label: "provider process exit callback",
-        predicate: () => exits.length === 1,
-      });
-      expect(exits[0]).toEqual(
-        expect.objectContaining({
-          providerId: "fake",
-          expected: true,
-          signal: "SIGKILL",
-        }),
-      );
-
-      await runtime.shutdown();
-    });
-
-    it("clears the expected-shutdown mark when a restart-provider stop fails while the provider stays alive", async () => {
-      const exits: AgentRuntimeProcessExitInfo[] = [];
-      const runtime = createRestartOnStopRuntime({
-        exits,
-        scriptPath: writeSingleThreadRestartProviderScript({
-          scriptName: "stop-reject-provider.cjs",
-          threadStopScript: `
-    process.stdout.write(JSON.stringify({
-      jsonrpc: "2.0", id: msg.id,
-      error: { code: -32000, message: "interrupt failed" }
-    }) + "\\n");
-    setTimeout(() => process.exit(7), 100);`,
-        }),
-      });
-
-      await runtime.startThread({
-        sessionKind: "thread",
-        environmentId: "env-1",
-        threadId: "t1",
-        projectId: "p1",
-        providerId: "fake",
-        options: fullRuntimeOptions,
-      });
-
-      // A non-exit interrupt failure must be surfaced, not swallowed.
-      await expect(runtime.stopThread({ threadId: "t1" })).rejects.toThrow(
-        /interrupt failed/,
-      );
-
-      // The later, unrelated exit must NOT be suppressed as an expected shutdown.
-      await waitForRuntimeState({
-        label: "unrelated provider exit",
-        predicate: () => exits.length === 1,
-      });
-      expect(exits[0]).toEqual(
-        expect.objectContaining({
-          providerId: "fake",
-          expected: false,
-          code: 7,
-        }),
-      );
-
-      await runtime.shutdown();
-    });
-
-    it("keeps a concurrent stop's expected-shutdown mark when an overlapping restart-provider stop fails", async () => {
-      const exits: AgentRuntimeProcessExitInfo[] = [];
-      const runtime = createRestartOnStopRuntime({
-        exits,
-        scriptPath: writeRestartProviderScript({
-          globalScript: "let started = 0;",
-          scriptPath: join(tmpDir, "stop-overlap-provider.cjs"),
-          threadStartScript: `
-    started += 1;
-    const providerThreadId = "prov-" + started;
-    process.stdout.write(JSON.stringify({
-      jsonrpc: "2.0", id: msg.id, result: { providerThreadId }
-    }) + "\\n");
-    process.stdout.write(JSON.stringify({
-      jsonrpc: "2.0", method: "thread/identity",
-      params: { threadId: msg.params?.threadId, providerThreadId }
-    }) + "\\n");`,
-          threadStopScript: `
-    if (msg.params?.threadId === "t2") {
-      process.stdout.write(JSON.stringify({
-        jsonrpc: "2.0", id: msg.id,
-        error: { code: -32000, message: "interrupt failed" }
-      }) + "\\n");
-      setTimeout(() => process.exit(0), 50);
-    }`,
-        }),
-      });
-
-      await runtime.startThread({
-        sessionKind: "thread",
-        environmentId: "env-1",
-        threadId: "t1",
-        projectId: "p1",
-        providerId: "fake",
-        options: fullRuntimeOptions,
-      });
-      await runtime.startThread({
-        sessionKind: "thread",
-        environmentId: "env-1",
-        threadId: "t2",
-        projectId: "p1",
-        providerId: "fake",
-        options: fullRuntimeOptions,
-      });
-      // Both threads share one provider process.
-      expect(runtime.listRunningProviders()).toEqual(["fake"]);
-
-      const stopA = runtime.stopThread({ threadId: "t1" });
-      const stopB = runtime.stopThread({ threadId: "t2" });
-
-      // Stop B fails (protocol error) and clears only its own mark.
-      await expect(stopB).rejects.toThrow(/interrupt failed/);
-      // Stop A's intended exit must still be expected — B must not have erased it.
-      await expect(stopA).resolves.toBeUndefined();
-      expect(runtime.listRunningProviders()).toEqual([]);
-
-      await waitForRuntimeState({
-        label: "provider process exit callback",
-        predicate: () => exits.length === 1,
-      });
-      expect(exits[0]).toEqual(
-        expect.objectContaining({ providerId: "fake", expected: true }),
-      );
 
       await runtime.shutdown();
     });
