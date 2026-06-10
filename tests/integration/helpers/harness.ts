@@ -20,7 +20,6 @@ import {
   type HostDaemonApp,
 } from "@bb/host-daemon/test";
 import { createHostDaemonClient } from "@bb/host-daemon-contract";
-import { createHostWatcher } from "@bb/host-watcher";
 import { initDb } from "../../../apps/server/src/db.js";
 import { createLifecycleDedupers } from "../../../apps/server/src/lifecycle-dedupers.js";
 import { createApp } from "../../../apps/server/src/server.js";
@@ -339,7 +338,6 @@ async function startHarnessDaemon(
     // restarts stay attached to the same host.
     await persistHostId({ dataDir, hostId: identity.hostId });
     const adapterFactory = resolveAdapterFactory(options);
-    const hostWatcher = await createHostWatcher();
     const daemonApp = await createHostDaemonApp({
       createRuntime: adapterFactory
         ? (runtimeOptions) =>
@@ -353,7 +351,6 @@ async function startHarnessDaemon(
       hostId: identity.hostId,
       hostName: identity.hostName,
       hostType: "persistent",
-      hostWatcher,
       instanceId: randomUUID(),
       localApiConfig: null,
       logger: testLogger,
