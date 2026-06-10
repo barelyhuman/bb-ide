@@ -5,8 +5,9 @@ import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
 import type { ThreadGitStatusDisplay } from "@/components/workspace/workspace-status";
 import { ChangedFilesDetailRow } from "@/components/workspace/ChangedFilesDetailRow";
 import type { WorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
-import { FormError } from "@/components/ui/form-error.js";
 import { Button } from "@/components/ui/button.js";
+import { Icon } from "@/components/ui/icon.js";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -188,10 +189,10 @@ export function ThreadGitActionDialogContent({
   const blocksRemoteMergeBase =
     dialogCopy.showMergeBase && selectedMergeBaseBranchIsRemote;
   const remoteMergeBaseErrorMessage =
-    "Squash merge requires a local target branch. Create or check out a local branch from the remote first.";
+    "Squash merge requires a local target branch.";
   const missingMergeBaseErrorMessage =
     "Squash merge requires an existing local target branch.";
-  const checkingMergeBaseErrorMessage = "Checking merge base branch.";
+  const checkingMergeBaseMessage = "Checking target branch";
   const canSelectMergeBase =
     dialogCopy.showMergeBase &&
     showMergeBaseDetails === true &&
@@ -204,31 +205,34 @@ export function ThreadGitActionDialogContent({
   const shouldShowChangedFilesRow = Boolean(
     changedFilesSection && changedFilesSection.files.length > 0,
   );
-  const mergeBaseSubmitError = !selectedMergeBaseBranch
+  const mergeBaseValidationErrorMessage = !selectedMergeBaseBranch
     ? "A merge base branch is required"
-    : selectedMergeBaseBranchClassificationPending
-      ? checkingMergeBaseErrorMessage
-      : blocksRemoteMergeBase
-        ? remoteMergeBaseErrorMessage
-        : selectedMergeBaseBranchMissing
-          ? missingMergeBaseErrorMessage
-          : null;
-  const visibleMergeBaseErrorMessage =
-    errorMessage ??
-    (selectedMergeBaseBranchClassificationPending
-      ? checkingMergeBaseErrorMessage
-      : blocksRemoteMergeBase
-        ? remoteMergeBaseErrorMessage
-        : selectedMergeBaseBranchMissing
-          ? missingMergeBaseErrorMessage
-          : null);
-  const submitTitle = selectedMergeBaseBranchClassificationPending
-    ? checkingMergeBaseErrorMessage
     : blocksRemoteMergeBase
       ? remoteMergeBaseErrorMessage
       : selectedMergeBaseBranchMissing
         ? missingMergeBaseErrorMessage
-        : undefined;
+        : null;
+  const mergeBaseSubmitBlockMessage =
+    selectedMergeBaseBranchClassificationPending
+      ? checkingMergeBaseMessage
+      : mergeBaseValidationErrorMessage;
+  const visibleMergeBaseStatusMessage =
+    !errorMessage && selectedMergeBaseBranchClassificationPending
+      ? checkingMergeBaseMessage
+      : null;
+  const visibleMergeBaseErrorMessage =
+    errorMessage ??
+    (blocksRemoteMergeBase
+      ? remoteMergeBaseErrorMessage
+      : selectedMergeBaseBranchMissing
+        ? missingMergeBaseErrorMessage
+        : null);
+  const submitTitle = selectedMergeBaseBranchClassificationPending
+    ? checkingMergeBaseMessage
+    : (mergeBaseValidationErrorMessage ?? undefined);
+  const footerMergeBaseMessage =
+    visibleMergeBaseErrorMessage ?? visibleMergeBaseStatusMessage;
+  const footerMergeBaseMessageIsError = Boolean(visibleMergeBaseErrorMessage);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -240,9 +244,13 @@ export function ThreadGitActionDialogContent({
         void onCommit();
         break;
       case "commit_and_squash_merge":
-        if (mergeBaseSubmitError || !selectedMergeBaseBranch) {
+        if (selectedMergeBaseBranchClassificationPending) {
+          return;
+        }
+        if (mergeBaseValidationErrorMessage || !selectedMergeBaseBranch) {
           setErrorMessage(
-            mergeBaseSubmitError ?? "A merge base branch is required",
+            mergeBaseValidationErrorMessage ??
+              "A merge base branch is required",
           );
           return;
         }
@@ -252,9 +260,13 @@ export function ThreadGitActionDialogContent({
         });
         break;
       case "squash_merge":
-        if (mergeBaseSubmitError || !selectedMergeBaseBranch) {
+        if (selectedMergeBaseBranchClassificationPending) {
+          return;
+        }
+        if (mergeBaseValidationErrorMessage || !selectedMergeBaseBranch) {
           setErrorMessage(
-            mergeBaseSubmitError ?? "A merge base branch is required",
+            mergeBaseValidationErrorMessage ??
+              "A merge base branch is required",
           );
           return;
         }
@@ -337,11 +349,34 @@ export function ThreadGitActionDialogContent({
             ) : null}
           </DetailCard>
         ) : null}
-        <FormError message={visibleMergeBaseErrorMessage} />
-        <DialogFooter>
+        <DialogFooter className="flex-row flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:space-x-0">
+          {footerMergeBaseMessage ? (
+            <p
+              className={cn(
+                "m-0 flex min-w-0 flex-1 items-center justify-end gap-1.5 text-right text-xs leading-5",
+                footerMergeBaseMessageIsError
+                  ? "text-destructive"
+                  : "text-muted-foreground",
+              )}
+              role={footerMergeBaseMessageIsError ? "alert" : "status"}
+              aria-live={footerMergeBaseMessageIsError ? undefined : "polite"}
+            >
+              {footerMergeBaseMessageIsError ? null : (
+                <Icon
+                  name="Spinner"
+                  className="size-3.5 shrink-0 animate-spin"
+                  aria-hidden="true"
+                />
+              )}
+              <span className="min-w-0">{footerMergeBaseMessage}</span>
+            </p>
+          ) : null}
           <Button
             type="submit"
-            disabled={dialogCopy.showMergeBase && mergeBaseSubmitError !== null}
+            className="shrink-0"
+            disabled={
+              dialogCopy.showMergeBase && mergeBaseSubmitBlockMessage !== null
+            }
             title={submitTitle}
           >
             {dialogCopy.submitLabel}
