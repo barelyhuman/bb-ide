@@ -76,9 +76,7 @@ import {
   getSidebarThreadGroupLineLeft,
   getSidebarThreadRowPaddingLeft,
 } from "./sidebarRowClasses";
-import {
-  type SidebarSortableDragBindings,
-} from "./sortableMotion";
+import { type SidebarSortableDragBindings } from "./sortableMotion";
 import type { ConsumeDragClickSuppression } from "@/components/ui/use-drag-click-suppression";
 import { SidebarChildToggleChevron } from "./SidebarChildToggleChevron";
 
@@ -706,6 +704,7 @@ function EnvironmentThreadGroupHeader({
               hasPendingInteraction={childActivity.pending}
               isBusy={childActivity.working}
               showUnreadBadge={childActivity.unread}
+              unreadBadgeTone={childActivity.unreadError ? "error" : "default"}
             />
           </span>
         ) : null}

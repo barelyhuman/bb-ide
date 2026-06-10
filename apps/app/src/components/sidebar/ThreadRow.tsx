@@ -51,8 +51,9 @@ import {
   SIDEBAR_ROW_BASE_CLASS,
   SIDEBAR_ROW_GLYPH_SLOT_CLASS,
   SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
-  SIDEBAR_UNREAD_DOT_CLASS,
+  SIDEBAR_UNREAD_DOT_CLASS_BY_TONE,
   getSidebarThreadRowPaddingLeft,
+  type SidebarUnreadDotTone,
 } from "./sidebarRowClasses";
 import type { ConsumeDragClickSuppression } from "@/components/ui/use-drag-click-suppression";
 import type { SidebarSortableDragBindings } from "./sortableMotion";
@@ -153,12 +154,18 @@ interface ThreadStatusGlyphProps {
   hasPendingInteraction: boolean;
   isBusy: boolean;
   showUnreadBadge: boolean;
+  unreadBadgeTone: SidebarUnreadDotTone;
+}
+
+interface ThreadUnreadBadgeLabelArgs {
+  tone: SidebarUnreadDotTone;
 }
 
 export function ThreadStatusGlyph({
   hasPendingInteraction,
   isBusy,
   showUnreadBadge,
+  unreadBadgeTone,
 }: ThreadStatusGlyphProps) {
   if (hasPendingInteraction) {
     return (
@@ -187,16 +194,25 @@ export function ThreadStatusGlyph({
   }
 
   if (showUnreadBadge) {
+    const label = getThreadUnreadBadgeLabel({ tone: unreadBadgeTone });
     return (
       <span
-        className={SIDEBAR_UNREAD_DOT_CLASS}
-        aria-label="Unread thread requires attention"
-        title="Unread thread requires attention"
+        className={SIDEBAR_UNREAD_DOT_CLASS_BY_TONE[unreadBadgeTone]}
+        aria-label={label}
+        title={label}
       />
     );
   }
 
   return null;
+}
+
+function getThreadUnreadBadgeLabel({
+  tone,
+}: ThreadUnreadBadgeLabelArgs): string {
+  return tone === "error"
+    ? "Unread thread encountered an error"
+    : "Unread thread requires attention";
 }
 
 interface ThreadTrailingIndicatorProps extends ThreadStatusGlyphProps {
@@ -210,18 +226,23 @@ function ThreadTrailingIndicator({
   hasPendingInteraction,
   isBusy,
   showUnreadBadge,
+  unreadBadgeTone,
 }: ThreadTrailingIndicatorProps) {
   const showStatusGlyph = hasPendingInteraction || isBusy || showUnreadBadge;
 
   if (showStatusGlyph) {
     return (
       <span
-        className={cn(SIDEBAR_ROW_GLYPH_SLOT_CLASS, COARSE_POINTER_GLYPH_BOX_CLASS)}
+        className={cn(
+          SIDEBAR_ROW_GLYPH_SLOT_CLASS,
+          COARSE_POINTER_GLYPH_BOX_CLASS,
+        )}
       >
         <ThreadStatusGlyph
           hasPendingInteraction={hasPendingInteraction}
           isBusy={isBusy}
           showUnreadBadge={showUnreadBadge}
+          unreadBadgeTone={unreadBadgeTone}
         />
       </span>
     );
@@ -287,6 +308,8 @@ function ThreadRowComponent({
   const hasPendingInteraction = thread.hasPendingInteraction;
   const threadIsBusy = isBusyThread(thread) && !hasPendingInteraction;
   const showUnreadBadge = !hasPendingInteraction && isUnreadDoneThread(thread);
+  const unreadBadgeTone: SidebarUnreadDotTone =
+    showUnreadBadge && thread.status === "error" ? "error" : "default";
   const threadTitle = getThreadDisplayTitle(thread);
   const parentOptions = options.kind === "parent" ? options : null;
   const isParentRow = parentOptions !== null;
@@ -298,8 +321,7 @@ function ThreadRowComponent({
   // A collapsed parent hides its descendants behind one glyph, so it must
   // surface its own status combined with the rolled-up child activity. Expanded
   // parents and leaves show only their own status.
-  const hasHiddenChildren =
-    isParentRow && isParentCollapsed && hasChildren;
+  const hasHiddenChildren = isParentRow && isParentCollapsed && hasChildren;
   const trailingHasPendingInteraction = hasHiddenChildren
     ? hasPendingInteraction || childActivity.pending
     : hasPendingInteraction;
@@ -309,6 +331,8 @@ function ThreadRowComponent({
   const trailingShowUnreadBadge = hasHiddenChildren
     ? showUnreadBadge || childActivity.unread
     : showUnreadBadge;
+  const trailingUnreadBadgeTone: SidebarUnreadDotTone =
+    hasHiddenChildren && childActivity.unreadError ? "error" : unreadBadgeTone;
   const linkLabel = hasComposerDraft
     ? `Open ${threadTitle} (unsubmitted draft)`
     : `Open ${threadTitle}`;
@@ -410,6 +434,7 @@ function ThreadRowComponent({
               hasPendingInteraction={trailingHasPendingInteraction}
               isBusy={trailingIsBusy}
               showUnreadBadge={trailingShowUnreadBadge}
+              unreadBadgeTone={trailingUnreadBadgeTone}
             />
           </span>
           <div
