@@ -113,6 +113,11 @@
     [data-promptbox-shell] [data-promptbox-icon-only-control] {
       flex-shrink: 0;
     }
+
+    [data-promptbox-shell] [data-promptbox-project-control] {
+      flex-shrink: 0;
+      max-inline-size: 10rem;
+    }
   }
 
   @container promptbox-shell (max-width: 28rem) {
