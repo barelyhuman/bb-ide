@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   AgentRuntimeClaudeCodeSkillRoot,
   AgentRuntimeCodexSkillRoot,
@@ -278,6 +278,66 @@ describe("injected skill staging", () => {
     });
 
     expect(second.catalogHash).not.toBe(first.catalogHash);
+  });
+
+  it("stages the same catalog concurrently without sharing temp directories", async () => {
+    const dataDir = await makeTempDir();
+    const skillRootPath = await writeSkill({
+      rootPath: path.join(dataDir, "source-skills"),
+      name: "release-notes",
+    });
+    const source = createDataDirSource({
+      dataDir,
+      skillName: "release-notes",
+      skillRootPath,
+    });
+    const fixedTime = vi.spyOn(Date, "now").mockReturnValue(1_781_053_873_372);
+
+    try {
+      const staged = await Promise.all(
+        Array.from({ length: 12 }, () =>
+          stageInjectedSkillSources({
+            dataDir,
+            injectedSkillSources: [source],
+          }),
+        ),
+      );
+
+      const catalogHashes = new Set(staged.map((entry) => entry.catalogHash));
+      expect(catalogHashes.size).toBe(1);
+      const firstStaged = staged[0];
+      if (!firstStaged) {
+        throw new Error("Expected staged skill catalogs");
+      }
+      for (const entry of staged) {
+        const codexRoot = entry.skillRoots.find(isCodexSkillRoot);
+        expect(codexRoot?.skillDirectoryRootPath).toBe(
+          path.join(
+            dataDir,
+            "runtime",
+            "global-skills",
+            entry.catalogHash,
+            "skills",
+          ),
+        );
+      }
+      await expect(
+        readFile(
+          path.join(
+            dataDir,
+            "runtime",
+            "global-skills",
+            firstStaged.catalogHash,
+            "skills",
+            "release-notes",
+            "SKILL.md",
+          ),
+          "utf8",
+        ),
+      ).resolves.toContain("Use release-notes");
+    } finally {
+      fixedTime.mockRestore();
+    }
   });
 
   it("skips symlinked files during staging", async () => {

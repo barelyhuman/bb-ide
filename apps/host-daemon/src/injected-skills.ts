@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Dirent } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -119,6 +119,8 @@ interface CreateCatalogFileArgs {
   catalogHash: string;
   trees: readonly CollectedSkillTree[];
 }
+
+const pendingStageRootWrites = new Map<string, Promise<string>>();
 
 function createNoopLogger(): InjectedSkillsLogger {
   return {
@@ -383,7 +385,7 @@ async function writeStageRoot(args: WriteStageRootArgs): Promise<string> {
   await fs.mkdir(stagingRootPath, { recursive: true });
   const tempRootPath = path.join(
     stagingRootPath,
-    `.tmp-${args.catalogHash}-${process.pid}-${Date.now()}`,
+    `.tmp-${args.catalogHash}-${process.pid}-${Date.now()}-${randomUUID()}`,
   );
   await fs.rm(tempRootPath, { recursive: true, force: true });
   await fs.mkdir(path.join(tempRootPath, "skills"), { recursive: true });
@@ -431,6 +433,24 @@ async function writeStageRoot(args: WriteStageRootArgs): Promise<string> {
   }
 
   return stageRootPath;
+}
+
+function stageRootWriteKey(args: WriteStageRootArgs): string {
+  return `${args.dataDir}\0${args.catalogHash}`;
+}
+
+async function writeStageRootOnce(args: WriteStageRootArgs): Promise<string> {
+  const key = stageRootWriteKey(args);
+  const pending = pendingStageRootWrites.get(key);
+  if (pending) {
+    return pending;
+  }
+
+  const write = writeStageRoot(args).finally(() => {
+    pendingStageRootWrites.delete(key);
+  });
+  pendingStageRootWrites.set(key, write);
+  return write;
 }
 
 function buildSkillRoots(args: BuildSkillRootsArgs): AgentRuntimeSkillRoot[] {
@@ -492,7 +512,7 @@ export async function stageInjectedSkillSources(
   }
 
   const catalogHash = hashCollectedTrees(sortedTrees);
-  const stageRootPath = await writeStageRoot({
+  const stageRootPath = await writeStageRootOnce({
     catalogHash,
     dataDir: args.dataDir,
     trees: sortedTrees,
