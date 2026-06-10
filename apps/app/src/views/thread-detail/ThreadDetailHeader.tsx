@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button.js";
 import { COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { Icon } from "@/components/ui/icon.js";
+import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport.js";
 import { SplitButton } from "@/components/ui/split-button.js";
 import { Pill } from "@/components/ui/pill.js";
 import {
@@ -48,11 +49,13 @@ export function ThreadDetailHeader({
   workspaceOpenButton,
 }: ThreadDetailHeaderProps) {
   const [primaryAction, ...secondaryActions] = threadHeaderGitActions;
+  const renderAsDrawer = useIsCompactViewport();
   const [desktopInfo] = useState(getBbDesktopInfo);
   const usesDesktopChrome = shouldUseMacosDesktopChrome(desktopInfo);
   const rightPanelLabel = isSecondaryPanelOpen
     ? "Hide right panel"
     : "Show right panel";
+  const rightPanelIconName = renderAsDrawer ? "PanelBottom" : "PanelRight";
 
   const center = (
     <>
@@ -115,7 +118,7 @@ export function ThreadDetailHeader({
         title={rightPanelLabel}
         onClick={onToggleSecondaryPanel}
       >
-        <Icon name="PanelRight" />
+        <Icon name={rightPanelIconName} />
         {activeTerminalCount > 0 ? (
           <span
             aria-hidden="true"

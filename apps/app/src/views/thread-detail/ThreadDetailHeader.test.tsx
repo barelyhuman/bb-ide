@@ -9,8 +9,12 @@ import { createNoopDesktopBrowserApi } from "@/test/bb-desktop-test-utils";
 import type { ThreadGitActionDialogTarget } from "@/components/dialogs/ThreadGitActionDialog";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
 
+const viewportState = vi.hoisted(() => ({
+  isCompactViewport: false,
+}));
+
 vi.mock("@/components/ui/hooks/use-compact-viewport.js", () => ({
-  useIsCompactViewport: () => false,
+  useIsCompactViewport: () => viewportState.isCompactViewport,
 }));
 
 vi.mock("@/components/ui/sidebar.js", () => ({
@@ -79,6 +83,7 @@ function installMacosDesktopChrome(): void {
 
 afterEach(() => {
   cleanup();
+  viewportState.isCompactViewport = false;
   delete window.bbDesktop;
 });
 
@@ -149,6 +154,15 @@ describe("ThreadDetailHeader panel toggle", () => {
 
     fireEvent.click(button);
     expect(onToggleSecondaryPanel).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the drawer icon on compact viewports", () => {
+    viewportState.isCompactViewport = true;
+    renderHeader({ isSecondaryPanelOpen: false });
+
+    const button = screen.getByRole("button", { name: "Show right panel" });
+    expect(button.querySelector("[data-icon='PanelBottom']")).not.toBeNull();
+    expect(button.querySelector("[data-icon='PanelRight']")).toBeNull();
   });
 
   it("toggles the right panel from the open state", () => {
