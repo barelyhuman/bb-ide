@@ -4,13 +4,13 @@
 export const templateDefinitions = [
   {
     "id": "agentThreadMessage",
-    "body": "[bb message from thread:{{senderThreadId}}; reply with `bb thread tell {{senderThreadId}} \"<your response>\"`]\n\n{{messageText}}",
+    "body": "[bb message from thread:{{senderThreadId}}]\n\n{{messageText}}",
     "fileName": "agent-thread-message.md",
     "kind": "prompt",
     "title": "Agent Thread Message",
     "summary": "Wraps a bb CLI message from one agent thread to another.",
-    "intent": "Tell the receiving agent which thread sent the message and how to reply.",
-    "editingNotes": "Keep the response command in the prefix so standard agent instructions do not need special cross-thread message guidance.",
+    "intent": "Tell the receiving agent which thread sent the message without prompting an unnecessary reply.",
+    "editingNotes": "Keep only sender identity in the prefix; reply instructions cause agents to acknowledge messages that do not need responses.",
     "variables": {
       "senderThreadId": "The thread ID that sent the message.",
       "messageText": "The original message text sent by the agent."
@@ -124,23 +124,23 @@ export const templateDefinitions = [
   },
   {
     "id": "standardAgentAppendInstructions",
-    "body": "You are a coding agent working on a project thread inside bb, an agent orchestration tool.\n\nIf you need to inspect bb context, message another thread, spawn or coordinate work, or manage scheduled follow-ups, use the `bb` CLI.",
+    "body": "You are working inside bb, an agentic IDE that you can use via the `bb` CLI. If you need to orchestrate work across bb (create/inspect/message threads), or the user instructs you to use bb, you may use the `bb` CLI.",
     "fileName": "standard-agent-append-instructions.md",
     "kind": "instruction",
     "title": "Standard Agent Append Instructions",
     "summary": "bb instructions appended to provider-backed coding-thread system prompts.",
-    "intent": "Keep the agent oriented inside bb without replacing provider-owned base instructions.",
-    "editingNotes": "Preserve concise coding-agent framing and keep this compatible with instructionMode append.",
+    "intent": "Let the agent know bb is available without causing unnecessary orchestration.",
+    "editingNotes": "Preserve concise bb framing and keep this compatible with instructionMode append.",
     "variables": {}
   },
   {
     "id": "systemMessageChildThreadNeedsAttention",
-    "body": "[bb system]\n\n{{threadMention}} needs attention.\nThe thread is blocked on a pending interaction. Inspect it and decide whether to ask the user, redirect the child thread, or take another coordination action.",
+    "body": "[bb system]\n\n{{threadMention}} needs attention.\nIt is blocked on a pending interaction. Inspect the thread and decide if you can answer or resolve the question from existing context. If not, ask the user for the missing decision. If the worker is stuck on the wrong assumption, send it a clarifying instruction.",
     "fileName": "system-message-child-thread-needs-attention.md",
     "kind": "prompt",
     "title": "Child Thread Needs Attention",
     "summary": "Notifies a parent thread that one of its child threads is blocked on a pending interaction.",
-    "intent": "Prompt the parent thread to inspect the blocker and decide whether to involve the user or redirect the work.",
+    "intent": "Prompt the parent thread to inspect the blocker and either resolve it from context, ask the user, or clarify the worker's assumption.",
     "editingNotes": "Keep this focused on parent-thread triage; do not imply the parent can approve or reject on the user's behalf.",
     "variables": {
       "threadMention": "Serialized thread mention token, e.g. '@thread:thr_abc123'."
@@ -161,12 +161,12 @@ export const templateDefinitions = [
   },
   {
     "id": "systemMessageThreadOwnershipAssigned",
-    "body": "[bb system]\n\n{{threadMention}} is now assigned to you as a child thread.\nInspect it and decide whether to monitor it, message the user, or send a follow-up.",
+    "body": "[bb system]\n\n{{threadMention}} was assigned to you.",
     "fileName": "system-message-thread-ownership-assigned.md",
     "kind": "prompt",
     "title": "Thread Ownership Assigned",
     "summary": "Notifies a parent thread that a child thread is now assigned to it.",
-    "intent": "Let the new parent know it owns a thread so it can begin coordinating it.",
+    "intent": "Let the new parent know a thread is now assigned to it.",
     "editingNotes": "Keep the thread mention first in the visible body so collapsed previews show the affected thread.",
     "variables": {
       "threadMention": "Serialized thread mention token, e.g. '@thread:thr_abc123'."
@@ -174,15 +174,29 @@ export const templateDefinitions = [
   },
   {
     "id": "systemMessageThreadOwnershipRemoved",
-    "body": "[bb system]\n\n{{threadMention}} is no longer assigned to you.\nStop treating it as one of your active child threads unless it is assigned back later.",
+    "body": "[bb system]\n\n{{threadMention}} was unassigned from you.",
     "fileName": "system-message-thread-ownership-removed.md",
     "kind": "prompt",
     "title": "Thread Ownership Removed",
     "summary": "Notifies a parent thread that a child thread is no longer assigned to it.",
-    "intent": "Let the previous parent know a thread moved away so it can update its internal tracking.",
+    "intent": "Let the previous parent know a thread is no longer assigned to it.",
     "editingNotes": "Keep the thread mention first in the visible body so collapsed previews show the affected thread.",
     "variables": {
       "threadMention": "Serialized thread mention token, e.g. '@thread:thr_abc123'."
+    }
+  },
+  {
+    "id": "systemMessageThreadScheduleDue",
+    "body": "[bb schedule due:{{scheduleId}}]\n\n{{prompt}}",
+    "fileName": "system-message-thread-schedule-due.md",
+    "kind": "prompt",
+    "title": "Thread Schedule Due",
+    "summary": "Wraps a due thread schedule prompt in bb system chrome.",
+    "intent": "Make system-initiated schedule wakeups explicit without changing the schedule author's prompt.",
+    "editingNotes": "Keep the schedule prompt body verbatim after the prefix.",
+    "variables": {
+      "scheduleId": "The due thread schedule ID.",
+      "prompt": "The schedule prompt text."
     }
   },
   {
@@ -262,6 +276,10 @@ export interface TemplateVariables {
   };
   systemMessageThreadOwnershipRemoved: {
     threadMention: string;
+  };
+  systemMessageThreadScheduleDue: {
+    scheduleId: string;
+    prompt: string;
   };
   threadOperationCommitFailureFollowUp: {
     errorMessage?: string;

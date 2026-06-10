@@ -213,7 +213,7 @@ describe("ConversationMessageContent", () => {
             senderThreadTitle="Frontend thread"
             attachments={null}
             mentions={[]}
-            text={`[bb message from thread:thr_sender123; reply with \`bb thread tell thr_sender123 "<your response>"\`]\n\n${messageBody}`}
+            text={`[bb message from thread:thr_sender123]\n\n${messageBody}`}
             turnRequest={{ kind: "message", status: "accepted" }}
           />
           <LocationProbe label="location" />
@@ -245,11 +245,80 @@ describe("ConversationMessageContent", () => {
 
     expect(screen.queryByText("thr_sender123")).toBeNull();
     expect(screen.queryByText(/\[bb message from thread/u)).toBeNull();
-    expect(screen.queryByText(/bb thread tell/u)).toBeNull();
     expect(
       toggle.getAttribute("aria-expanded"),
     ).toBe("true");
     expect(screen.getAllByText(/Line 4/u).length).toBeGreaterThan(0);
+  });
+
+  it("renders short agent-originated messages as static generated rows", () => {
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppRouteNavigationProvider>
+          <ConversationMessageContent
+            role="user"
+            initiator="agent"
+            resolveSegmentLinkHref={(link) => {
+              switch (link.kind) {
+                case "thread":
+                  return `/projects/proj_123/threads/${link.threadId}`;
+              }
+            }}
+            senderThreadId="thr_sender123"
+            senderThreadTitle="Frontend thread"
+            attachments={null}
+            mentions={[]}
+            text={"[bb message from thread:thr_sender123]\n\nDone."}
+            turnRequest={{ kind: "message", status: "accepted" }}
+          />
+        </AppRouteNavigationProvider>
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.queryByRole("button", {
+        name: /Message from Frontend thread/u,
+      }),
+    ).toBeNull();
+    expect(screen.getByText("Done.")).toBeTruthy();
+  });
+
+  it("renders one-line system messages with mention pills as static generated rows", () => {
+    const token = "@thread:thr_target";
+    const text = `[bb system]\n\n${token} completed.`;
+    const start = text.indexOf(token);
+
+    render(
+      <MemoryRouter>
+        <ConversationMessageContent
+          role="user"
+          initiator="system"
+          senderThreadId={null}
+          senderThreadTitle={null}
+          attachments={null}
+          mentions={[
+            {
+              start,
+              end: start + token.length,
+              resource: {
+                kind: "thread",
+                threadId: "thr_target",
+                projectId: "proj_target",
+                label: "Worker thread",
+              },
+            },
+          ]}
+          text={text}
+          turnRequest={{ kind: "message", status: "accepted" }}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "System Message" }),
+    ).toBeNull();
+    expect(screen.getByRole("link", { name: "Worker thread" })).toBeTruthy();
+    expect(screen.getByText("completed.")).toBeTruthy();
   });
 
   it("renders generated agent steer status inside the expanded body", () => {
@@ -262,7 +331,7 @@ describe("ConversationMessageContent", () => {
         attachments={null}
         mentions={[]}
         text={
-          '[bb message from thread:thr_sender123; reply with `bb thread tell thr_sender123 "<your response>"`]\n\nAgent-to-agent status update.'
+          "[bb message from thread:thr_sender123]\n\nAgent-to-agent status update."
         }
         turnRequest={{ kind: "steer", status: "accepted" }}
       />,
@@ -283,7 +352,7 @@ describe("ConversationMessageContent", () => {
 
   it("renders mention pills in agent-originated rows with shifted offsets", () => {
     const token = "@thread:thr_target";
-    const text = `[bb message from thread:thr_sender123; reply with \`bb thread tell thr_sender123 "<your response>"\`]\n\nAsk ${token} to review the parent-thread cleanup details and confirm the route copy still reads clearly.`;
+    const text = `[bb message from thread:thr_sender123]\n\nAsk ${token} to review the parent-thread cleanup details and confirm the route copy still reads clearly.`;
     const start = text.indexOf(token);
 
     render(
@@ -318,16 +387,11 @@ describe("ConversationMessageContent", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: /Message from Frontend thread/u,
-      }),
-    );
-
     const mention = screen.getByRole("link", { name: "API planning" });
     expect(mention.getAttribute("href")).toBe(
       "/projects/proj_target/threads/thr_target",
     );
+    expect(screen.queryByText(/\[bb message from thread/u)).toBeNull();
     expect(screen.queryByText(token)).toBeNull();
   });
 

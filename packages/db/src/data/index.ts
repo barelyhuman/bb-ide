@@ -235,6 +235,7 @@ export {
   getLastStoredProviderThreadId,
   getLastStoredTurnRequestEvent,
   getLatestThreadOutputEventRow,
+  getLatestThreadSystemErrorEventRow,
   getLatestThreadSequence,
   insertEvents,
   listContextWindowUsageRows,

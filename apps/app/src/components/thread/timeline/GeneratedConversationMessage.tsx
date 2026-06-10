@@ -1,4 +1,9 @@
-import { memo, useCallback, useMemo } from "react";
+import {
+  memo,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import type { TimelineUserConversationRow } from "@bb/server-contract";
 import type { PromptTextMention } from "@bb/domain";
 import type { TimelineTitle, TimelineTitleSegment } from "@bb/thread-view";
@@ -19,6 +24,7 @@ import type { TimelineTitleLinkResolver } from "./TimelineTitleView.js";
 import type { ThreadTimelineLocalFileLinkHandler } from "./types.js";
 import { turnRequestLabel } from "./conversation-turn-request-label.js";
 import { TurnRequestLabel } from "./TurnRequestLabel.js";
+import { useIsOverflowing } from "./conversation-message-overflow.js";
 
 interface GeneratedConversationMessageProps {
   attachmentItems: ConversationAttachmentItems;
@@ -204,9 +210,19 @@ export const GeneratedConversationMessage = memo(
       attachmentItems.filePaths.length > 0 ||
       attachmentItems.imageItems.length > 0 ||
       requestLabel !== null;
-    const expandable =
-      hasExpandedOnlyContent || messageText.length > 0;
     const collapsedPreviewLine = messageText.split(/\r\n|\r|\n/u, 1)[0] ?? "";
+    const hasAdditionalBodyLines =
+      collapsedPreviewLine.length < messageText.length;
+    const collapsedPreviewTextRef = useRef<HTMLParagraphElement>(null);
+    const isCollapsedPreviewOverflowing = useIsOverflowing({
+      elementRef: collapsedPreviewTextRef,
+      enabled: messageText.length > 0,
+      measurementKey: messageText,
+    });
+    const expandable =
+      hasExpandedOnlyContent ||
+      hasAdditionalBodyLines ||
+      isCollapsedPreviewOverflowing;
     const collapsedPreviewBody = clipMentionTextToVisibleRange({
       mentions: messageMentions,
       rangeStart: 0,
@@ -214,7 +230,10 @@ export const GeneratedConversationMessage = memo(
     });
     const collapsedPreview = collapsedPreviewBody.text ? (
       <div className={NESTED_TIMELINE_GROUP_LINE_CLASS_NAME}>
-        <p className="line-clamp-1 break-words pl-2 text-sm leading-relaxed text-foreground">
+        <p
+          ref={collapsedPreviewTextRef}
+          className="line-clamp-1 break-words pl-2 text-sm leading-relaxed text-foreground"
+        >
           {renderMentionTextSegments({
             mentions: collapsedPreviewBody.mentions,
             text: collapsedPreviewBody.text,

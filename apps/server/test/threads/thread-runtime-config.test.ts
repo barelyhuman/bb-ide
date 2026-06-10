@@ -489,7 +489,7 @@ describe("thread runtime config", () => {
       );
       expect(runtimeConfig.workspaceProvisionType).toBe("unmanaged");
       expect(runtimeConfig.instructions).toContain(
-        "You are a coding agent working on a project thread inside bb",
+        "You are working inside bb, an agentic IDE",
       );
     });
   });

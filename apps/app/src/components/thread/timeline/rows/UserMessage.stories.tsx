@@ -270,7 +270,7 @@ export function Overview() {
             senderThreadId="thr_sender123"
             senderThreadTitle="Frontend thread"
             text={
-              '[bb message from thread:thr_sender123; reply with `bb thread tell thr_sender123 "<your response>"`]\n\nHey — I finished the audit you asked for. Punch list is in `notes/audit-2026-05.md`; the highest-value trim is collapsing the picker-shape options into a discriminated union.'
+              "[bb message from thread:thr_sender123]\n\nHey — I finished the audit you asked for. Punch list is in `notes/audit-2026-05.md`; the highest-value trim is collapsing the picker-shape options into a discriminated union."
             }
             attachments={null}
             mentions={[]}
@@ -290,7 +290,7 @@ export function Overview() {
             senderThreadId="thr_sender123"
             senderThreadTitle="Frontend thread"
             text={
-              '[bb message from thread:thr_sender123; reply with `bb thread tell thr_sender123 "<your response>"`]\n\nOne more note from the frontend manager while the current turn is already running.'
+              "[bb message from thread:thr_sender123]\n\nOne more note from the frontend manager while the current turn is already running."
             }
             attachments={null}
             mentions={[]}
