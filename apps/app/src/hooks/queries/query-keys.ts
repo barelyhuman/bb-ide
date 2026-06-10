@@ -32,6 +32,7 @@ export const THREAD_PENDING_INTERACTIONS_QUERY_KEY =
   "threadPendingInteractions";
 export const THREAD_SCHEDULES_QUERY_KEY = "threadSchedules";
 export const THREAD_TERMINALS_QUERY_KEY = "threadTerminals";
+export const PROJECT_COMMANDS_QUERY_KEY = "projectCommands";
 export const THREAD_STORAGE_FILES_QUERY_KEY = "threadStorageFiles";
 export const THREAD_STORAGE_PATHS_QUERY_KEY = "threadStoragePaths";
 export const THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY = "threadStorageFilePreview";
@@ -202,6 +203,13 @@ export type AllThreadTerminalsQueryKeyPrefix = readonly [
 ];
 export type ThreadTerminalsQueryKey = readonly [
   typeof THREAD_TERMINALS_QUERY_KEY,
+  string,
+];
+export type ProjectCommandsQueryKey = readonly [
+  typeof PROJECT_COMMANDS_QUERY_KEY,
+  string | undefined,
+  string | undefined,
+  string | null,
   string,
 ];
 export type ThreadStorageFilesQueryKey = readonly [
@@ -646,6 +654,21 @@ export function threadTerminalsQueryKey(
 
 export function allThreadTerminalsQueryKeyPrefix(): AllThreadTerminalsQueryKeyPrefix {
   return [THREAD_TERMINALS_QUERY_KEY];
+}
+
+export function projectCommandsQueryKey(
+  projectId: string | undefined,
+  providerId: string | undefined,
+  environmentId: string | null,
+  query: string,
+): ProjectCommandsQueryKey {
+  return [
+    PROJECT_COMMANDS_QUERY_KEY,
+    projectId,
+    providerId,
+    environmentId,
+    query,
+  ];
 }
 
 export function threadStorageFilesQueryKey(

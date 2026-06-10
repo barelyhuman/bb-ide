@@ -120,6 +120,8 @@ import type {
   ThreadStorageFileListResponse,
   ThreadStoragePathListResponse,
   ThreadStoragePathsQuery,
+  ProjectCommandsQuery,
+  CommandListResponse,
   WorkspaceFileListResponse,
   WorkspacePathListResponse,
   ReplayCaptureListResponse,
@@ -346,6 +348,26 @@ export type PublicApiSchema = {
     $get: Endpoint<
       PathProjectId & { query: ProjectPathsQuery },
       WorkspacePathListResponse
+    >;
+  };
+  "/projects/:id/commands": {
+    /**
+     * List the provider command/skill typeahead entries available to the
+     * project, scoped by `provider` and `environmentId`. Resolves the
+     * `(hostId, cwd)` to discover against — the environment's path when
+     * `environmentId` is provided and ready, else the project's local-path
+     * source, else the primary host with `cwd: null` (user-home roots only) —
+     * proxies to `host.list_commands`, then applies server policy (filter,
+     * de-dup by (source,name) with project origin winning, section-grouped
+     * prefix-then-alpha sort, limit). Returns `{ commands: [], truncated:
+     * false }` for providers without a command surface. Serves both the
+     * existing-thread follow-up composer and the new-thread composer (no
+     * thread id required). The trigger char (`/` for claude-code, `$` for
+     * codex) is a client concern; this route is provider-agnostic.
+     */
+    $get: Endpoint<
+      PathProjectId & { query: ProjectCommandsQuery },
+      CommandListResponse
     >;
   };
   "/projects/:id/branches": {

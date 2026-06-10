@@ -27,6 +27,7 @@ import type { QueuedMessageReorderRequest } from "@/lib/queued-message-reorder";
 import { ThreadEnvironmentSummary } from "@/components/promptbox/ThreadEnvironmentSummary";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
+import { useCommandSuggestions } from "@/hooks/useCommandSuggestions";
 import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
 import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
 import {
@@ -210,6 +211,17 @@ export function ThreadDetailPromptArea({
   const promptMentions = usePromptMentions(projectId, {
     currentThreadId: thread.id,
     environmentId: thread.environmentId ?? null,
+  });
+  // Mirrors the @-mention query plumbing above: the composer feeds the text
+  // typed after the command trigger into `commandQuery`, which drives the hook.
+  // Called unconditionally (hooks rules); inert when the provider has no
+  // command trigger.
+  const [commandQuery, setCommandQuery] = useState<string | null>(null);
+  const commandSuggestions = useCommandSuggestions({
+    projectId: thread.projectId,
+    providerId: thread.providerId,
+    environmentId: thread.environmentId,
+    query: commandQuery,
   });
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [expandedBannerSection, setExpandedBannerSection] =
@@ -749,13 +761,22 @@ export function ThreadDetailPromptArea({
     ],
   );
 
-  const mentionsConfig = useMemo(
+  const typeaheadConfig = useMemo(
     () => ({
-      suggestions: promptMentions.suggestions,
-      isLoading: promptMentions.isLoading,
-      isError: promptMentions.isError,
-      onQueryChange: promptMentions.setQuery,
-      resolveLink: resolveMentionLink,
+      mention: {
+        suggestions: promptMentions.suggestions,
+        isLoading: promptMentions.isLoading,
+        isError: promptMentions.isError,
+        onQueryChange: promptMentions.setQuery,
+        resolveLink: resolveMentionLink,
+      },
+      command: {
+        trigger: commandSuggestions.trigger,
+        suggestions: commandSuggestions.suggestions,
+        isLoading: commandSuggestions.isLoading,
+        isError: commandSuggestions.isError,
+        onQueryChange: setCommandQuery,
+      },
     }),
     [
       promptMentions.isError,
@@ -763,6 +784,10 @@ export function ThreadDetailPromptArea({
       promptMentions.setQuery,
       promptMentions.suggestions,
       resolveMentionLink,
+      commandSuggestions.isError,
+      commandSuggestions.isLoading,
+      commandSuggestions.suggestions,
+      commandSuggestions.trigger,
     ],
   );
 
@@ -874,7 +899,7 @@ export function ThreadDetailPromptArea({
       contextWindowUsage={contextWindowUsage ?? null}
       execution={executionConfig}
       permission={permissionConfig}
-      mentions={mentionsConfig}
+      typeahead={typeaheadConfig}
     />
   );
 }
