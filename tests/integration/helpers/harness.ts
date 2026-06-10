@@ -40,6 +40,7 @@ import type {
 import { NotificationHub } from "../../../apps/server/src/ws/hub.js";
 import { createPublicApiClient } from "@bb/server-contract";
 import { waitForHostConnected } from "./assertions.js";
+import { createIntegrationFetch } from "./fetch.js";
 import { removePathWithRetry } from "./remove-path.js";
 import { createTestGitRepo } from "./seed.js";
 
@@ -505,7 +506,9 @@ export async function createIntegrationHarness(
       threadStorageRootPath,
       options,
     );
-    const api = createPublicApiClient(server.baseUrl);
+    const api = createPublicApiClient(server.baseUrl, {
+      fetch: createIntegrationFetch(),
+    });
     daemonResources = await startHarnessDaemon(
       daemonDataDir,
       server,
