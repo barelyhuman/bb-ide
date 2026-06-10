@@ -3,7 +3,6 @@ import type {
   Environment,
   Host,
   PendingInteraction,
-  Project,
   ProjectExecutionDefaults,
   ProjectSource,
   ResolvedThreadExecutionOptions,
@@ -488,15 +487,15 @@ export async function deleteReplayCapture(id: string): Promise<void> {
 
 export async function createProject(
   req: CreateProjectRequest,
-): Promise<Project> {
-  return request<Project>(apiClient.projects.$post({ json: req }));
+): Promise<ProjectResponse> {
+  return request<ProjectResponse>(apiClient.projects.$post({ json: req }));
 }
 
 export async function updateProject(
   id: string,
   req: UpdateProjectRequest,
-): Promise<Project> {
-  return request<Project>(
+): Promise<ProjectResponse> {
+  return request<ProjectResponse>(
     apiClient.projects[":id"].$patch({ param: { id }, json: req }),
   );
 }
