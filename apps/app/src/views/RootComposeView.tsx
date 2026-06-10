@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import {
-  PERSONAL_PROJECT_ID,
-  type ThreadListEntry,
-} from "@bb/domain";
+import { PERSONAL_PROJECT_ID, type ThreadListEntry } from "@bb/domain";
 import {
   NewThreadPromptBox,
   type NewThreadProjectConfig,
@@ -27,7 +24,7 @@ import {
   stripProjectThreads,
 } from "@/hooks/queries/project-queries";
 import { useThreads } from "@/hooks/queries/thread-queries";
-import { useHostDaemon } from "@/hooks/useHostDaemon";
+import { usePrimaryHost } from "@/hooks/queries/host-queries";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
 import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/prompt-mention-link";
@@ -201,7 +198,7 @@ export function RootComposeView() {
     setRootComposeProjectId(projectId);
   }, [projectId, projects, rootComposeProjectId, setRootComposeProjectId]);
   const createThread = useCreateThread();
-  const { localHostId } = useHostDaemon();
+  const primaryHostId = usePrimaryHost()?.id ?? null;
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
   const { data: projectPromptHistory = [] } =
@@ -290,12 +287,7 @@ export function RootComposeView() {
       replace: true,
       state: null,
     });
-  }, [
-    location.search,
-    location.state,
-    navigate,
-    setEnvironmentSelectionValue,
-  ]);
+  }, [location.search, location.state, navigate, setEnvironmentSelectionValue]);
 
   // Worktree picker options come from the project's unarchived threads.
   // Threads on managed or unmanaged worktrees with a non-null environmentId
@@ -315,19 +307,19 @@ export function RootComposeView() {
   const effectiveEnvironmentValue = useMemo(() => {
     const parsedSelection = parseEnvironmentValue(environmentSelectionValue);
     if (isProjectless) {
-      return localHostId ? encodeHostValue(localHostId, "local") : "";
+      return primaryHostId ? encodeHostValue(primaryHostId, "local") : "";
     }
     if (parsedSelection?.type === "reuse") {
       return environmentSelectionValue;
     }
-    if (localHostId) {
+    if (primaryHostId) {
       return encodeHostValue(
-        localHostId,
+        primaryHostId,
         parsedSelection?.type === "host" ? parsedSelection.mode : "local",
       );
     }
     return "";
-  }, [environmentSelectionValue, isProjectless, localHostId]);
+  }, [environmentSelectionValue, isProjectless, primaryHostId]);
   const parsedEnvironment = useMemo(
     () => parseEnvironmentValue(effectiveEnvironmentValue),
     [effectiveEnvironmentValue],

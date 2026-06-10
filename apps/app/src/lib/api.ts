@@ -1,6 +1,7 @@
 import { extractErrorMessage, toRecord } from "@bb/core-ui";
 import type {
   Environment,
+  Host,
   PendingInteraction,
   Project,
   ProjectExecutionDefaults,
@@ -879,7 +880,9 @@ export async function listAppSources(
 export async function addAppSource(
   req: AddAppSourceRequest,
 ): Promise<AppSourceStatus> {
-  return request<AppSourceStatus>(apiClient["app-sources"].$post({ json: req }));
+  return request<AppSourceStatus>(
+    apiClient["app-sources"].$post({ json: req }),
+  );
 }
 
 export async function syncAppSource(
@@ -1403,4 +1406,8 @@ export async function getSystemVersion(): Promise<SystemVersionResponse> {
 
 export async function getSystemConfig(): Promise<SystemConfigResponse> {
   return request<SystemConfigResponse>(apiClient.system.config.$get());
+}
+
+export async function listHosts(): Promise<Host[]> {
+  return request<Host[]>(apiClient.hosts.$get());
 }

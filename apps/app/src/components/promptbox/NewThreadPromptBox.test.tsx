@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, screen } from "@testing-library/react";
-import type { PermissionMode, ProjectSource } from "@bb/domain";
+import type { Host, PermissionMode, ProjectSource } from "@bb/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import {
@@ -16,6 +16,16 @@ interface TestProviderIconProps {
 }
 
 const localHostId = "host_local";
+
+const localHost: Host = {
+  id: localHostId,
+  name: "localhost",
+  type: "persistent",
+  status: "connected",
+  lastSeenAt: 0,
+  createdAt: 0,
+  updatedAt: 0,
+};
 
 const projectSources: readonly ProjectSource[] = [
   {
@@ -48,7 +58,8 @@ function buildThreadModeConfig(): NewThreadModeConfig {
       value: `host:${localHostId}:local`,
       onChange: noop,
       sources: projectSources,
-      hostId: localHostId,
+      host: localHost,
+      isLocal: true,
     },
     branch: {
       value: null,

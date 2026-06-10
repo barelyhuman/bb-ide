@@ -42,9 +42,12 @@ type ProjectWithThreadsOverrides = Partial<ProjectWithThreadsResponse>;
 vi.mock("@/hooks/useHostDaemon", () => ({
   useHostDaemon: () => ({
     localHostId: "host_local",
+    localDaemonHostId: "host_local",
     hasDaemon: true,
     supportsNativeFolderPicker: false,
     platform: null,
+    isLocalDaemonHost: (hostId: string | null | undefined) =>
+      hostId === "host_local",
     pickFolder: null,
   }),
 }));
