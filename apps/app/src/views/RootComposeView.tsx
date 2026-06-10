@@ -34,6 +34,7 @@ import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { promptHistoryEntriesToDrafts } from "@/lib/prompt-history";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { promptDraftToInput } from "@/lib/prompt-draft";
+import { useNavigateToThreadAfterCreatePreference } from "@/lib/root-compose-create-preference";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import {
   getThreadRoutePath,
@@ -198,6 +199,8 @@ export function RootComposeView() {
     setRootComposeProjectId(projectId);
   }, [projectId, projects, rootComposeProjectId, setRootComposeProjectId]);
   const createThread = useCreateThread();
+  const [navigateToThreadAfterCreate] =
+    useNavigateToThreadAfterCreatePreference();
   const primaryHostId = usePrimaryHost()?.id ?? null;
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
@@ -533,7 +536,7 @@ export function RootComposeView() {
     }
 
     try {
-      await createThread.mutateAsync({
+      const thread = await createThread.mutateAsync({
         input: submittedInput,
         projectId,
         providerId: selectedProviderId,
@@ -546,6 +549,14 @@ export function RootComposeView() {
       });
       clearReuseEnvironment();
       promptDraft.clearIfCurrentMatches(submittedDraft);
+      if (navigateToThreadAfterCreate) {
+        navigate(
+          getThreadRoutePath({
+            projectId: thread.projectId,
+            threadId: thread.id,
+          }),
+        );
+      }
     } catch {
       // Global mutation error handling already surfaced the failure.
     }
@@ -553,6 +564,8 @@ export function RootComposeView() {
     clearReuseEnvironment,
     createThread,
     executionInputSources,
+    navigate,
+    navigateToThreadAfterCreate,
     permissionMode,
     projectId,
     promptDraft,

@@ -31,6 +31,8 @@ import type {
 } from "@bb/server-contract";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
+import { getThreadRoutePath } from "@/lib/app-route-paths";
+import { NAVIGATE_TO_THREAD_AFTER_CREATE_STORAGE_KEY } from "@/lib/root-compose-create-preference";
 import { QuickCreateProjectProvider } from "@/hooks/useQuickCreateProject";
 import { RootComposeRoute } from "./RootComposeView";
 
@@ -250,6 +252,13 @@ function seedProjectRootComposeDraft(projectId: string, text: string): void {
   );
 }
 
+function seedNavigateToThreadAfterCreatePreference(enabled: boolean): void {
+  window.localStorage.setItem(
+    NAVIGATE_TO_THREAD_AFTER_CREATE_STORAGE_KEY,
+    JSON.stringify(enabled),
+  );
+}
+
 function isEnabledButton(element: HTMLElement): boolean {
   return element instanceof HTMLButtonElement && !element.disabled;
 }
@@ -362,6 +371,11 @@ function renderRootComposeRoute(
           <QuickCreateProjectProvider>
             <Routes>
               <Route path="/" element={rootRouteElement} />
+              <Route path="/threads/:threadId" element={<LocationCapture />} />
+              <Route
+                path="/projects/:projectId/threads/:threadId"
+                element={<LocationCapture />}
+              />
             </Routes>
           </QuickCreateProjectProvider>
         </MemoryRouter>
@@ -395,6 +409,50 @@ describe("RootComposeRoute", () => {
     expect(window.localStorage.getItem("bb.root-compose.project-id")).toBe(
       PERSONAL_PROJECT_ID,
     );
+  });
+
+  it("stays on root compose after creating a thread by default", async () => {
+    const requests = installRootComposeFetchRoutes();
+    seedRootComposeDraft("Open a debugging thread");
+    renderRootComposeRoute();
+
+    await screen.findByRole("textbox");
+    const submitButton = screen.getByTitle("Submit (Enter)");
+    await waitFor(() => {
+      expect(isEnabledButton(submitButton)).toBe(true);
+    });
+
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(requests.createThread).toHaveLength(1);
+    });
+    expect(screen.getByTestId("pathname").textContent).toBe("/");
+  });
+
+  it("navigates to a created thread when the navigate-on-create preference is on", async () => {
+    const thread = makeThread({ id: "thr_new_thread" });
+    installRootComposeFetchRoutes({ createdThread: thread });
+    seedNavigateToThreadAfterCreatePreference(true);
+    seedRootComposeDraft("Open a debugging thread");
+    renderRootComposeRoute();
+
+    await screen.findByRole("textbox");
+    const submitButton = screen.getByTitle("Submit (Enter)");
+    await waitFor(() => {
+      expect(isEnabledButton(submitButton)).toBe(true);
+    });
+
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("pathname").textContent).toBe(
+        getThreadRoutePath({
+          projectId: thread.projectId,
+          threadId: thread.id,
+        }),
+      );
+    });
   });
 
   it("focuses the rich prompt editor when root compose navigation requests focus", async () => {
@@ -465,5 +523,27 @@ describe("RootComposeRoute", () => {
         screen.queryByRole("button", { name: "Stop reusing worktree" }),
       ).toBeNull();
     });
+  });
+
+  it("does not navigate when creation fails and the navigate-on-create preference is on", async () => {
+    const requests = installRootComposeFetchRoutes({
+      createThreadShouldFail: true,
+    });
+    seedNavigateToThreadAfterCreatePreference(true);
+    seedRootComposeDraft("Open a debugging thread");
+    renderRootComposeRoute();
+
+    await screen.findByRole("textbox");
+    const submitButton = screen.getByTitle("Submit (Enter)");
+    await waitFor(() => {
+      expect(isEnabledButton(submitButton)).toBe(true);
+    });
+
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(requests.createThread).toHaveLength(1);
+    });
+    expect(screen.getByTestId("pathname").textContent).toBe("/");
   });
 });
