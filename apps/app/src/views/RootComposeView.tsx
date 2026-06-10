@@ -52,6 +52,7 @@ import {
 } from "./root-compose-branch-ui";
 import { resolveRootComposeThreadEnvironment } from "./root-compose-thread-environment";
 import { useScopedBranchSelection } from "./root-compose-branch-selection";
+import { RootComposeMobileRecents } from "./RootComposeMobileRecents";
 
 const ROOT_COMPOSE_ZEN_MODE_STORAGE_KEY = "bb.promptbox.zen-mode.root-compose";
 const ROOT_COMPOSE_SIDEBAR_ACTION_ALIGNED_TOP_PADDING_CLASS = "pt-2";
@@ -200,6 +201,9 @@ export function RootComposeView() {
     setRootComposeProjectId(projectId);
   }, [projectId, projects, rootComposeProjectId, setRootComposeProjectId]);
   const createThread = useCreateThread();
+  const [lastCreatedThreadId, setLastCreatedThreadId] = useState<string | null>(
+    null,
+  );
   const [navigateToThreadAfterCreate] =
     useNavigateToThreadAfterCreatePreference();
   const primaryHostId = usePrimaryHost()?.id ?? null;
@@ -465,6 +469,20 @@ export function RootComposeView() {
       [],
     [projects],
   );
+  const mobileRecentProjectNamesById = useMemo(() => {
+    const namesById = new Map<string, string>();
+    const navigation = sidebarNavigationQuery.data;
+    if (!navigation) return namesById;
+
+    namesById.set(
+      navigation.personalProject.id,
+      navigation.personalProject.name,
+    );
+    for (const project of navigation.projects) {
+      namesById.set(project.id, project.name);
+    }
+    return namesById;
+  }, [sidebarNavigationQuery.data]);
 
   const selectedThreadModel = activeModel?.model ?? selectedModel;
   const handleProjectChange = useCallback<ProjectSelectionChangeHandler>(
@@ -548,6 +566,7 @@ export function RootComposeView() {
         executionInputSources,
         environment: selectedEnvironment,
       });
+      setLastCreatedThreadId(thread.id);
       clearReuseEnvironment();
       promptDraft.clearIfCurrentMatches(submittedDraft);
       if (navigateToThreadAfterCreate) {
@@ -915,6 +934,12 @@ export function RootComposeView() {
           },
         }}
         execution={executionConfig}
+      />
+      <RootComposeMobileRecents
+        highlightedThreadId={lastCreatedThreadId}
+        projectNamesById={mobileRecentProjectNamesById}
+        showCreatingRow={createThread.isPending}
+        threads={threadsQuery.data ?? []}
       />
     </PageShell>
   );

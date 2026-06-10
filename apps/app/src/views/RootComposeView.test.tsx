@@ -6,6 +6,7 @@ import {
   fireEvent,
   render,
   screen,
+  within,
   waitFor,
 } from "@testing-library/react";
 import {
@@ -236,6 +237,20 @@ function makeThreadListEntry(
   };
 }
 
+function makeThreadListEntryFromThread(
+  thread: ThreadWithRuntime,
+): ThreadListEntry {
+  return {
+    ...thread,
+    pinSortKey: null,
+    hasPendingInteraction: false,
+    environmentHostId: null,
+    environmentName: null,
+    environmentBranchName: null,
+    environmentWorkspaceDisplayKind: "other",
+  };
+}
+
 function makeProjectWithThreadsResponse(
   overrides: ProjectWithThreadsOverrides = {},
 ): ProjectWithThreadsResponse {
@@ -347,6 +362,7 @@ function installRootComposeFetchRoutes(
   };
   let sidebarNavigation =
     options.sidebarNavigation ?? buildSidebarNavigationResponse();
+  let threads = [...(options.threads ?? [])];
   const createdProject =
     options.createdProject ?? makeCreatedProjectWithThreadsResponse();
   const projectIds = [
@@ -406,9 +422,7 @@ function installRootComposeFetchRoutes(
         const url = new URL(request.url);
         const projectId = url.searchParams.get("projectId");
         return jsonResponse(
-          (options.threads ?? []).filter(
-            (thread) => thread.projectId === projectId,
-          ),
+          threads.filter((thread) => thread.projectId === projectId),
         );
       },
     },
@@ -420,7 +434,9 @@ function installRootComposeFetchRoutes(
         if (options.createThreadShouldFail) {
           return jsonResponse({ error: "create failed" }, { status: 500 });
         }
-        return jsonResponse(options.createdThread ?? makeThread(), {
+        const thread = options.createdThread ?? makeThread();
+        threads = [makeThreadListEntryFromThread(thread), ...threads];
+        return jsonResponse(thread, {
           status: 201,
         });
       },
@@ -519,6 +535,45 @@ describe("RootComposeRoute", () => {
       expect(requests.createThread).toHaveLength(1);
     });
     expect(screen.getByTestId("pathname").textContent).toBe("/");
+  });
+
+  it("shows the created thread in mobile recents when staying on root compose", async () => {
+    const thread = makeThread({
+      id: "thr_mobile_recent",
+      title: "Mobile feedback thread",
+      titleFallback: "Mobile feedback thread",
+      createdAt: 100,
+      latestAttentionAt: 100,
+      runtime: {
+        displayStatus: "created",
+        hostReconnectGraceExpiresAt: null,
+      },
+      status: "created",
+      updatedAt: 100,
+    });
+    installRootComposeFetchRoutes({ createdThread: thread });
+    seedRootComposeDraft("Open a mobile feedback thread");
+    renderRootComposeRoute();
+
+    await screen.findByRole("textbox");
+    const submitButton = screen.getByTitle("Submit (Enter)");
+    await waitFor(() => {
+      expect(isEnabledButton(submitButton)).toBe(true);
+    });
+
+    fireEvent.click(submitButton);
+
+    const recents = await screen.findByRole("region", { name: "Recent" });
+    const link = within(recents).getByRole("link", {
+      name: "Open Mobile feedback thread",
+    });
+    expect(link.getAttribute("href")).toBe(
+      getThreadRoutePath({
+        projectId: thread.projectId,
+        threadId: thread.id,
+      }),
+    );
+    expect(within(recents).getByText("Personal")).toBeTruthy();
   });
 
   it("navigates to a created thread when the navigate-on-create preference is on", async () => {
