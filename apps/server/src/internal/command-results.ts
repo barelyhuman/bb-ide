@@ -106,10 +106,6 @@ export function handleLiveCommandResultSideEffects<TType extends ParsedCommandTy
     report: CommandResultReportForType<TType>;
   },
 ): CommandResultSideEffectsResult {
-  if (args.report.type !== args.command.type) {
-    return emptyCommandResultSideEffects();
-  }
-
   const owner = getCommandResultOwner(args.command);
   if (!owner?.applySideEffects) {
     return emptyCommandResultSideEffects();
