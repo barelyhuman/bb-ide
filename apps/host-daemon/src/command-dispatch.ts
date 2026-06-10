@@ -348,10 +348,10 @@ const commandHandlers: CommandHandlerMap = {
         resolution.failure.message,
       );
     }
-    options.terminalManager?.closeEnvironmentTerminals(
-      command.environmentId,
-      "environment-destroyed",
-    );
+    await options.terminalManager?.closeEnvironmentTerminals({
+      environmentId: command.environmentId,
+      reason: "environment-destroyed",
+    });
     await options.runtimeManager.destroyEnvironment(command.environmentId);
     return {};
   },
