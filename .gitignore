@@ -58,6 +58,7 @@ output.txt
 # codex, claude code
 .claude/settings.local.json
 .codex
+.otto/
 
 # turborepo
 .turbo
