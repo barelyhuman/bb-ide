@@ -125,13 +125,13 @@ export class RuntimeProviderProcessManager {
   }
 
   async ensureProvider(args: EnsureRuntimeProviderArgs): Promise<void> {
-    if (this.processes.has(args.providerId)) return;
-
     const existing = this.providerStarting.get(args.providerId);
     if (existing) {
       await existing;
       return;
     }
+
+    if (this.processes.has(args.providerId)) return;
 
     const startPromise = (async () => {
       const adapter = this.getAdapter(args.providerId);
@@ -193,7 +193,9 @@ export class RuntimeProviderProcessManager {
     try {
       await startPromise;
     } finally {
-      this.providerStarting.delete(args.providerId);
+      if (this.providerStarting.get(args.providerId) === startPromise) {
+        this.providerStarting.delete(args.providerId);
+      }
     }
   }
 
