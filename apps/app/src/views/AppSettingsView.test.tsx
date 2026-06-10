@@ -78,8 +78,8 @@ describe("LocalOpenTargetSettingsSection", () => {
     cleanup();
   });
 
-  it("shows readable daemon-unavailable copy inside the picker menu while preserving saved values", async () => {
-    render(
+  it("hides file preferences for remote clients", () => {
+    const { container } = render(
       <LocalOpenTargetSettingsSection
         directoryTargetId="finder"
         fileTargetId="default-app"
@@ -91,30 +91,54 @@ describe("LocalOpenTargetSettingsSection", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: "File Preferences" }),
-    ).not.toBeNull();
-    const directoryPicker = screen.getByRole("button", {
-      name: "Directory default",
-    });
-
-    expect(directoryPicker.textContent).toContain("Finder");
-    expect(
-      screen.queryByText(
-        "This default can be changed when the local host daemon is available.",
-      ),
+      screen.queryByRole("heading", { name: "File Preferences" }),
     ).toBeNull();
+    expect(container.firstChild).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Directory default" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "File default" })).toBeNull();
+    expect(screen.queryByText("Finder")).toBeNull();
+    expect(screen.queryByText("Default App")).toBeNull();
+  });
 
-    fireEvent.pointerDown(directoryPicker, {
-      button: 0,
-      ctrlKey: false,
-    });
-
-    const message = await screen.findByText(
-      "This default can be changed when the local host daemon is available.",
+  it("shows preference rows when local open targets are available", () => {
+    render(
+      <LocalOpenTargetSettingsSection
+        directoryTargetId="finder"
+        fileTargetId="default-app"
+        hasDaemon
+        onDirectoryTargetChange={vi.fn()}
+        onFileTargetChange={vi.fn()}
+        targets={[
+          {
+            capabilities: {
+              openDirectory: true,
+              openFile: false,
+              openFileAtLine: false,
+            },
+            id: "finder",
+            label: "Finder",
+          },
+          {
+            capabilities: {
+              openDirectory: true,
+              openFile: true,
+              openFileAtLine: false,
+            },
+            id: "default-app",
+            label: "Default App",
+          },
+        ]}
+      />,
     );
-    expect(message.getAttribute("role")).toBe("note");
-    expect(message.className).toContain("text-foreground");
-    expect(message.getAttribute("data-disabled")).toBeNull();
+
+    expect(
+      screen.getByRole("button", { name: "Directory default" }).textContent,
+    ).toContain("Finder");
+    expect(
+      screen.getByRole("button", { name: "File default" }).textContent,
+    ).toContain("Default App");
   });
 });
 

@@ -68,7 +68,6 @@ interface LocalOpenTargetPreferenceDefinition {
 
 interface LocalOpenTargetPreferenceControlProps {
   definition: LocalOpenTargetPreferenceDefinition;
-  hasDaemon: boolean;
   onTargetChange: (targetId: WorkspaceOpenTargetId) => void;
   preferredTargetId: StoredWorkspaceOpenTargetPreference;
   targets: WorkspaceOpenTarget[];
@@ -237,12 +236,8 @@ const FILE_TARGET_PREFERENCE: LocalOpenTargetPreferenceDefinition = {
   label: "File default",
 };
 
-const LOCAL_OPEN_TARGET_DISCONNECTED_MENU_MESSAGE =
-  "This default can be changed when the local host daemon is available.";
-
 function LocalOpenTargetPreferenceControl({
   definition,
-  hasDaemon,
   onTargetChange,
   preferredTargetId,
   targets,
@@ -266,11 +261,8 @@ function LocalOpenTargetPreferenceControl({
       }),
     [definition.capability, preferredTargetId, targets],
   );
-  const unavailableMessage = !hasDaemon
-    ? LOCAL_OPEN_TARGET_DISCONNECTED_MENU_MESSAGE
-    : compatibleTargets.length === 0
-      ? definition.emptyDescription
-      : null;
+  const unavailableMessage =
+    compatibleTargets.length === 0 ? definition.emptyDescription : null;
   const selectedTargetId = resolvedTarget?.id ?? preferredTargetId;
   const buttonLabel =
     resolvedTarget?.label ??
@@ -347,19 +339,21 @@ export function LocalOpenTargetSettingsSection({
   onFileTargetChange,
   targets,
 }: LocalOpenTargetSettingsSectionProps) {
+  if (!hasDaemon) {
+    return null;
+  }
+
   return (
     <SettingsSection title="File Preferences">
       <div className="space-y-4">
         <LocalOpenTargetPreferenceControl
           definition={DIRECTORY_TARGET_PREFERENCE}
-          hasDaemon={hasDaemon}
           onTargetChange={onDirectoryTargetChange}
           preferredTargetId={directoryTargetId}
           targets={targets}
         />
         <LocalOpenTargetPreferenceControl
           definition={FILE_TARGET_PREFERENCE}
-          hasDaemon={hasDaemon}
           onTargetChange={onFileTargetChange}
           preferredTargetId={fileTargetId}
           targets={targets}
