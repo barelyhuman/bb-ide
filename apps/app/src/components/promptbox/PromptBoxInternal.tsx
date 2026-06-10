@@ -128,11 +128,6 @@ export interface PromptBoxSubmissionConfig {
   isRunning?: boolean;
   onStop?: () => void;
   onModifierSubmit?: () => void;
-  /** When true, the submit button is enabled even when the textarea is
-   * empty and no attachments are present. Used by callers (e.g. the
-   * new-thread flow) where empty submission has a meaningful fallback
-   * server-side. */
-  allowEmptyInput?: boolean;
 }
 
 export interface MentionsConfig {
@@ -554,7 +549,6 @@ export function PromptBoxInternal({
     isRunning = false,
     onStop,
     onModifierSubmit,
-    allowEmptyInput = false,
   } = submission;
   const {
     suggestions: mentionSuggestions,
@@ -1160,10 +1154,7 @@ export function PromptBoxInternal({
   const isVoiceBusy = isVoiceRecording || isVoiceProcessing;
   const showVoiceActionGroup = isVoiceRecording || isVoiceProcessing;
   const canSubmit =
-    (hasSubmittableInput || allowEmptyInput) &&
-    !isSubmitting &&
-    !submitDisabled &&
-    !isVoiceBusy;
+    hasSubmittableInput && !isSubmitting && !submitDisabled && !isVoiceBusy;
   const canModifierSubmit =
     onModifierSubmit !== undefined &&
     !isSubmitting &&

@@ -406,45 +406,6 @@ function buildOrderedSecondaryFileTabs({
   return displayable;
 }
 
-/**
- * Opens (or re-activates) an app tab in a thread's secondary panel and reveals
- * the panel. Keyed by `threadId`, so callers outside the active thread detail
- * view — e.g. the sidebar app-icon cluster — can drive the same panel state the
- * detail view reads. This is the canonical open-app-tab path; `useThreadFileTabs`
- * exposes it as `openApp`.
- */
-export function useOpenThreadAppTab(
-  threadId: string | null | undefined,
-): (applicationId: string) => void {
-  const updateFixedPanelTabsState = useUpdateFixedPanelTabsState(threadId);
-  const setThreadSecondaryPanelOpen = useSetAtom(
-    getThreadSecondaryPanelOpenAtom(threadId),
-  );
-  return useCallback(
-    (applicationId: string) => {
-      const nextTab = createAppTab(applicationId);
-      setThreadSecondaryPanelOpen(true);
-      updateFixedPanelTabsState((state) => {
-        const tabs = upsertSecondaryTab(state.secondary.tabs, nextTab);
-        if (
-          tabs === state.secondary.tabs &&
-          state.secondary.activeTabId === nextTab.id &&
-          state.secondary.isOpen
-        ) {
-          return state;
-        }
-        return setSecondaryTabs({
-          activeTabId: nextTab.id,
-          isOpen: true,
-          state,
-          tabs,
-        });
-      });
-    },
-    [setThreadSecondaryPanelOpen, updateFixedPanelTabsState],
-  );
-}
-
 export function useThreadFileTabs({
   apps,
   threadId,
@@ -691,8 +652,6 @@ export function useThreadFileTabs({
       updateFixedPanelTabsState,
     ],
   );
-
-  const openApp = useOpenThreadAppTab(threadId);
 
   const closeAppTab = useCallback(
     (applicationId: string) => {
@@ -1010,11 +969,9 @@ export function useThreadFileTabs({
     closeNewTab,
     closeStorageFileTab,
     closeWorkspaceFileTab,
-    hasNewTab: findNewTab(fixedPanelTabsState.secondary.tabs) !== null,
     isNewTabActive: activeNewTab !== null,
     openBrowserTab,
     openNewTab,
-    openApp,
     openHostFile,
     openStorageFile,
     openWorkspaceFile,

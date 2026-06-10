@@ -925,9 +925,6 @@ export function ThreadDetailView() {
     mergeBaseBranch,
   } = useEnvironmentMergeBase({
     environment,
-    mergeBaseBranchRef: selectedMergeBaseBranchRef,
-    mergeBaseBranchOptions,
-    mergeBaseRemoteBranchOptions,
     selectedMergeBaseBranch,
     setSelectedMergeBaseBranch,
     thread,

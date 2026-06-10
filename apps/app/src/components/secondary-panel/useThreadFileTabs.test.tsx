@@ -433,7 +433,10 @@ describe("useThreadFileTabs", () => {
     });
 
     act(() => {
-      result.current.openApp("review");
+      result.current.selectFileSearchResult({
+        source: "app",
+        applicationId: "review",
+      });
       result.current.openWorkspaceFile(
         buildWorkspaceFileTab({ lineNumber: null, path: "src/app.ts" }),
       );
@@ -461,7 +464,6 @@ describe("useThreadFileTabs", () => {
       result.current.openNewTab();
     });
 
-    expect(result.current.hasNewTab).toBe(true);
     expect(result.current.isNewTabActive).toBe(true);
     expect(result.current.fixedPanelTabsState.secondary.tabs).toEqual([
       {
@@ -487,7 +489,6 @@ describe("useThreadFileTabs", () => {
       });
     });
 
-    expect(result.current.hasNewTab).toBe(false);
     expect(result.current.activeWorkspaceFilePath).toBe("src/open.ts");
     expect(result.current.fixedPanelTabsState.secondary.tabs).toEqual([
       {
@@ -522,7 +523,6 @@ describe("useThreadFileTabs", () => {
       });
     });
 
-    expect(result.current.hasNewTab).toBe(false);
     expect(result.current.activeWorkspaceFilePath).toBe("src/existing.ts");
     expect(result.current.activeWorkspaceFileLineNumber).toBe(7);
     expect(result.current.fixedPanelTabsState.secondary.tabs).toHaveLength(1);
@@ -764,7 +764,10 @@ describe("useThreadFileTabs", () => {
     });
 
     act(() => {
-      result.current.openApp("review");
+      result.current.selectFileSearchResult({
+        source: "app",
+        applicationId: "review",
+      });
     });
 
     expect(appTabIds(result.current.orderedSecondaryFileTabs)).toEqual([

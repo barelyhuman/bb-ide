@@ -225,7 +225,6 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
           isSubmitting,
           disabled,
           title: isSubmitting ? "Submitting..." : "Submit (Enter)",
-          allowEmptyInput: false,
         }}
         zenMode={{
           layout: "root-compose",

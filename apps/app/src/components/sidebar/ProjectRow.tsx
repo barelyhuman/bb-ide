@@ -208,7 +208,6 @@ interface EnvironmentThreadGroupHeaderProps {
   rowDepth: number;
   stickyLevel?: number;
   parentLineDepth?: number;
-  childCount: number;
   childActivity: CollapsedChildActivity;
   isCollapsed: boolean;
   archiveThreadsPending?: boolean;
@@ -600,7 +599,6 @@ function EnvironmentThreadGroupHeader({
   rowDepth,
   stickyLevel,
   parentLineDepth,
-  childCount,
   childActivity,
   isCollapsed,
   archiveThreadsPending = false,
@@ -835,7 +833,6 @@ const EnvironmentThreadGroupRow = memo(function EnvironmentThreadGroupRow({
             node: representativeNode,
           })}
           parentLineDepth={parentLineDepth}
-          childCount={stats.childCount}
           childActivity={stats.childActivity}
           isCollapsed={isCollapsed}
           archiveThreadsPending={archiveThreadsPending}
