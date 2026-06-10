@@ -517,7 +517,7 @@ export function RootComposeView() {
     }
 
     try {
-      const thread = await createThread.mutateAsync({
+      await createThread.mutateAsync({
         input: submittedInput,
         projectId,
         providerId: selectedProviderId,
@@ -530,12 +530,6 @@ export function RootComposeView() {
       });
       clearReuseEnvironment();
       promptDraft.clearIfCurrentMatches(submittedDraft);
-      navigate(
-        getThreadRoutePath({
-          projectId: thread.projectId,
-          threadId: thread.id,
-        }),
-      );
     } catch {
       // Global mutation error handling already surfaced the failure.
     }
@@ -543,7 +537,6 @@ export function RootComposeView() {
     clearReuseEnvironment,
     createThread,
     executionInputSources,
-    navigate,
     permissionMode,
     projectId,
     promptDraft,

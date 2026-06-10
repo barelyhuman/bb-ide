@@ -31,7 +31,6 @@ import type {
 } from "@bb/server-contract";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
-import { getThreadRoutePath } from "@/lib/app-route-paths";
 import { QuickCreateProjectProvider } from "@/hooks/useQuickCreateProject";
 import { RootComposeRoute } from "./RootComposeView";
 
@@ -148,18 +147,6 @@ function RootComposeWithFocusButton() {
         onClick={() => navigate("/", { state: { focusPrompt: true } })}
       >
         Sidebar new thread
-      </button>
-    </>
-  );
-}
-
-function ThreadRouteWithReturnToCompose() {
-  const navigate = useNavigate();
-  return (
-    <>
-      <LocationCapture />
-      <button type="button" onClick={() => navigate("/")}>
-        New thread
       </button>
     </>
   );
@@ -374,14 +361,6 @@ function renderRootComposeRoute(
           <QuickCreateProjectProvider>
             <Routes>
               <Route path="/" element={rootRouteElement} />
-              <Route
-                path="/threads/:threadId"
-                element={<ThreadRouteWithReturnToCompose />}
-              />
-              <Route
-                path="/projects/:projectId/threads/:threadId"
-                element={<ThreadRouteWithReturnToCompose />}
-              />
             </Routes>
           </QuickCreateProjectProvider>
         </MemoryRouter>
@@ -417,30 +396,6 @@ describe("RootComposeRoute", () => {
     );
   });
 
-  it("navigates to a successfully created new thread", async () => {
-    const thread = makeThread({ id: "thr_new_thread" });
-    installRootComposeFetchRoutes({ createdThread: thread });
-    seedRootComposeDraft("Open a debugging thread");
-    renderRootComposeRoute();
-
-    await screen.findByRole("textbox");
-    const submitButton = screen.getByTitle("Submit (Enter)");
-    await waitFor(() => {
-      expect(isEnabledButton(submitButton)).toBe(true);
-    });
-
-    fireEvent.click(submitButton);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("pathname").textContent).toBe(
-        getThreadRoutePath({
-          projectId: thread.projectId,
-          threadId: thread.id,
-        }),
-      );
-    });
-  });
-
   it("focuses the rich prompt editor when root compose navigation requests focus", async () => {
     installRootComposeFetchRoutes();
     seedRootComposeDraft("Continue this draft");
@@ -462,7 +417,7 @@ describe("RootComposeRoute", () => {
     });
   });
 
-  it("does not keep reuse-environment selection after creating a thread", async () => {
+  it("clears the reuse-environment selection after creating a thread", async () => {
     const standardProject = makeStandardProjectWithThreadsResponse();
     const createdThread = makeThread({
       id: "thr_standard_created",
@@ -489,60 +444,6 @@ describe("RootComposeRoute", () => {
     });
 
     await screen.findByRole("button", { name: "Stop reusing worktree" });
-    const firstSubmitButton = screen.getByTitle("Submit (Enter)");
-    await waitFor(() => {
-      expect(isEnabledButton(firstSubmitButton)).toBe(true);
-    });
-
-    fireEvent.click(firstSubmitButton);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("pathname").textContent).toBe(
-        getThreadRoutePath({
-          projectId: STANDARD_PROJECT_ID,
-          threadId: createdThread.id,
-        }),
-      );
-    });
-    expect(requests.createThread).toHaveLength(1);
-    const firstCreateBody = await requests.createThread[0]?.json();
-    expect(firstCreateBody.environment).toEqual({
-      type: "reuse",
-      environmentId: "env_reuse",
-    });
-
-    seedProjectRootComposeDraft(
-      STANDARD_PROJECT_ID,
-      "Start a regular new thread",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "New thread" }));
-
-    await screen.findByRole("textbox");
-    const secondSubmitButton = screen.getByTitle("Submit (Enter)");
-    await waitFor(() => {
-      expect(isEnabledButton(secondSubmitButton)).toBe(true);
-    });
-
-    fireEvent.click(secondSubmitButton);
-
-    await waitFor(() => {
-      expect(requests.createThread).toHaveLength(2);
-    });
-    const secondCreateBody = await requests.createThread[1]?.json();
-    expect(secondCreateBody.environment).toMatchObject({
-      type: "host",
-      hostId: "host_local",
-    });
-  });
-
-  it("does not navigate when new thread creation fails", async () => {
-    const requests = installRootComposeFetchRoutes({
-      createThreadShouldFail: true,
-    });
-    seedRootComposeDraft("Open a debugging thread");
-    renderRootComposeRoute();
-
-    await screen.findByRole("textbox");
     const submitButton = screen.getByTitle("Submit (Enter)");
     await waitFor(() => {
       expect(isEnabledButton(submitButton)).toBe(true);
@@ -553,6 +454,15 @@ describe("RootComposeRoute", () => {
     await waitFor(() => {
       expect(requests.createThread).toHaveLength(1);
     });
-    expect(screen.getByTestId("pathname").textContent).toBe("/");
+    const createBody = await requests.createThread[0]?.json();
+    expect(createBody.environment).toEqual({
+      type: "reuse",
+      environmentId: "env_reuse",
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: "Stop reusing worktree" }),
+      ).toBeNull();
+    });
   });
 });
