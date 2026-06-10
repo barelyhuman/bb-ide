@@ -255,7 +255,6 @@ export interface PromptBoxInternalProps {
    * "Reusing existing worktree" banner when env mode is set to reuse. */
   header?: ReactNode;
   footerStart?: ReactNode;
-  autoFocus?: boolean;
   submission?: PromptBoxSubmissionConfig;
   /**
    * Minimum textarea height in pixels. Defaults to PROMPTBOX_MIN_HEIGHT.
@@ -555,7 +554,6 @@ export function PromptBoxInternal({
   className,
   header,
   footerStart,
-  autoFocus = false,
   submission = {},
   minHeight = PROMPTBOX_MIN_HEIGHT,
   typeahead,
@@ -605,6 +603,8 @@ export function PromptBoxInternal({
   const isPointerCoarse = usePointerCoarse();
   const canSubmitWithEnterKey = !isPointerCoarse;
   const editorEnterKeyHint = isPointerCoarse ? "enter" : "send";
+  // Passive text autofocus opens the soft keyboard on coarse-pointer devices.
+  const shouldAvoidSoftKeyboardAutofocus = isPointerCoarse;
   const formRef = useRef<HTMLFormElement>(null);
   const heightAnimationFromRef = useRef<number | null>(null);
   const editorRef = useRef<Editor | null>(null);
@@ -660,7 +660,7 @@ export function PromptBoxInternal({
     [resolvedZenModeStorageKey],
   );
   const [isZenMode, setIsZenMode] = useAtom(zenModeAtom);
-  const autoFocusScopeKey = history?.resetKey;
+  const focusScopeKey = history?.resetKey;
   const onChangeRef = useRef(onChange);
 
   useEffect(() => {
@@ -920,12 +920,17 @@ export function PromptBoxInternal({
   }, [editor, editorEnterKeyHint, placeholder]);
 
   useLayoutEffect(() => {
-    if (!autoFocus) return;
+    if (shouldAvoidSoftKeyboardAutofocus) return;
     if (!editor) return;
 
     editor.commands.focus("end");
     scheduleRevealEditorSelection();
-  }, [autoFocus, autoFocusScopeKey, editor, scheduleRevealEditorSelection]);
+  }, [
+    editor,
+    focusScopeKey,
+    scheduleRevealEditorSelection,
+    shouldAvoidSoftKeyboardAutofocus,
+  ]);
 
   useEffect(() => {
     mentionRangesRef.current = mentionRanges;

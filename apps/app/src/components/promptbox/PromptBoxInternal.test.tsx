@@ -31,7 +31,6 @@ beforeAll(() => {
 });
 
 interface PromptBoxHarnessProps {
-  autoFocus?: boolean;
   historyEntries: PromptBoxHarnessDraft[];
   initialDraft: PromptBoxHarnessDraft;
   mentionSuggestions?: PromptMentionSuggestion[];
@@ -106,7 +105,6 @@ function PromptBoxHarness(args: PromptBoxHarnessProps) {
           }));
         }}
         onSubmit={args.onSubmitSpy ?? noopPromptSubmit}
-        autoFocus={args.autoFocus ?? false}
         placeholder={args.placeholder}
         attachments={{
           items: draft.attachments,
@@ -164,6 +162,12 @@ afterEach(() => {
   restoreMatchMedia();
   vi.clearAllMocks();
 });
+
+function setupCoarsePointerViewport(): void {
+  setupMatchMedia({
+    matchesByQuery: new Map([[POINTER_COARSE_QUERY, true]]),
+  });
+}
 
 async function pressHistoryArrow({
   expectedValue,
@@ -292,6 +296,38 @@ function waitForAnimationFrame(): Promise<void> {
   });
 }
 
+describe("PromptBoxInternal autofocus", () => {
+  it("autofocuses the prompt editor on fine pointer devices", async () => {
+    render(
+      <PromptBoxHarness
+        initialDraft={{ text: "Run this", attachments: [] }}
+        historyEntries={[]}
+      />,
+    );
+
+    const editor = getEditor();
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(editor);
+    });
+  });
+
+  it("does not autofocus the prompt editor on coarse pointer devices", async () => {
+    setupCoarsePointerViewport();
+    render(
+      <PromptBoxHarness
+        initialDraft={{ text: "Run this", attachments: [] }}
+        historyEntries={[]}
+      />,
+    );
+
+    const editor = getEditor();
+    await waitForAnimationFrame();
+
+    expect(document.activeElement).not.toBe(editor);
+  });
+});
+
 describe("PromptBoxInternal rich paste", () => {
   it("updates the empty editor placeholder after rerender", async () => {
     const { rerender } = render(
@@ -377,6 +413,7 @@ describe("PromptBoxInternal rich paste", () => {
         historyEntries={[]}
       />,
     );
+    await waitForAnimationFrame();
     const scrollContainer = getPromptEditorScrollContainer(container);
     vi.spyOn(scrollContainer, "getBoundingClientRect").mockReturnValue(
       new DOMRect(0, 0, 320, 100),
@@ -655,9 +692,7 @@ describe("PromptBoxInternal submit shortcuts", () => {
   });
 
   it("does not submit on unshifted Enter for coarse pointer devices", async () => {
-    setupMatchMedia({
-      matchesByQuery: new Map([[POINTER_COARSE_QUERY, true]]),
-    });
+    setupCoarsePointerViewport();
     const onSubmit = vi.fn();
     render(
       <PromptBoxHarness
