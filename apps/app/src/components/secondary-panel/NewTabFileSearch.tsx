@@ -87,6 +87,7 @@ export interface NewTabFileSearchProps {
 
 export interface NewTabActionMenuProps {
   projectId: string | undefined;
+  environmentId: string | null;
   currentThreadId: string;
   onSelect: (selection: FileSearchSelection) => void;
   onOpenFileSearch: () => void;
@@ -162,6 +163,7 @@ type LauncherTileVariant = "result" | "menu";
 
 interface GetAvailableFileSearchSourcesArgs {
   projectId: string | undefined;
+  environmentId: string | null;
   currentThreadId: string;
 }
 
@@ -247,13 +249,21 @@ const RECENT_ENTRY_ID_PREFIX = "file-search-result-recent";
 
 function getAvailableFileSearchSources({
   projectId,
+  environmentId,
   currentThreadId,
 }: GetAvailableFileSearchSourcesArgs): readonly FileSearchSource[] {
   const sources: FileSearchSource[] = [];
   if (currentThreadId.length > 0) {
     sources.push("app");
   }
-  if (projectId && !isProjectlessProjectId(projectId)) {
+  // The workspace is searchable via an existing thread's environment, or via a
+  // standard project's default source before any environment exists. Projectless
+  // (personal) threads have no project source, so without an environment there
+  // is no workspace to search. Mirrors the source selection in usePathSuggestions.
+  if (
+    Boolean(environmentId) ||
+    (projectId && !isProjectlessProjectId(projectId))
+  ) {
     sources.push("workspace");
   }
   if (currentThreadId.length > 0) {
@@ -724,12 +734,9 @@ export function NewTabFileSearch({
   );
   const trimmedQuery = query.trim();
   const hasQuery = trimmedQuery.length > 0;
-  const searchableWorkspaceProjectId = isProjectlessProjectId(projectId)
-    ? undefined
-    : projectId;
   const { suggestions, isLoading, fileSearchError, isDebouncing } =
     useFileSearchSuggestions({
-      projectId: searchableWorkspaceProjectId,
+      projectId,
       query,
       limit: FILE_SEARCH_LIMIT,
       environmentId,
@@ -739,9 +746,10 @@ export function NewTabFileSearch({
     () =>
       getAvailableFileSearchSources({
         projectId,
+        environmentId,
         currentThreadId,
       }),
-    [currentThreadId, projectId],
+    [currentThreadId, environmentId, projectId],
   );
   const fileSearchSources = useMemo(
     () => availableSources.filter((source) => source !== "app"),
@@ -966,6 +974,7 @@ export function NewTabFileSearch({
 
 export function NewTabActionMenu({
   projectId,
+  environmentId,
   currentThreadId,
   onSelect,
   onOpenFileSearch,
@@ -982,9 +991,10 @@ export function NewTabActionMenu({
     () =>
       getAvailableFileSearchSources({
         projectId,
+        environmentId,
         currentThreadId,
       }),
-    [currentThreadId, projectId],
+    [currentThreadId, environmentId, projectId],
   );
   const fileSearchSources = useMemo(
     () => availableSources.filter((source) => source !== "app"),

@@ -50,6 +50,7 @@ import type {
   EnvironmentDiffFileQuery,
   EnvironmentDiffFileResponse,
   EnvironmentDiffBranchesResponse,
+  EnvironmentPathsQuery,
   EnvironmentActionApiError,
   EnvironmentActionRequest,
   EnvironmentActionResponse,
@@ -340,10 +341,10 @@ export type PublicApiSchema = {
   };
   "/projects/:id/paths": {
     /**
-     * Search files and/or folders in the project. Proxies to `host.list_paths`
-     * against the path of the environment identified by `environmentId` when
-     * provided, falling back to the project's default source path when
-     * `environmentId` is null.
+     * Search files and/or folders against the project's default source path.
+     * Proxies to `host.list_paths`. Used by the new-thread compose box before
+     * any environment exists; once a thread has an environment, workspace path
+     * search goes through `/environments/:id/paths` instead.
      */
     $get: Endpoint<
       PathProjectId & { query: ProjectPathsQuery },
@@ -462,6 +463,18 @@ export type PublicApiSchema = {
     $get: Endpoint<
       PathId & { query: EnvironmentDiffBranchesQuery },
       EnvironmentDiffBranchesResponse
+    >;
+  };
+  "/environments/:id/paths": {
+    /**
+     * Search files and/or folders in an environment's workspace. Proxies to
+     * `host.list_paths` against the environment's path. Project-agnostic — works
+     * for any ready environment, including projectless (personal) ones — so it
+     * is the canonical workspace path search for an existing thread.
+     */
+    $get: Endpoint<
+      PathId & { query: EnvironmentPathsQuery },
+      WorkspacePathListResponse
     >;
   };
   "/environments/:id/actions": {

@@ -26,6 +26,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
   return {
     ...actual,
     searchProjectPaths: vi.fn(),
+    searchEnvironmentPaths: vi.fn(),
     listApps: vi.fn(),
     listThreadStoragePaths: vi.fn(),
   };
@@ -45,6 +46,7 @@ interface PathListFixtureResponse {
 
 interface RenderNewTabPageArgs {
   projectId?: string;
+  environmentId?: string | null;
   currentThreadId?: string;
   onSelect?: (selection: FileSearchSelection) => void;
 }
@@ -85,6 +87,7 @@ function seedRecentItems(threadId: string, items: ThreadRecentItem[]): void {
 function mockEmptySearchSources(): void {
   vi.mocked(api.listApps).mockResolvedValue([]);
   vi.mocked(api.searchProjectPaths).mockResolvedValue(makePathResponse([]));
+  vi.mocked(api.searchEnvironmentPaths).mockResolvedValue(makePathResponse([]));
   vi.mocked(api.listThreadStoragePaths).mockResolvedValue({
     ...makePathResponse([]),
     storageRootPath: "/tmp/thread-storage",
@@ -100,7 +103,7 @@ function renderNewTabPage(args: RenderNewTabPageArgs = {}) {
     ...render(
       <NewTabPage
         projectId={args.projectId}
-        environmentId="env-1"
+        environmentId={args.environmentId === undefined ? "env-1" : args.environmentId}
         currentThreadId={args.currentThreadId ?? "thr-standard"}
         focusRequest={0}
         onSelect={onSelect}
@@ -120,7 +123,7 @@ afterEach(() => {
 describe("NewTabPage", () => {
   it("renders file search and selects a workspace result", async () => {
     vi.mocked(api.listApps).mockResolvedValue([]);
-    vi.mocked(api.searchProjectPaths).mockResolvedValue(
+    vi.mocked(api.searchEnvironmentPaths).mockResolvedValue(
       makePathResponse([
         {
           kind: "file",
@@ -168,7 +171,7 @@ describe("NewTabPage", () => {
 
   it("selects a thread-storage result with the keyboard", async () => {
     vi.mocked(api.listApps).mockResolvedValue([]);
-    vi.mocked(api.searchProjectPaths).mockResolvedValue(
+    vi.mocked(api.searchEnvironmentPaths).mockResolvedValue(
       makePathResponse([
         {
           kind: "file",
@@ -206,10 +209,11 @@ describe("NewTabPage", () => {
     });
   });
 
-  it("ends file-search loading in a projectless thread with no matches", async () => {
+  it("ends file-search loading in a projectless thread with no workspace", async () => {
     mockEmptySearchSources();
     renderNewTabPage({
       projectId: undefined,
+      environmentId: null,
       currentThreadId: "thr-projectless-search",
     });
 
@@ -224,18 +228,21 @@ describe("NewTabPage", () => {
       expect(screen.queryByText("Searching files...")).toBeNull();
     });
 
+    // No project source and no environment ⇒ workspace is never queried.
     expect(api.searchProjectPaths).not.toHaveBeenCalled();
+    expect(api.searchEnvironmentPaths).not.toHaveBeenCalled();
     expect(screen.queryByText("File search failed.")).toBeNull();
     expect(screen.getByText("No files match your search.")).toBeTruthy();
   });
 
   it("renders an unavailable state without querying", () => {
-    renderNewTabPage({ currentThreadId: "" });
+    renderNewTabPage({ currentThreadId: "", environmentId: null });
 
     expect(
       screen.getByText("No searchable file source is available."),
     ).toBeTruthy();
     expect(api.searchProjectPaths).not.toHaveBeenCalled();
+    expect(api.searchEnvironmentPaths).not.toHaveBeenCalled();
     expect(api.listApps).not.toHaveBeenCalled();
     expect(api.listThreadStoragePaths).not.toHaveBeenCalled();
 

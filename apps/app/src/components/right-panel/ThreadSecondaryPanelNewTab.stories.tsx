@@ -11,7 +11,7 @@ import { WithDesktopBrowser } from "../../../.ladle/story-desktop";
 import { createAppQueryClient } from "@/lib/query-client";
 import {
   appsQueryKey,
-  projectPathsQueryKey,
+  environmentPathsQueryKey,
   threadStoragePathsQueryKey,
 } from "@/hooks/queries/query-keys";
 import { ThreadSecondaryPanel } from "../secondary-panel/ThreadSecondaryPanel";
@@ -237,7 +237,6 @@ interface StoryQueryClientArgs {
   apps: readonly AppSummary[];
   currentThreadId: string;
   initialQuery: string;
-  projectId: string | undefined;
   threadStoragePaths: readonly WorkspacePathEntry[];
   workspacePaths: readonly WorkspacePathEntry[];
 }
@@ -305,7 +304,6 @@ function useStoryQueryClient({
   apps,
   currentThreadId,
   initialQuery,
-  projectId,
   threadStoragePaths,
   workspacePaths,
 }: StoryQueryClientArgs) {
@@ -324,11 +322,10 @@ function useStoryQueryClient({
     });
     const query = initialQuery.trim();
     queryClient.setQueryData(
-      projectPathsQueryKey(
-        projectId,
+      environmentPathsQueryKey(
+        ENVIRONMENT_ID,
         query,
         STORY_SOURCE_LIMIT,
-        ENVIRONMENT_ID,
         true,
         false,
       ),
@@ -349,7 +346,6 @@ function useStoryQueryClient({
     apps,
     currentThreadId,
     initialQuery,
-    projectId,
     threadStoragePaths,
     workspacePaths,
   ]);
@@ -392,7 +388,6 @@ function NewTabPanelStory({
     apps,
     currentThreadId,
     initialQuery,
-    projectId,
     threadStoragePaths,
     workspacePaths,
   });
@@ -535,6 +530,7 @@ function NewTabPanelStory({
           <QueryClientProvider client={queryClient}>
             <NewTabActionMenu
               projectId={projectId}
+              environmentId={ENVIRONMENT_ID}
               currentThreadId={currentThreadId}
               onSelect={handleSelect}
               onOpenFileSearch={handleOpenFileSearch}

@@ -41,7 +41,6 @@ interface UseProjectPathSuggestionsArgs {
   projectId: string | undefined;
   query: string | null;
   limit?: number;
-  environmentId: string | null;
   includeFiles: boolean;
   includeDirectories: boolean;
 }
@@ -186,7 +185,6 @@ export function useProjectPathSuggestions(args: UseProjectPathSuggestionsArgs) {
     projectId,
     query,
     limit = 8,
-    environmentId,
     includeFiles,
     includeDirectories,
   } = args;
@@ -197,7 +195,6 @@ export function useProjectPathSuggestions(args: UseProjectPathSuggestionsArgs) {
       projectId,
       trimmedQuery,
       limit,
-      environmentId,
       includeFiles,
       includeDirectories,
     ),
@@ -206,7 +203,6 @@ export function useProjectPathSuggestions(args: UseProjectPathSuggestionsArgs) {
         projectId: projectId ?? "",
         query: trimmedQuery,
         limit,
-        environmentId,
         includeFiles,
         includeDirectories,
       }),

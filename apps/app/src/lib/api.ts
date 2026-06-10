@@ -601,7 +601,14 @@ interface SearchProjectPathsArgs {
   projectId: string;
   query: string;
   limit: number;
-  environmentId: string | null;
+  includeFiles: boolean;
+  includeDirectories: boolean;
+}
+
+interface SearchEnvironmentPathsArgs {
+  environmentId: string;
+  query: string;
+  limit: number;
   includeFiles: boolean;
   includeDirectories: boolean;
 }
@@ -612,6 +619,11 @@ function toPathListIncludeQueryValue(
   return value ? "true" : "false";
 }
 
+/**
+ * Search the project's default source path. Used by the new-thread compose box
+ * before any environment exists; once a thread has an environment, workspace
+ * path search goes through {@link searchEnvironmentPaths}.
+ */
 export async function searchProjectPaths(
   args: SearchProjectPathsArgs,
 ): Promise<WorkspacePathListResponse> {
@@ -621,7 +633,29 @@ export async function searchProjectPaths(
       query: {
         query: args.query,
         limit: String(args.limit),
-        environmentId: args.environmentId ?? "",
+        // The project-source listing has no environment to scope to; the shared
+        // query schema still carries the field, so send the empty string (=
+        // null) to select the default source.
+        environmentId: "",
+        includeFiles: toPathListIncludeQueryValue(args.includeFiles),
+        includeDirectories: toPathListIncludeQueryValue(
+          args.includeDirectories,
+        ),
+      },
+    }),
+  );
+}
+
+/** Search the workspace of an existing thread's environment (project-agnostic). */
+export async function searchEnvironmentPaths(
+  args: SearchEnvironmentPathsArgs,
+): Promise<WorkspacePathListResponse> {
+  return request<WorkspacePathListResponse>(
+    apiClient.environments[":id"].paths.$get({
+      param: { id: args.environmentId },
+      query: {
+        query: args.query,
+        limit: String(args.limit),
         includeFiles: toPathListIncludeQueryValue(args.includeFiles),
         includeDirectories: toPathListIncludeQueryValue(
           args.includeDirectories,

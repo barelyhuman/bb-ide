@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import { useDebounceValue } from "usehooks-ts";
+import { useEnvironmentPathSuggestions } from "./queries/environment-queries";
 import { useProjectPathSuggestions } from "./queries/project-queries";
 import { useThreadStoragePaths } from "./queries/thread-queries";
+import { isProjectlessProjectId } from "@/lib/app-route-paths";
 import type { PathListOptions } from "@/lib/path-list-options";
 
 export const PATH_SUGGESTION_DEBOUNCE_MS = 120;
@@ -11,6 +13,8 @@ const SOURCE_OVERSAMPLE_MULTIPLIER = 2;
 
 export type PathSuggestionSource = "workspace" | "thread-storage";
 export type PathSuggestionEntryKind = "file" | "directory";
+
+type WorkspaceSource = "environment" | "project" | "none";
 
 export interface PathSuggestion {
   source: PathSuggestionSource;
@@ -89,7 +93,16 @@ export function usePathSuggestions(
   const debouncedTrimmedQuery = debouncedQuery?.trim() ?? "";
   const isDebouncing = hasQuery && trimmedQuery !== debouncedTrimmedQuery;
   const hasDebouncedQuery = debouncedTrimmedQuery.length > 0;
-  const includeWorkspace = Boolean(args.projectId);
+  // The workspace source for an existing thread is its environment; the
+  // project's default source is only used by the new-thread compose box before
+  // an environment exists. Projectless (personal) threads have no project
+  // source, so without an environment there is no workspace to search.
+  const workspaceSource: WorkspaceSource = args.environmentId
+    ? "environment"
+    : args.projectId && !isProjectlessProjectId(args.projectId)
+      ? "project"
+      : "none";
+  const includeWorkspace = workspaceSource !== "none";
   const includeThreadStorage = Boolean(args.currentThreadId);
   const isWorkspaceQueryEnabled = includeWorkspace && hasDebouncedQuery;
   const isThreadStorageQueryEnabled = includeThreadStorage && hasDebouncedQuery;
@@ -104,14 +117,25 @@ export function usePathSuggestions(
     [args.includeDirectories, debouncedQuery, oversampleLimit],
   );
 
-  const workspaceQuery = useProjectPathSuggestions({
-    projectId: args.projectId,
+  const projectWorkspaceQuery = useProjectPathSuggestions({
+    projectId: workspaceSource === "project" ? args.projectId : undefined,
     query: debouncedQuery,
     limit: oversampleLimit,
-    environmentId: args.environmentId,
     includeFiles: true,
     includeDirectories: args.includeDirectories,
   });
+  const environmentWorkspaceQuery = useEnvironmentPathSuggestions({
+    environmentId:
+      workspaceSource === "environment" ? args.environmentId : undefined,
+    query: debouncedQuery,
+    limit: oversampleLimit,
+    includeFiles: true,
+    includeDirectories: args.includeDirectories,
+  });
+  const workspaceQuery =
+    workspaceSource === "environment"
+      ? environmentWorkspaceQuery
+      : projectWorkspaceQuery;
   const threadStorageQuery = useThreadStoragePaths(
     args.currentThreadId ?? "",
     threadStorageOptions,

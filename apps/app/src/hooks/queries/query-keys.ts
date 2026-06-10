@@ -48,6 +48,7 @@ export const ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY =
 export const ENVIRONMENT_GIT_DIFF_QUERY_KEY = "environmentGitDiff";
 export const ENVIRONMENT_DIFF_FILE_QUERY_KEY = "environmentDiffFile";
 export const ENVIRONMENT_FILE_PREVIEW_QUERY_KEY = "environmentFilePreview";
+export const ENVIRONMENT_PATHS_QUERY_KEY = "environmentPaths";
 export const THREAD_TIMELINE_QUERY_KEY = "threadTimeline";
 export const THREAD_TIMELINE_TURN_SUMMARY_DETAILS_QUERY_KEY =
   "threadTimelineTurnSummaryDetails";
@@ -112,7 +113,6 @@ export type ProjectPathsQueryKey = readonly [
   string | undefined,
   string,
   number,
-  string | null,
   boolean,
   boolean,
 ];
@@ -412,6 +412,18 @@ export type EnvironmentFilePreviewQueryKeyPrefix = readonly [
   typeof ENVIRONMENT_FILE_PREVIEW_QUERY_KEY,
   string,
 ];
+export type EnvironmentPathsQueryKey = readonly [
+  typeof ENVIRONMENT_PATHS_QUERY_KEY,
+  string | undefined,
+  string,
+  number,
+  boolean,
+  boolean,
+];
+export type EnvironmentPathsQueryKeyPrefix = readonly [
+  typeof ENVIRONMENT_PATHS_QUERY_KEY,
+  string,
+];
 export type SystemProvidersQueryKey = readonly [
   typeof SYSTEM_PROVIDERS_QUERY_KEY,
 ];
@@ -469,7 +481,6 @@ export function projectPathsQueryKey(
   projectId: string | undefined,
   query: string,
   limit: number,
-  environmentId: string | null,
   includeFiles: boolean,
   includeDirectories: boolean,
 ): ProjectPathsQueryKey {
@@ -478,7 +489,6 @@ export function projectPathsQueryKey(
     projectId,
     query,
     limit,
-    environmentId,
     includeFiles,
     includeDirectories,
   ];
@@ -486,6 +496,29 @@ export function projectPathsQueryKey(
 
 export function allProjectPathsQueryKeyPrefix(): AllProjectPathsQueryKeyPrefix {
   return [PROJECT_PATHS_QUERY_KEY];
+}
+
+export function environmentPathsQueryKey(
+  environmentId: string | undefined,
+  query: string,
+  limit: number,
+  includeFiles: boolean,
+  includeDirectories: boolean,
+): EnvironmentPathsQueryKey {
+  return [
+    ENVIRONMENT_PATHS_QUERY_KEY,
+    environmentId,
+    query,
+    limit,
+    includeFiles,
+    includeDirectories,
+  ];
+}
+
+export function environmentPathsQueryKeyPrefix(
+  environmentId: string,
+): EnvironmentPathsQueryKeyPrefix {
+  return [ENVIRONMENT_PATHS_QUERY_KEY, environmentId];
 }
 
 export function projectPromptHistoryQueryKey(

@@ -762,6 +762,7 @@ export function ThreadDetailView() {
     ({ closeMenu }) => (
       <NewTabActionMenu
         projectId={projectId ?? undefined}
+        environmentId={thread?.environmentId ?? null}
         currentThreadId={threadId ?? ""}
         onSelect={selectFileSearchResult}
         onOpenFileSearch={handleOpenFileSearch}
@@ -779,6 +780,7 @@ export function ThreadDetailView() {
       openBrowserTab,
       projectId,
       selectFileSearchResult,
+      thread?.environmentId,
       threadId,
     ],
   );

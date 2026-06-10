@@ -1057,6 +1057,20 @@ export const projectPathsQuerySchema = projectFilesQuerySchema.extend({
 });
 export type ProjectPathsQuery = z.infer<typeof projectPathsQuerySchema>;
 
+/**
+ * Query for searching paths in an environment's workspace. Unlike the
+ * project-scoped variant this needs no `environmentId` — the environment is
+ * the route param — and is project-agnostic, so it works for projectless
+ * (personal) environments too.
+ */
+export const environmentPathsQuerySchema = z.object({
+  query: z.string().min(1).max(FILE_LIST_QUERY_MAX_LENGTH).optional(),
+  limit: z.string().regex(/^\d+$/).optional(),
+  includeFiles: pathListIncludeQueryValueSchema,
+  includeDirectories: pathListIncludeQueryValueSchema,
+});
+export type EnvironmentPathsQuery = z.infer<typeof environmentPathsQuerySchema>;
+
 export const branchListQuerySchema = z.object({
   query: z.string().min(1).max(BRANCH_LIST_QUERY_MAX_LENGTH).optional(),
   limit: z.string().regex(/^\d+$/).optional(),

@@ -40,12 +40,14 @@ interface ProviderWrapperProps {
 
 interface RenderLauncherArgs {
   projectId?: string;
+  environmentId?: string | null;
   currentThreadId?: string;
   onSelect?: NewTabFileSearchProps["onSelect"];
 }
 
 interface RenderActionMenuArgs {
   projectId?: string;
+  environmentId?: string | null;
   currentThreadId?: string;
   onSelect?: NewTabActionMenuProps["onSelect"];
   onOpenFileSearch?: NewTabActionMenuProps["onOpenFileSearch"];
@@ -235,7 +237,7 @@ function renderLauncher(args: RenderLauncherArgs = {}) {
   return render(
     createElement(NewTabFileSearch, {
       projectId: args.projectId ?? "proj_1",
-      environmentId: null,
+      environmentId: args.environmentId ?? null,
       currentThreadId: args.currentThreadId ?? "thr_1",
       focusRequest: 0,
       onSelect: args.onSelect ?? vi.fn(),
@@ -251,6 +253,7 @@ function renderActionMenu(args: RenderActionMenuArgs = {}) {
   return render(
     createElement(NewTabActionMenu, {
       projectId: args.projectId ?? "proj_1",
+      environmentId: args.environmentId ?? null,
       currentThreadId: args.currentThreadId ?? "thr_1",
       onSelect: args.onSelect ?? vi.fn(),
       onOpenFileSearch: args.onOpenFileSearch ?? vi.fn(),
@@ -598,10 +601,27 @@ describe("NewTabFileSearch", () => {
     expect(recentRow.textContent ?? "").not.toContain(String.fromCharCode(183));
   });
 
-  it("does not pass the personal project id to workspace file search", () => {
-    renderLauncher({ projectId: PERSONAL_PROJECT_ID });
+  it("surfaces workspace files for a projectless thread that has an environment", () => {
+    setFileSearchSuggestions([FILE_SUGGESTION]);
 
-    expect(fileSearchMockArgs.at(-1)?.projectId).toBeUndefined();
+    renderLauncher({ projectId: PERSONAL_PROJECT_ID, environmentId: "env_1" });
+
+    // The component forwards project and environment ids verbatim; the source
+    // decision (search the environment workspace, not the personal "project")
+    // lives in usePathSuggestions.
+    expect(fileSearchMockArgs.at(-1)?.projectId).toBe(PERSONAL_PROJECT_ID);
+    expect(fileSearchMockArgs.at(-1)?.environmentId).toBe("env_1");
+    expect(screen.getByRole("option", { name: /app\.ts/u })).toBeTruthy();
+  });
+
+  it("hides workspace files for a projectless thread without an environment", () => {
+    setFileSearchSuggestions([FILE_SUGGESTION]);
+
+    renderLauncher({ projectId: PERSONAL_PROJECT_ID, environmentId: null });
+
+    // No project source and no environment ⇒ no workspace to search, so
+    // workspace suggestions are filtered out of the results.
+    expect(screen.queryByRole("option", { name: /app\.ts/u })).toBeNull();
     expect(
       screen.getByRole("combobox", { name: "Search files" }),
     ).toHaveProperty("disabled", false);

@@ -590,13 +590,10 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
 
       const limit = parseFileListLimit(query.limit);
 
-      const target =
-        query.environmentId !== null
-          ? resolveEnvironmentPath(deps, {
-              projectId,
-              environmentId: query.environmentId,
-            })
-          : resolveProjectSourcePath(deps, { projectId, hostId: null });
+      // Project-source listing only: used by the new-thread compose box before
+      // any environment exists. Once a thread has an environment, workspace
+      // path search goes through `GET /environments/:id/paths` instead.
+      const target = resolveProjectSourcePath(deps, { projectId, hostId: null });
       const inclusion = parsePathKindInclusion({
         includeFiles: query.includeFiles,
         includeDirectories: query.includeDirectories,

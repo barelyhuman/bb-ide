@@ -1002,7 +1002,6 @@ describe("createRealtimeCacheEffects", () => {
       "project-1",
       "",
       20,
-      null,
       true,
       true,
     );
@@ -1010,7 +1009,6 @@ describe("createRealtimeCacheEffects", () => {
       "project-2",
       "",
       20,
-      null,
       true,
       true,
     );
