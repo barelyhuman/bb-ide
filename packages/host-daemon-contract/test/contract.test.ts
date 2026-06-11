@@ -307,6 +307,15 @@ const ONLINE_RPC_RESPONSE_RESULT_FIXTURES: OnlineRpcResponseResultFixtures = {
   },
   "workspace.status": WORKSPACE_UNAVAILABLE_RESULT,
   "workspace.diff": WORKSPACE_UNAVAILABLE_RESULT,
+  "workspace.pull_request": {
+    pullRequest: {
+      number: 42,
+      title: "Add host RPC guard",
+      state: "OPEN",
+      url: "https://github.com/acme/bb/pull/42",
+      isDraft: false,
+    },
+  },
 };
 
 const ADDITIONAL_ONLINE_RPC_RESPONSE_ROUND_TRIP_CASES: OnlineRpcResponseRoundTripCase[] =
@@ -332,6 +341,11 @@ const ADDITIONAL_ONLINE_RPC_RESPONSE_ROUND_TRIP_CASES: OnlineRpcResponseRoundTri
       name: "workspace.diff available result",
       commandType: "workspace.diff",
       result: WORKSPACE_DIFF_AVAILABLE_RESULT,
+    },
+    {
+      name: "workspace.pull_request no-PR result",
+      commandType: "workspace.pull_request",
+      result: { pullRequest: null },
     },
   ];
 
@@ -433,6 +447,8 @@ const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
     "thread runtime context may omit provider-specific built-in tool removals for providers that do not need them.",
   "hostDaemonCommandSchema.resumeContext.disallowedTools":
     "turn.submit resume context may omit provider-specific built-in tool removals for providers that do not need them.",
+  "hostDaemonCommandSchema.options.claudeCodeMockCliTraffic":
+    "Runtime execution options may omit the Claude Code mock-CLI-traffic config on legacy commands; the server fills the current app setting before dispatching new runtime work.",
 };
 
 describe("host-daemon local schemas", () => {
@@ -2090,7 +2106,7 @@ describe("host-daemon command schemas", () => {
 
 describe("host-daemon session schemas", () => {
   it("documents the current protocol version", () => {
-    expect(HOST_DAEMON_PROTOCOL_VERSION).toBe(34);
+    expect(HOST_DAEMON_PROTOCOL_VERSION).toBe(35);
   });
 
   it("parses valid session open and event batch payloads", () => {

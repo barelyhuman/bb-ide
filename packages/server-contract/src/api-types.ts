@@ -33,6 +33,7 @@ import {
   threadScheduleKindSchema,
   threadWithRuntimeSchema,
   threadQueuedMessageSchema,
+  threadPullRequestSchema,
   workspaceStatusSchema,
   jsonValueSchema,
   appDataPathSchema,
@@ -2450,6 +2451,20 @@ export const environmentStatusResponseSchema = z.discriminatedUnion("outcome", [
     })
     .strict(),
 ]);
+
+/**
+ * `pullRequest` is required + nullable: `null` means "no PR for this branch"
+ * (a real, distinct state), covering every detection failure the daemon folds
+ * together. Non-git environments resolve to `null` without a daemon call.
+ */
+export const environmentPullRequestResponseSchema = z
+  .object({
+    pullRequest: threadPullRequestSchema.nullable(),
+  })
+  .strict();
+export type EnvironmentPullRequestResponse = z.infer<
+  typeof environmentPullRequestResponseSchema
+>;
 
 export const environmentDiffResponseSchema = z.discriminatedUnion("outcome", [
   z

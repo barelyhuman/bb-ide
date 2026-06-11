@@ -3,6 +3,7 @@ import type { Environment, WorkspaceDiffTarget } from "@bb/domain";
 import type {
   EnvironmentDiffBranchesResponse,
   EnvironmentDiffResponse,
+  EnvironmentPullRequestResponse,
   EnvironmentStatusResponse,
   WorkspacePathListResponse,
 } from "@bb/server-contract";
@@ -13,6 +14,7 @@ import {
   environmentFilePreviewQueryKey,
   environmentGitDiffQueryKey,
   environmentMergeBaseBranchesQueryKey,
+  environmentPullRequestQueryKey,
   environmentPathsQueryKey,
   environmentQueryKey,
   environmentWorkStatusQueryKey,
@@ -43,6 +45,7 @@ interface UseEnvironmentGitDiffOptions extends QueryOptions {
 }
 
 const ENVIRONMENT_WORK_STATUS_STALE_MS = 10_000;
+const ENVIRONMENT_PULL_REQUEST_STALE_MS = 30_000;
 const MERGE_BASE_BRANCHES_STALE_MS = 30_000;
 const MERGE_BASE_BRANCHES_LIMIT = 50;
 
@@ -98,6 +101,22 @@ export function useEnvironmentWorkStatus(
             environmentId,
           )
         : undefined,
+  });
+}
+
+export function useEnvironmentPullRequest(
+  environmentId: string | null | undefined,
+  options?: QueryOptions,
+) {
+  return useQuery<EnvironmentPullRequestResponse>({
+    queryKey: environmentPullRequestQueryKey(environmentId),
+    queryFn: () =>
+      api.getEnvironmentPullRequest(
+        requireEnvironmentId(environmentId, "useEnvironmentPullRequest"),
+      ),
+    enabled: (options?.enabled ?? true) && Boolean(environmentId),
+    refetchOnWindowFocus: false,
+    staleTime: ENVIRONMENT_PULL_REQUEST_STALE_MS,
   });
 }
 
