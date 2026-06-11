@@ -105,6 +105,17 @@ interface ManagedEnvironmentArchiveCleanupEvaluationResult {
 }
 
 type PeriodicSweepJobList = readonly PeriodicSweepJob[];
+type HostUnavailableDeferralsByHostId = ReadonlyMap<string, number>;
+
+function countHostUnavailableDeferrals(
+  deferralsByHostId: HostUnavailableDeferralsByHostId,
+): number {
+  let total = 0;
+  for (const count of deferralsByHostId.values()) {
+    total += count;
+  }
+  return total;
+}
 
 let lastDatabaseMaintenanceCheckAt = 0;
 let databaseMaintenanceRunning = false;
@@ -191,13 +202,12 @@ async function evaluateManagedEnvironmentArchiveCleanupCandidates(
     };
   }
 
-  let hostUnavailableDeferrals = 0;
+  const hostUnavailableDeferralsByHostId = new Map<string, number>();
   for (const environment of environmentsToClean) {
     if (environment.path && !deps.hub.hasDaemonForHost(environment.hostId)) {
-      hostUnavailableDeferrals += 1;
-      deps.logger.debug(
-        { environmentId: environment.id, hostId: environment.hostId },
-        "Managed environment archive cleanup deferred until host reconnects",
+      hostUnavailableDeferralsByHostId.set(
+        environment.hostId,
+        (hostUnavailableDeferralsByHostId.get(environment.hostId) ?? 0) + 1,
       );
       continue;
     }
@@ -218,13 +228,9 @@ async function evaluateManagedEnvironmentArchiveCleanupCandidates(
         continue;
       }
       if (isHostUnavailableError(error)) {
-        hostUnavailableDeferrals += 1;
-        deps.logger.debug(
-          {
-            environmentId: environment.id,
-            ...runtimeErrorLogFields(deps.config, error),
-          },
-          "Managed environment archive cleanup deferred until host reconnects",
+        hostUnavailableDeferralsByHostId.set(
+          environment.hostId,
+          (hostUnavailableDeferralsByHostId.get(environment.hostId) ?? 0) + 1,
         );
         continue;
       }
@@ -236,6 +242,22 @@ async function evaluateManagedEnvironmentArchiveCleanupCandidates(
         "Managed environment archive cleanup sweep failed",
       );
     }
+  }
+
+  const hostUnavailableDeferrals = countHostUnavailableDeferrals(
+    hostUnavailableDeferralsByHostId,
+  );
+  if (
+    hostUnavailableDeferrals > 0 &&
+    hostUnavailableDeferrals < environmentsToClean.length
+  ) {
+    deps.logger.debug(
+      {
+        deferredEnvironmentCount: hostUnavailableDeferrals,
+        deferredHostIds: Array.from(hostUnavailableDeferralsByHostId.keys()),
+      },
+      "Managed environment archive cleanup deferred some candidates until host reconnects",
+    );
   }
 
   return {
