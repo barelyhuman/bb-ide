@@ -23,14 +23,16 @@ export function registerSystemRoutes(app: Hono, deps: ServerAppDeps): void {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });
 
-  get("/system/config", (context) =>
-    context.json({
+  function buildSystemConfigResponse() {
+    return {
       experiments: getExperiments(deps.db),
       featureFlags: deps.config.featureFlags,
       hostDaemonPort: deps.config.hostDaemonPort,
       voiceTranscriptionEnabled: resolveVoiceTranscriptionEnabled(deps),
-    }),
-  );
+    };
+  }
+
+  get("/system/config", (context) => context.json(buildSystemConfigResponse()));
 
   put("/settings/experiments", experimentsSchema, (context, payload) => {
     setExperiments(deps.db, payload);

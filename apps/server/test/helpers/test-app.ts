@@ -203,8 +203,7 @@ export async function withTestHarness<T>(
 ): Promise<T> {
   const overrides: TestAppHarnessConfigOverrides =
     typeof overridesOrRun === "function" ? {} : overridesOrRun;
-  const run =
-    typeof overridesOrRun === "function" ? overridesOrRun : maybeRun;
+  const run = typeof overridesOrRun === "function" ? overridesOrRun : maybeRun;
   if (!run) {
     throw new Error("withTestHarness requires a run callback");
   }

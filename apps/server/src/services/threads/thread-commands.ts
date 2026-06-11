@@ -1,10 +1,12 @@
-import { environments, events, threads } from "@bb/db";
+import { environments, events, getExperiments, threads } from "@bb/db";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import {
   getBuiltInAgentProviderInfo,
   isAgentProviderId,
 } from "@bb/agent-providers";
-import type {
+import {
+  DEFAULT_CLAUDE_CODE_MOCK_CLI_TRAFFIC_ENDPOINT,
+  type ClaudeCodeMockCliTrafficConfig,
   PromptInput,
   ProjectExecutionDefaults,
   PermissionEscalation,
@@ -81,6 +83,7 @@ export interface ThreadStartCommandArgs {
 }
 
 interface PreparedTurnSubmitCommandBuildArgs {
+  claudeCodeMockCliTraffic: ClaudeCodeMockCliTrafficConfig;
   environmentId: string;
   execution: ResolvedThreadExecutionOptions;
   permissionEscalation: PermissionEscalation;
@@ -112,6 +115,7 @@ export type PreparedTurnSubmitCommandPayload = Omit<
 >;
 
 interface RuntimeExecutionOptionsArgs {
+  claudeCodeMockCliTraffic: ClaudeCodeMockCliTrafficConfig;
   execution: ResolvedThreadExecutionOptions;
   permissionEscalation: PermissionEscalation;
   providerId: string;
@@ -160,6 +164,15 @@ function providerSupportsThreadArchiveForwarding(providerId: string): boolean {
   return getBuiltInAgentProviderInfo(providerId).capabilities.supportsArchive;
 }
 
+function resolveClaudeCodeMockCliTrafficConfig(
+  deps: Pick<AppDeps, "db">,
+): ClaudeCodeMockCliTrafficConfig {
+  return {
+    enabled: getExperiments(deps.db).claudeCodeMockCliTraffic,
+    endpoint: DEFAULT_CLAUDE_CODE_MOCK_CLI_TRAFFIC_ENDPOINT,
+  };
+}
+
 function toRuntimeExecutionOptions(
   args: RuntimeExecutionOptionsArgs,
 ): RuntimeThreadExecutionOptions {
@@ -167,6 +180,7 @@ function toRuntimeExecutionOptions(
     model: args.execution.model,
     serviceTier: args.execution.serviceTier,
     reasoningLevel: args.execution.reasoningLevel,
+    claudeCodeMockCliTraffic: args.claudeCodeMockCliTraffic,
     workflowsEnabled: resolveWorkflowsEnabledPolicy(args.providerId),
   };
   if (args.execution.permissionMode === "full") {
@@ -224,7 +238,10 @@ export async function buildThreadStartCommand(
     providerId: args.providerId,
     requestId: args.requestId,
     input: args.input,
-    options: toRuntimeExecutionOptions(args),
+    options: toRuntimeExecutionOptions({
+      ...args,
+      claudeCodeMockCliTraffic: resolveClaudeCodeMockCliTrafficConfig(deps),
+    }),
     instructions: runtimeContext.instructions,
     dynamicTools: runtimeContext.dynamicTools,
     injectedSkillSources: runtimeContext.injectedSkillSources,
@@ -243,6 +260,7 @@ function buildPreparedTurnSubmitCommandPayload(
     input: args.input,
     options: toRuntimeExecutionOptions({
       ...args,
+      claudeCodeMockCliTraffic: args.claudeCodeMockCliTraffic,
       providerId: args.runtimeContext.providerId,
     }),
     target: args.target,
@@ -284,6 +302,7 @@ export async function prepareTurnSubmitCommandPayload(
     environment: args.environment,
   });
   return buildPreparedTurnSubmitCommandPayload({
+    claudeCodeMockCliTraffic: resolveClaudeCodeMockCliTrafficConfig(deps),
     environmentId: args.environment.id,
     execution: args.execution,
     permissionEscalation: args.permissionEscalation,
