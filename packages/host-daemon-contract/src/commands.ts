@@ -17,7 +17,6 @@ import {
   clientTurnRequestIdSchema,
   gitBranchNameSchema,
   jsonObjectSchema,
-  applicationIdSchema,
   reasoningLevelSchema,
   workflowSandboxSchema,
   BRANCH_LIST_LIMIT_MAX,
@@ -135,19 +134,11 @@ export const hostDaemonInjectedSkillSourceSchema = z.discriminatedUnion(
     hostDaemonInjectedSkillSourceBaseSchema
       .extend({
         sourceType: z.literal("builtin"),
-        applicationId: z.null(),
       })
       .strict(),
     hostDaemonInjectedSkillSourceBaseSchema
       .extend({
         sourceType: z.literal("data-dir"),
-        applicationId: z.null(),
-      })
-      .strict(),
-    hostDaemonInjectedSkillSourceBaseSchema
-      .extend({
-        sourceType: z.literal("global-app"),
-        applicationId: applicationIdSchema,
       })
       .strict(),
   ],
