@@ -229,7 +229,7 @@ describe("FilePreview", () => {
     expect(screen.queryByText("alert(1)")).toBeNull();
   });
 
-  it("opens markdown files in source mode when they have a target line", () => {
+  it("opens markdown files in preview mode when they have a target line", () => {
     const { container } = render(
       <FilePreview
         path="README.md"
@@ -244,6 +244,16 @@ describe("FilePreview", () => {
         }}
       />,
     );
+
+    expect(
+      screen
+        .getByRole("button", { name: "Preview" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(screen.getByRole("heading", { name: "Readme" })).toBeTruthy();
+    expect(container.querySelector('[data-line="2"]')).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Raw" }));
 
     expect(
       screen.getByTitle("Markdown source").getAttribute("aria-pressed"),

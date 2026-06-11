@@ -109,6 +109,11 @@ interface FilePreviewCodeProps {
   lineRange: FilePreviewLineRange | null;
 }
 
+interface GetInitialFilePreviewViewModeArgs {
+  lineRange: FilePreviewLineRange | null;
+  toggleKind: FilePreviewToggleKind | null;
+}
+
 type FilePreviewViewMode = "preview" | "source";
 type FilePreviewToggleKind = "html" | "markdown";
 export type FilePreviewHeaderMode = "file" | "none";
@@ -182,6 +187,16 @@ function getFilePreviewLineRange(
   return null;
 }
 
+function getInitialFilePreviewViewMode({
+  lineRange,
+  toggleKind,
+}: GetInitialFilePreviewViewModeArgs): FilePreviewViewMode {
+  if (toggleKind === "markdown") {
+    return "preview";
+  }
+  return lineRange === null ? "preview" : "source";
+}
+
 function usesCodeViewLayout(
   state: FilePreviewState,
   viewMode: FilePreviewViewMode,
@@ -209,13 +224,21 @@ export function FilePreview({
   const toggleKind = getFilePreviewToggleKind(state);
   const filePreviewLineRange = getFilePreviewLineRange(state);
   const [viewMode, setViewMode] = useState<FilePreviewViewMode>(
-    filePreviewLineRange === null ? "preview" : "source",
+    getInitialFilePreviewViewMode({
+      lineRange: filePreviewLineRange,
+      toggleKind,
+    }),
   );
-  // Each new file opens in rendered preview by default; the user re-toggles per
-  // file rather than carrying their last choice across unrelated files.
+  // Each new file opens in the appropriate default mode; the user re-toggles
+  // per file rather than carrying their last choice across unrelated files.
   useEffect(() => {
-    setViewMode(filePreviewLineRange === null ? "preview" : "source");
-  }, [filePreviewLineRange, path]);
+    setViewMode(
+      getInitialFilePreviewViewMode({
+        lineRange: filePreviewLineRange,
+        toggleKind,
+      }),
+    );
+  }, [filePreviewLineRange, path, toggleKind]);
 
   const usesIframeLayout =
     state.kind === "iframe" ||
