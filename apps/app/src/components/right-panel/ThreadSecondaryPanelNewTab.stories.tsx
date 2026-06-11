@@ -624,12 +624,12 @@ export function NewTab() {
         </StoryRow>
         <StoryRow
           label="search results"
-          hint="file matches appear above Recent while Actions and Apps stay available"
+          hint="typed search shows only file and app results"
         >
           <NewTabPanelStory
             apps={APPS_RESPONSE}
             currentThreadId={SEARCH_THREAD_ID}
-            initialQuery="thread"
+            initialQuery="review"
             projectId={PROJECT_ID}
             recentItems={RECENT_ROW_ITEMS}
             showOpenBrowser
