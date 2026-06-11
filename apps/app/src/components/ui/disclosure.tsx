@@ -54,6 +54,7 @@ export interface CollapsibleHeaderProps {
   toneClassName: string;
   summaryClassName?: string;
   className?: string;
+  forceChevronVisible?: boolean;
   isExpanded?: boolean;
   onToggle?: () => void;
 }
@@ -63,6 +64,7 @@ export function CollapsibleHeader({
   toneClassName,
   summaryClassName,
   className,
+  forceChevronVisible = false,
   isExpanded = false,
   onToggle,
 }: CollapsibleHeaderProps) {
@@ -95,7 +97,9 @@ export function CollapsibleHeader({
           "pointer-events-none size-4 shrink-0 origin-center transition-[opacity,rotate] duration-200 ease-out",
           isExpanded
             ? "rotate-90"
-            : "opacity-0 group-hover/timeline-row:opacity-100 group-focus-within/timeline-row:opacity-100 group-hover/toggle:opacity-100 group-focus-visible/toggle:opacity-100 max-md:pointer-coarse:opacity-100",
+            : forceChevronVisible
+              ? "opacity-100"
+              : "opacity-0 group-hover/timeline-row:opacity-100 group-focus-within/timeline-row:opacity-100 group-hover/toggle:opacity-100 group-focus-visible/toggle:opacity-100 max-md:pointer-coarse:opacity-100",
         )}
       />
     </button>
@@ -108,6 +112,7 @@ export interface ExpandablePanelProps {
   headerToneClass: string;
   onToggle?: () => void;
   collapsedContent?: ReactNode;
+  forceHeaderChevronVisible?: boolean;
   headerButtonClassName?: string;
   summaryContentClassName?: string;
   children?: ReactNode;
@@ -189,6 +194,7 @@ export function ExpandablePanel({
   headerToneClass,
   onToggle,
   collapsedContent,
+  forceHeaderChevronVisible = false,
   headerButtonClassName,
   summaryContentClassName,
   children,
@@ -287,6 +293,7 @@ export function ExpandablePanel({
       <div className="group/timeline-row">
         <CollapsibleHeader
           isExpanded={isExpanded}
+          forceChevronVisible={forceHeaderChevronVisible}
           onToggle={onToggle}
           toneClassName={headerToneClass}
           className={headerRootClassName}
