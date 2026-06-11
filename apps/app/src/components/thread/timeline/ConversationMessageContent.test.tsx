@@ -347,6 +347,7 @@ describe("ConversationMessageContent", () => {
                     case "thread":
                       return `/projects/proj_123/threads/${link.threadId}`;
                   }
+                  return null;
                 }}
                 senderThreadId="thr_sender123"
                 senderThreadTitle="Frontend thread"
@@ -446,14 +447,14 @@ describe("ConversationMessageContent", () => {
     expect(
       screen.getByRole("button", { name: "Message from Frontend thread" }),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /steer/u })).toBeNull();
-    expect(screen.queryByText("steer")).toBeNull();
+    expect(screen.queryByRole("button", { name: /steer/iu })).toBeNull();
+    expect(screen.queryByText("Steer")).toBeNull();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Message from Frontend thread" }),
     );
 
-    expect(screen.getByText("steer")).toBeTruthy();
+    expect(screen.getByText("Steer")).toBeTruthy();
   });
 
   it("renders mention pills in agent-originated rows with shifted offsets", () => {

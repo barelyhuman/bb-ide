@@ -20,7 +20,7 @@ import {
   COARSE_POINTER_TEXT_SM_CLASS,
 } from "@/components/ui/coarse-pointer-sizing.js";
 import { Icon } from "@/components/ui/icon.js";
-import { getDesktopBrowserApi } from "@/lib/bb-desktop";
+import { getBbDesktopInfo, getDesktopBrowserApi } from "@/lib/bb-desktop";
 import { cn } from "@/lib/utils";
 import {
   getBrowserUrlSecurity,
@@ -28,6 +28,7 @@ import {
 } from "@/lib/browser-url";
 import { useBrowserHistory } from "@/lib/browser-history";
 import { BROWSER_VIEW_BOUNDS_SYNC_EVENT } from "@/lib/browser-view-bounds-sync";
+import { useIsBrowserDimmingModalOpen } from "@/hooks/useBrowserDimmingModal";
 import { BrowserNewTabScreen } from "./BrowserNewTabScreen";
 import {
   registerBrowserView,
@@ -68,10 +69,11 @@ interface BrowserChromeProps {
   onBack: () => void;
   onForward: () => void;
   onReloadOrStop: () => void;
+  onOpenExternal: () => void;
 }
 
 interface NavButtonProps {
-  icon: "ChevronLeft" | "ChevronRight" | "RotateCcw" | "X";
+  icon: "ChevronLeft" | "ChevronRight" | "RotateCcw" | "X" | "ExternalLink";
   label: string;
   disabled?: boolean;
   onClick: () => void;
@@ -173,6 +175,7 @@ function BrowserChrome({
   onBack,
   onForward,
   onReloadOrStop,
+  onOpenExternal,
 }: BrowserChromeProps) {
   const isLoading = state?.isLoading ?? false;
   const security = getBrowserUrlSecurity(currentUrl);
@@ -247,6 +250,12 @@ function BrowserChrome({
           />
         </div>
       </form>
+      <NavButton
+        icon="ExternalLink"
+        label="Open in external browser"
+        disabled={currentUrl.length === 0}
+        onClick={onOpenExternal}
+      />
       {isLoading ? (
         <span className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden">
           <span className="block h-full w-1/3 animate-pulse bg-ring" />
@@ -324,6 +333,11 @@ export function BrowserTabContent({
   isActiveRef.current = isActive;
 
   const hasPage = currentUrl.length > 0;
+  // A blocking modal (e.g. the git-action dialog) dims the panel with a DOM
+  // backdrop the native browser overlay cannot sit behind. While one is open,
+  // hide the view and fall back to the DOM new-tab screen so the backdrop dims
+  // the whole panel.
+  const isBrowserDimmingModalOpen = useIsBrowserDimmingModalOpen();
   const lastSentBoundsRef = useRef<BbDesktopBrowserViewBounds | null>(null);
 
   const readBounds = useCallback(() => {
@@ -504,7 +518,7 @@ export function BrowserTabContent({
   // hidden, so deactivation never reloads it. (Collapse/expand of the panel
   // toggles `isActive`, which hides the view outright rather than chasing a
   // CSS transition the overlay cannot clip to.)
-  const isViewVisible = isActive && hasPage;
+  const isViewVisible = isActive && hasPage && !isBrowserDimmingModalOpen;
   // A layout effect (pre-paint) declares visibility so showing/hiding lands in
   // the same frame as the DOM tab swap — no flash. Ordering across tabs (hide
   // the previously-visible view BEFORE showing this one) and bounds-before-show
@@ -575,6 +589,7 @@ export function BrowserTabContent({
         onBack={() => desktopBrowser.goBack(tabId)}
         onForward={() => desktopBrowser.goForward(tabId)}
         onReloadOrStop={handleReloadOrStop}
+        onOpenExternal={() => getBbDesktopInfo()?.openExternalUrl(currentUrl)}
       />
       {state?.errorText != null && hasPage ? (
         <div
@@ -587,7 +602,7 @@ export function BrowserTabContent({
         </div>
       ) : null}
       <div ref={contentRef} className="relative min-h-0 flex-1">
-        {hasPage ? null : (
+        {hasPage && !isBrowserDimmingModalOpen ? null : (
           <BrowserNewTabScreen
             onNavigateInput={navigateToInput}
             recent={recent}

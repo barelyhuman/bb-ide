@@ -452,7 +452,7 @@ function AnimatedBody({
           : "pointer-events-none grid-rows-[0fr] border-t border-transparent opacity-0",
       )}
     >
-      <div className="overflow-hidden">{children}</div>
+      <div className="overflow-hidden bg-popover">{children}</div>
     </section>
   );
 }
@@ -612,7 +612,7 @@ export function ThreadPromptContextBanner({
   return (
     <PromptStackCard
       ariaLabel="Thread context before sending"
-      className="overflow-hidden"
+      className="overflow-hidden bg-surface-recessed"
       style={{ minHeight: THREAD_PROMPT_CONTEXT_BANNER_ROW_HEIGHT }}
     >
       <div className="flex items-center gap-0.5 px-2 py-1 text-xs text-muted-foreground">
@@ -739,7 +739,11 @@ export function ThreadPromptContextBanner({
             className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
             data-promptbox-hide-compact=""
           >
-            <span className="shrink-0">Merge base:</span>
+            <Icon
+              name="GitMerge"
+              className="size-3.5 shrink-0"
+              aria-label="Merge base"
+            />
             <BranchPicker
               value={gitSection.mergeBase.branch}
               options={mergeBaseCandidates.options}
