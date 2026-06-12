@@ -1587,6 +1587,7 @@ export function ThreadDetailView() {
           onOpenLocalFileLink: handleOpenTimelineLocalFileLink,
           onTitleAction: handleTimelineTitleAction,
           projectId,
+          resolveMentionLink,
           showOngoingIndicator:
             thread.stopRequestedAt === null &&
             // A pending interaction (question or approval) already renders its
