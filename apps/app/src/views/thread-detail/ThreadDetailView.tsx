@@ -69,7 +69,11 @@ import {
   type WorkspaceChangedFileSelection,
 } from "@/components/workspace/workspace-change-summary";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
-import { getThreadRoutePath } from "@/lib/route-paths";
+import {
+  getSurfaceAwareThreadRoutePath,
+  isRoutePath,
+  type ThreadRoutePathArgs,
+} from "@/lib/route-paths";
 import { useGitDiffPanel } from "@/components/secondary-panel/git-diff/useGitDiffPanel";
 import type { GitDiffPanelIntent } from "@/components/secondary-panel/git-diff/gitDiffPanelStateReducer";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
@@ -103,6 +107,8 @@ import { Icon } from "@/components/ui/icon.js";
 import {
   getDesktopBrowserApi,
   isDesktopBrowserAvailable,
+  MACOS_APP_REGION_NO_DRAG_CLASS,
+  MACOS_WINDOW_DRAG_CLASS,
 } from "@/lib/bb-desktop";
 import {
   resolveChatLinkOpenTarget,
@@ -180,6 +186,9 @@ type MergeBasePickerOpenChangeHandler = NonNullable<
   ContextBannerMergeBaseConfig["onPickerOpenChange"]
 >;
 type SecondaryPanelChangeHandler = (panel: ThreadSecondaryPanelTab) => void;
+type NullableSecondaryPanelChangeHandler = (
+  panel: ThreadSecondaryPanelTab | null,
+) => void;
 type OpenInEditorHandler = NonNullable<
   ReturnType<typeof buildOpenInEditorHandler>
 >;
@@ -187,6 +196,28 @@ type OpenFilePreviewHandler = (relativePath: string) => void;
 
 interface RightPanelFileTabIconProps {
   path: string;
+}
+
+interface ThreadDetailViewPageProps {
+  surface: "page";
+}
+
+interface ThreadDetailViewPopoutProps {
+  onPopoutHide: () => void;
+  onPopoutNewQuickThread: () => void;
+  onPopoutOpenInMain: (thread: ThreadRoutePathArgs) => void;
+  surface: "popout";
+}
+
+type ThreadDetailViewProps =
+  | ThreadDetailViewPageProps
+  | ThreadDetailViewPopoutProps;
+
+interface PopoutThreadHeaderProps {
+  onHide: () => void;
+  onNewQuickThread: () => void;
+  onOpenInMain: () => void;
+  threadTitle: string;
 }
 
 function RightPanelFileTabIcon({ path }: RightPanelFileTabIconProps) {
@@ -197,6 +228,61 @@ function RightPanelFileTabIcon({ path }: RightPanelFileTabIconProps) {
       className={COARSE_POINTER_COMPACT_ICON_SIZE_CLASS}
       aria-hidden
     />
+  );
+}
+
+function PopoutThreadHeader({
+  onHide,
+  onNewQuickThread,
+  onOpenInMain,
+  threadTitle,
+}: PopoutThreadHeaderProps) {
+  const buttonClassName = [
+    "inline-flex items-center justify-center text-muted-foreground",
+    "transition-colors hover:bg-state-hover hover:text-foreground",
+    HEADER_ICON_BUTTON_CLASS,
+    MACOS_APP_REGION_NO_DRAG_CLASS,
+  ].join(" ");
+
+  return (
+    <div
+      className={[
+        MACOS_WINDOW_DRAG_CLASS,
+        "flex h-10 shrink-0 items-center gap-1",
+        "border-b border-border-seam-vertical px-2",
+      ].join(" ")}
+    >
+      <button
+        type="button"
+        className={buttonClassName}
+        aria-label="Hide popout"
+        title="Hide popout"
+        onClick={onHide}
+      >
+        <Icon name="X" />
+      </button>
+      <p className="min-w-0 flex-1 truncate px-1 text-sm font-semibold">
+        {threadTitle}
+      </p>
+      <button
+        type="button"
+        className={buttonClassName}
+        aria-label="New quick thread"
+        title="New quick thread"
+        onClick={onNewQuickThread}
+      >
+        <Icon name="EditFile" />
+      </button>
+      <button
+        type="button"
+        className={buttonClassName}
+        aria-label="Open in main app"
+        title="Open in main app"
+        onClick={onOpenInMain}
+      >
+        <Icon name="ExternalLink" />
+      </button>
+    </div>
   );
 }
 
@@ -297,18 +383,20 @@ export function resolveHostFilePreviewLinkRootPath({
   return null;
 }
 
-export function ThreadDetailView() {
+export function ThreadDetailView(props: ThreadDetailViewProps) {
   const { projectId, threadId } = useRouteState();
   const navigate = useNavigate();
   useFixedPanelTabsStorageMaintenance(threadId);
   const fixedPanelTabsState = useFixedPanelTabsState(threadId);
   const isPersistedSecondaryPanelOpen = fixedPanelTabsState.secondary.isOpen;
+  const isPersistedSecondaryPanelOpenForSurface =
+    props.surface === "popout" ? false : isPersistedSecondaryPanelOpen;
   const activeFixedSecondaryTab = getActiveFixedSecondaryTab({
     fixedPanelTabsState,
   });
   const openFixedSecondaryTab = getOpenFixedSecondaryTab({
     activeFixedSecondaryTab,
-    isSecondaryPanelOpen: isPersistedSecondaryPanelOpen,
+    isSecondaryPanelOpen: isPersistedSecondaryPanelOpenForSurface,
   });
   const activeFixedSecondaryTabId = activeFixedSecondaryTab?.id ?? null;
   const renderSecondaryPanelAsDrawer = useIsCompactViewport();
@@ -318,6 +406,16 @@ export function ThreadDetailView() {
   const removeFixedTerminalTab = useRemoveFixedRightTerminalTab(threadId);
   const updateFixedPanelTabsState = useUpdateFixedPanelTabsState(threadId);
   const setThreadSecondaryPanel = useSetThreadSecondaryPanelSelection(threadId);
+  const setThreadSecondaryPanelForSurface =
+    useCallback<NullableSecondaryPanelChangeHandler>(
+      (panel) => {
+        if (props.surface === "popout") {
+          return;
+        }
+        setThreadSecondaryPanel(panel);
+      },
+      [props.surface, setThreadSecondaryPanel],
+    );
   const toggleDefaultPersistedSecondaryPanel =
     useToggleThreadSecondaryPanelSelection(threadId);
   const threadDetailBootstrapQuery = useThreadDetailBootstrap(threadId ?? "");
@@ -460,6 +558,9 @@ export function ThreadDetailView() {
       return;
     }
     return browserApi.onOpenTab(({ url }) => {
+      if (isRoutePath({ path: url })) {
+        return;
+      }
       openBrowserTab(url);
     });
   }, [openBrowserTab]);
@@ -617,7 +718,7 @@ export function ThreadDetailView() {
     mergeBaseBranchOptionsEnabled: hasRequestedMergeBaseOptions,
     onRequestCommitDiffSelection: requestGitDiffCommitSelection,
     onRequestDiffFileFocus: requestGitDiffFileFocus,
-    setThreadSecondaryPanel,
+    setThreadSecondaryPanel: setThreadSecondaryPanelForSurface,
   });
   const {
     closePanel: closeSecondaryPanel,
@@ -632,7 +733,7 @@ export function ThreadDetailView() {
     togglePanel: toggleSecondaryPanel,
   } = useThreadSecondaryPanelVisibility({
     closePersistedPanel: closeThreadSecondaryPanel,
-    isPersistedOpen: isPersistedSecondaryPanelOpen,
+    isPersistedOpen: isPersistedSecondaryPanelOpenForSurface,
     isCompactViewport: renderSecondaryPanelAsDrawer,
     openPersistedCommitDiff,
     openPersistedDiffFile,
@@ -641,6 +742,7 @@ export function ThreadDetailView() {
     openPersistedPanel: openPersistedSecondaryPanel,
     openPersistedStorageFile,
     openPersistedWorkspaceFile,
+    surface: props.surface,
     threadId,
     togglePersistedPanel: toggleDefaultPersistedSecondaryPanel,
   });
@@ -662,6 +764,8 @@ export function ThreadDetailView() {
   const [storedConversationCollapsed, setStoredConversationCollapsed] = useAtom(
     getThreadConversationCollapsedAtom(threadId),
   );
+  const isConversationCollapsed =
+    props.surface === "popout" ? false : storedConversationCollapsed;
   // The collapse preference only applies while the panel is open on a wide
   // viewport; ThreadDetailSecondaryContent gates it (there is nothing to expand
   // into otherwise) and surfaces the toggle on the seam arrow.
@@ -698,8 +802,9 @@ export function ThreadDetailView() {
         if (!targetProjectId) return null;
         return () =>
           navigate(
-            getThreadRoutePath({
+            getSurfaceAwareThreadRoutePath({
               projectId: targetProjectId,
+              surface: props.surface,
               threadId: resource.threadId,
             }),
           );
@@ -726,6 +831,7 @@ export function ThreadDetailView() {
       openStorageFile,
       openWorkspaceFile,
       projectId,
+      props.surface,
       thread?.environmentId,
     ],
   );
@@ -982,8 +1088,9 @@ export function ThreadDetailView() {
   const parentThreadSection: ThreadPromptParentThreadSection | null =
     useMemo(() => {
       if (!thread?.parentThreadId) return null;
-      const href = getThreadRoutePath({
+      const href = getSurfaceAwareThreadRoutePath({
         projectId: thread.projectId,
+        surface: props.surface,
         threadId: thread.parentThreadId,
       });
       if (parentThread === undefined) {
@@ -1007,7 +1114,12 @@ export function ThreadDetailView() {
         parentThreadTitle: getThreadDisplayTitle(parentThread),
         href,
       };
-    }, [parentThread, thread?.parentThreadId, thread?.projectId]);
+    }, [
+      parentThread,
+      props.surface,
+      thread?.parentThreadId,
+      thread?.projectId,
+    ]);
   const childThreadsSection: ThreadPromptChildThreadsSection | null =
     useMemo(() => {
       const list = childThreadSubsetQuery.data ?? [];
@@ -1018,14 +1130,15 @@ export function ThreadDetailView() {
         .map((entry) => ({
           id: entry.id,
           title: getThreadDisplayTitle(entry),
-          href: getThreadRoutePath({
+          href: getSurfaceAwareThreadRoutePath({
             projectId: entry.projectId,
+            surface: props.surface,
             threadId: entry.id,
           }),
         }));
       if (activeItems.length === 0) return null;
       return { items: activeItems };
-    }, [childThreadSubsetQuery.data]);
+    }, [childThreadSubsetQuery.data, props.surface]);
   const isThreadTimelinePending = timelineLoading && timelineRows.length === 0;
   useThreadReadTracking({
     markThreadRead,
@@ -1445,19 +1558,32 @@ export function ThreadDetailView() {
         }}
       />
     ) : undefined;
-  const timelineHeader = (
-    <ThreadDetailHeader
-      actionsMenu={threadActionsMenu}
-      isChildThread={Boolean(parentThreadId)}
-      isSecondaryPanelOpen={isSecondaryPanelOpen}
-      activeTerminalCount={activeTerminalCount}
-      onOpenThreadGitAction={gitActions.threadGitActionDialog.onOpen}
-      onToggleSecondaryPanel={toggleSecondaryPanel}
-      threadHeaderGitActions={gitActions.threadHeaderGitActions}
-      threadTitle={threadTitle}
-      workspaceOpenButton={workspaceOpenButton}
-    />
-  );
+  const timelineHeader =
+    props.surface === "popout" ? (
+      <PopoutThreadHeader
+        threadTitle={threadTitle}
+        onHide={props.onPopoutHide}
+        onNewQuickThread={props.onPopoutNewQuickThread}
+        onOpenInMain={() => {
+          props.onPopoutOpenInMain({
+            projectId,
+            threadId: thread.id,
+          });
+        }}
+      />
+    ) : (
+      <ThreadDetailHeader
+        actionsMenu={threadActionsMenu}
+        isChildThread={Boolean(parentThreadId)}
+        isSecondaryPanelOpen={isSecondaryPanelOpen}
+        activeTerminalCount={activeTerminalCount}
+        onOpenThreadGitAction={gitActions.threadGitActionDialog.onOpen}
+        onToggleSecondaryPanel={toggleSecondaryPanel}
+        threadHeaderGitActions={gitActions.threadHeaderGitActions}
+        threadTitle={threadTitle}
+        workspaceOpenButton={workspaceOpenButton}
+      />
+    );
   const composerFooter = (
     <ThreadDetailPromptArea
       canUseGitUi={canUseGitUi}
@@ -1468,6 +1594,9 @@ export function ThreadDetailView() {
       environmentCompactLabel={threadEnvironmentDisplay?.compactModeLabel}
       isEnvironmentActionPending={requestEnvironmentAction.isPending}
       onCreateNewThreadInWorktree={onCreateNewThreadInWorktree}
+      onEscapeEmptyPrompt={
+        props.surface === "popout" ? props.onPopoutHide : undefined
+      }
       composerQueriesEnabled={hasThreadComposerBootstrapReady}
       composerQueriesStaleTime={composerHydratedDataStaleTime}
       onChangedFileClick={handleChangedFileClick}
@@ -1577,7 +1706,8 @@ export function ThreadDetailView() {
         header={timelineHeader}
         isMetadataLoading={environmentQuery.isLoading}
         isSecondaryPanelOpen={isSecondaryPanelOpen}
-        isConversationCollapsed={storedConversationCollapsed}
+        isConversationCollapsed={isConversationCollapsed}
+        surface={props.surface}
         onToggleConversationCollapse={toggleConversationCollapse}
         metadata={{
           thread,

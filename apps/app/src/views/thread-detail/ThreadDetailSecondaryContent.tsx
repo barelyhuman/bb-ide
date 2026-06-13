@@ -11,7 +11,7 @@ import {
   getBbDesktopInfo,
   shouldUseMacosDesktopChrome,
 } from "@/lib/bb-desktop";
-import { useIsSidebarShowing } from "@/components/ui/sidebar.js";
+import { useOptionalIsSidebarShowing } from "@/components/ui/sidebar.js";
 import {
   Panel,
   PanelGroup,
@@ -58,6 +58,7 @@ interface ThreadDetailSecondaryContentProps {
   isMetadataLoading: boolean;
   isSecondaryPanelOpen: boolean;
   isConversationCollapsed: boolean;
+  surface: "page" | "popout";
   onToggleConversationCollapse: () => void;
   metadata: ThreadMetadataContentProps;
   secondaryPanel: ThreadSecondaryPanelProps;
@@ -211,6 +212,7 @@ export function ThreadDetailSecondaryContent({
   isMetadataLoading,
   isSecondaryPanelOpen,
   isConversationCollapsed,
+  surface,
   onToggleConversationCollapse,
   metadata,
   secondaryPanel,
@@ -231,7 +233,9 @@ export function ThreadDetailSecondaryContent({
   // zone; nothing-to-do otherwise (web, or sidebar covers the cluster).
   const [desktopInfo] = useState(getBbDesktopInfo);
   const usesDesktopChrome = shouldUseMacosDesktopChrome(desktopInfo);
-  const isMainSidebarShowing = useIsSidebarShowing();
+  const optionalIsMainSidebarShowing = useOptionalIsSidebarShowing();
+  const isMainSidebarShowing =
+    surface === "popout" ? false : optionalIsMainSidebarShowing === true;
   const isLeftmostSurfaceUnderTrafficLights =
     usesDesktopChrome && !isMainSidebarShowing && !renderAsDrawer;
   // Collapsing the conversation only makes sense on a wide viewport with the
@@ -315,7 +319,12 @@ export function ThreadDetailSecondaryContent({
   ) : null;
 
   return (
-    <div className="-mx-4 -mb-4 -mt-4 flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-clip md:-mx-5 md:-mb-5 md:-mt-5">
+    <div
+      className={cn(
+        "flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-clip",
+        surface === "page" && "-mx-4 -mb-4 -mt-4 md:-mx-5 md:-mb-5 md:-mt-5",
+      )}
+    >
       {/*
         When collapsed we keep the resizable PanelGroup mounted (the timeline
         lifts to 0% and the panel to 100% via the layout effect) and slot the

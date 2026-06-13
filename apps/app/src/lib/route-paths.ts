@@ -1,8 +1,19 @@
 import { PERSONAL_PROJECT_ID } from "@bb/domain";
+import {
+  POPOUT_ROUTE_PATH,
+  getDesktopPopoutThreadRoutePath,
+  type BbDesktopPopoutThreadRef,
+} from "@bb/server-contract";
 import { matchPath } from "react-router-dom";
+
+export { POPOUT_ROUTE_PATH };
 
 export const APP_ROOT_ROUTE_PATH = "/";
 export const AUTH_CALLBACK_ROUTE_PATH = "/auth/callback";
+export const POPOUT_PROJECTLESS_THREAD_DETAIL_ROUTE_PATH =
+  "/popout/threads/:threadId";
+export const POPOUT_THREAD_DETAIL_ROUTE_PATH =
+  "/popout/projects/:projectId/threads/:threadId";
 export const SETTINGS_ROUTE_PATH = "/settings";
 export const AUTOMATIONS_ROUTE_PATH = "/automations";
 export const ROOT_COMPOSE_ROUTE_PATH = APP_ROOT_ROUTE_PATH;
@@ -16,6 +27,12 @@ export const THREAD_DETAIL_ROUTE_PATH =
 export interface ThreadRoutePathArgs {
   projectId: string;
   threadId: string;
+}
+
+export type ThreadRouteSurface = "page" | "popout";
+
+export interface SurfaceAwareThreadRoutePathArgs extends ThreadRoutePathArgs {
+  surface: ThreadRouteSurface;
 }
 
 export interface IsRoutePathArgs {
@@ -41,6 +58,18 @@ export function getRootComposeRoutePath(): string {
   return ROOT_COMPOSE_ROUTE_PATH;
 }
 
+export function getPopoutRoutePath(): string {
+  return POPOUT_ROUTE_PATH;
+}
+
+export function getPopoutThreadRoutePath(args: ThreadRoutePathArgs): string {
+  const thread: BbDesktopPopoutThreadRef = {
+    projectId: args.projectId,
+    threadId: args.threadId,
+  };
+  return getDesktopPopoutThreadRoutePath(thread);
+}
+
 export function getAutomationsRoutePath(): string {
   return AUTOMATIONS_ROUTE_PATH;
 }
@@ -63,9 +92,20 @@ export function getThreadRoutePath(args: ThreadRoutePathArgs): string {
     : `/projects/${args.projectId}/threads/${args.threadId}`;
 }
 
+export function getSurfaceAwareThreadRoutePath(
+  args: SurfaceAwareThreadRoutePathArgs,
+): string {
+  return args.surface === "popout"
+    ? getPopoutThreadRoutePath(args)
+    : getThreadRoutePath(args);
+}
+
 const baseRoutePatterns: readonly string[] = [
   APP_ROOT_ROUTE_PATH,
   AUTH_CALLBACK_ROUTE_PATH,
+  POPOUT_ROUTE_PATH,
+  POPOUT_PROJECTLESS_THREAD_DETAIL_ROUTE_PATH,
+  POPOUT_THREAD_DETAIL_ROUTE_PATH,
   SETTINGS_ROUTE_PATH,
   AUTOMATIONS_ROUTE_PATH,
   LEGACY_PROJECT_COMPOSE_ROUTE_PATH,

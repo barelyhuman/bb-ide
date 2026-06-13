@@ -29,6 +29,7 @@ import { useThreads } from "@/hooks/queries/thread-queries";
 import { useCommandSuggestions } from "@/hooks/useCommandSuggestions";
 import { usePrimaryHost } from "@/hooks/queries/host-queries";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
+import { useEscapeToHide } from "@/hooks/useEscapeToHide";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
 import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/prompt-mention-link";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
@@ -42,7 +43,9 @@ import { getThreadDisplayTitle } from "@/lib/thread-title";
 import {
   getThreadRoutePath,
   getRootComposeRoutePath,
+  getSurfaceAwareThreadRoutePath,
   isProjectlessProjectId,
+  type ThreadRoutePathArgs,
 } from "@/lib/route-paths";
 import {
   useRootComposeProjectId,
@@ -64,6 +67,16 @@ type ProjectSelectionChangeHandler = NewThreadProjectConfig["onChange"];
 interface LegacyProjectComposeRedirectProps {
   projectId: string;
 }
+
+type RootComposeViewProps =
+  | {
+      surface: "page";
+    }
+  | {
+      onThreadCreated(args: ThreadRoutePathArgs): void;
+      onEscapeEmptyPrompt(): void;
+      surface: "popout";
+    };
 
 interface BuildMobileRecentThreadsArgs {
   sidebarNavigation: SidebarBootstrapResponse | undefined;
@@ -186,10 +199,10 @@ export function RootComposeRoute() {
     return <LegacyProjectComposeRedirect projectId={projectId} />;
   }
 
-  return <RootComposeView />;
+  return <RootComposeView surface="page" />;
 }
 
-export function RootComposeView() {
+export function RootComposeView(props: RootComposeViewProps) {
   const [rootComposeProjectId, setRootComposeProjectId] =
     useRootComposeProjectId();
   const location = useLocation();
@@ -602,7 +615,12 @@ export function RootComposeView() {
       setLastCreatedThreadId(thread.id);
       clearReuseEnvironment();
       promptDraft.clearIfCurrentMatches(submittedDraft);
-      if (navigateToThreadAfterCreate) {
+      if (props.surface === "popout") {
+        props.onThreadCreated({
+          projectId: thread.projectId,
+          threadId: thread.id,
+        });
+      } else if (navigateToThreadAfterCreate) {
         navigate(
           getThreadRoutePath({
             projectId: thread.projectId,
@@ -621,6 +639,7 @@ export function RootComposeView() {
     navigateToThreadAfterCreate,
     permissionMode,
     projectId,
+    props,
     promptDraft,
     reasoningLevel,
     selectedEnvironment,
@@ -639,6 +658,21 @@ export function RootComposeView() {
     (branchEnvironmentMode === "local" &&
       selectedBranch !== null &&
       branchUiState.mutationBlocker !== null);
+
+  const isPromptEmpty = useCallback(
+    () => promptInput.length === 0,
+    [promptInput.length],
+  );
+  const onEscapeEmptyPrompt =
+    props.surface === "popout" ? props.onEscapeEmptyPrompt : undefined;
+  const hideEmptyPopoutPrompt = useCallback(() => {
+    onEscapeEmptyPrompt?.();
+  }, [onEscapeEmptyPrompt]);
+  useEscapeToHide({
+    enabled: props.surface === "popout",
+    isEmpty: isPromptEmpty,
+    onHide: hideEmptyPopoutPrompt,
+  });
 
   const currentPromptDraft = useMemo(
     () => ({
@@ -664,13 +698,14 @@ export function RootComposeView() {
       resource.kind === "thread"
         ? () =>
             navigate(
-              getThreadRoutePath({
+              getSurfaceAwareThreadRoutePath({
                 projectId: resource.projectId ?? projectId,
+                surface: props.surface,
                 threadId: resource.threadId,
               }),
             )
         : null,
-    [navigate, projectId],
+    [navigate, projectId, props.surface],
   );
   // Mirrors the @-mention plumbing: the composer feeds the text typed after the
   // command trigger into `commandQuery`, which drives the project+provider-
@@ -930,44 +965,52 @@ export function RootComposeView() {
     );
   }
 
+  const promptBox = (
+    <NewThreadPromptBox
+      id="root-compose-prompt"
+      promptBoxRef={promptBoxRef}
+      value={prompt}
+      mentionRanges={promptDraft.mentions}
+      onChange={promptDraft.setTextAndMentions}
+      onSubmit={submitPrompt}
+      isSubmitting={createThread.isPending}
+      disabled={isSubmitDisabled}
+      zenModeStorageKey={rootComposeZenModeStorageKey}
+      history={historyConfig}
+      typeahead={typeaheadConfig}
+      attachments={attachmentsConfig}
+      modeConfig={{
+        environment: environmentConfig,
+        branch: branchConfig,
+        worktree: worktreeConfig,
+        permission: permissionConfig,
+        header: reuseHeader,
+      }}
+      project={{
+        projects: projectOptions,
+        value: isProjectless ? null : projectId,
+        onChange: handleProjectChange,
+        allowNoProject: true,
+        createProject: {
+          onCreate: quickCreateProject.openCreateDialog,
+          disabled:
+            !quickCreateProject.isAvailable || quickCreateProject.isCreating,
+          isCreating: quickCreateProject.isCreating,
+        },
+      }}
+      execution={executionConfig}
+    />
+  );
+
+  if (props.surface === "popout") {
+    return <div className="w-full">{promptBox}</div>;
+  }
+
   return (
     <PageShell
       contentClassName={ROOT_COMPOSE_SIDEBAR_ACTION_ALIGNED_TOP_PADDING_CLASS}
     >
-      <NewThreadPromptBox
-        id="root-compose-prompt"
-        promptBoxRef={promptBoxRef}
-        value={prompt}
-        mentionRanges={promptDraft.mentions}
-        onChange={promptDraft.setTextAndMentions}
-        onSubmit={submitPrompt}
-        isSubmitting={createThread.isPending}
-        disabled={isSubmitDisabled}
-        zenModeStorageKey={rootComposeZenModeStorageKey}
-        history={historyConfig}
-        typeahead={typeaheadConfig}
-        attachments={attachmentsConfig}
-        modeConfig={{
-          environment: environmentConfig,
-          branch: branchConfig,
-          worktree: worktreeConfig,
-          permission: permissionConfig,
-          header: reuseHeader,
-        }}
-        project={{
-          projects: projectOptions,
-          value: isProjectless ? null : projectId,
-          onChange: handleProjectChange,
-          allowNoProject: true,
-          createProject: {
-            onCreate: quickCreateProject.openCreateDialog,
-            disabled:
-              !quickCreateProject.isAvailable || quickCreateProject.isCreating,
-            isCreating: quickCreateProject.isCreating,
-          },
-        }}
-        execution={executionConfig}
-      />
+      {promptBox}
       <RootComposeMobileRecents
         highlightedThreadId={lastCreatedThreadId}
         projectNamesById={mobileRecentProjectNamesById}
