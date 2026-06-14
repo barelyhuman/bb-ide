@@ -399,6 +399,14 @@ export function RootComposeView(props: RootComposeViewProps) {
     setBranchSearchQuery("");
   }, [effectiveEnvironmentValue, projectId]);
   const isHostMode = parsedEnvironment?.type === "host";
+  const isHostLocalMode = isHostMode && parsedEnvironment.mode === "local";
+  const branchEnvironmentMode: RootComposeBranchEnvironmentMode = isProjectless
+    ? "other"
+    : isHostLocalMode
+      ? "local"
+      : isHostMode && parsedEnvironment.mode === "worktree"
+        ? "worktree"
+        : "other";
   const {
     selectedBranch,
     onBranchChange: handleBranchChange,
@@ -408,6 +416,7 @@ export function RootComposeView(props: RootComposeViewProps) {
   } = useScopedBranchSelection({
     environmentValue: effectiveEnvironmentValue,
     projectId,
+    rememberSelection: branchEnvironmentMode === "worktree",
   });
   const selectedBranchName = selectedBranch?.name ?? "";
   const hostBranchesQuery = useProjectSourceBranches(
@@ -430,14 +439,6 @@ export function RootComposeView(props: RootComposeViewProps) {
     activeBranchesQuery.data?.branches,
     activeBranchesQuery.data?.selectedBranch,
   ]);
-  const isHostLocalMode = isHostMode && parsedEnvironment.mode === "local";
-  const branchEnvironmentMode: RootComposeBranchEnvironmentMode = isProjectless
-    ? "other"
-    : isHostLocalMode
-      ? "local"
-      : isHostMode && parsedEnvironment.mode === "worktree"
-        ? "worktree"
-        : "other";
   const remoteBranchOptions = useMemo(() => {
     if (
       branchEnvironmentMode !== "local" &&
@@ -456,12 +457,6 @@ export function RootComposeView(props: RootComposeViewProps) {
     activeBranchesQuery.data?.selectedBranch,
     branchEnvironmentMode,
   ]);
-  const branchOptionsTruncated = Boolean(
-    activeBranchesQuery.data?.branchesTruncated ||
-    ((branchEnvironmentMode === "local" ||
-      branchEnvironmentMode === "worktree") &&
-      activeBranchesQuery.data?.remoteBranchesTruncated),
-  );
   const branchSelectionSeed =
     branchEnvironmentMode === "local" &&
     activeBranchesQuery.data?.checkout.kind === "branch"
@@ -854,7 +849,6 @@ export function RootComposeView(props: RootComposeViewProps) {
       isNew: selectedBranch?.isNew ?? false,
       options: branchOptions,
       remoteOptions: remoteBranchOptions,
-      optionsTruncated: branchOptionsTruncated,
       loading: activeBranchesQuery.isFetching,
       placeholder: branchUiState.placeholder,
       triggerLabel: branchUiState.triggerLabel,
@@ -880,7 +874,6 @@ export function RootComposeView(props: RootComposeViewProps) {
     }),
     [
       activeBranchesQuery.isFetching,
-      branchOptionsTruncated,
       branchOptions,
       branchEnvironmentMode,
       remoteBranchOptions,
