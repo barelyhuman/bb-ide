@@ -608,6 +608,7 @@ interface ListProjectCommandsArgs {
   environmentId: string | null;
   query: string;
   limit: number;
+  offset: number;
 }
 
 /**
@@ -630,6 +631,7 @@ export async function listProjectCommands(
         environmentId: args.environmentId ?? "",
         ...(args.query.length > 0 ? { query: args.query } : {}),
         limit: String(args.limit),
+        ...(args.offset > 0 ? { offset: String(args.offset) } : {}),
       },
     }),
   );

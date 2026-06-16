@@ -791,7 +791,9 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
             }),
           );
       }
-      if (resource.entryKind !== "file") return null;
+      if (resource.kind !== "path" || resource.entryKind !== "file") {
+        return null;
+      }
       if (resource.source === "thread-storage") {
         return () =>
           openStorageFile({
