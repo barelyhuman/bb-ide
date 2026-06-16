@@ -10,7 +10,6 @@ import { sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { threadStatusValues } from "@bb/domain/thread-status";
 import type {
-  EnvironmentCleanupMode,
   EnvironmentStatus,
   HostType,
   PendingInteractionStatus,
@@ -202,8 +201,6 @@ export const environments = sqliteTable(
     baseBranch: text("base_branch"),
     defaultBranch: text("default_branch"),
     mergeBaseBranch: text("merge_base_branch"),
-    cleanupRequestedAt: integer("cleanup_requested_at"),
-    cleanupMode: text("cleanup_mode").$type<EnvironmentCleanupMode>(),
     destroyAttemptId: text("destroy_attempt_id"),
     workspaceProvisionType: text("workspace_provision_type")
       .$type<WorkspaceProvisionType>()
@@ -218,7 +215,6 @@ export const environments = sqliteTable(
   (table) => [
     uniqueIndex("environments_host_path_idx").on(table.hostId, table.path),
     index("environments_project_idx").on(table.projectId),
-    index("environments_cleanup_requested_idx").on(table.cleanupRequestedAt),
     index("environments_status_idx").on(table.status),
   ],
 );
@@ -280,7 +276,7 @@ export const threads = sqliteTable(
     titleFallback: text("title_fallback"),
     status: text("status", { enum: threadStatusValues })
       .notNull()
-      .default("created"),
+      .default("starting"),
     parentThreadId: text("parent_thread_id").references(
       (): AnySQLiteColumn => threads.id,
       { onDelete: "set null" },
@@ -288,7 +284,6 @@ export const threads = sqliteTable(
     archivedAt: integer("archived_at"),
     pinnedAt: integer("pinned_at"),
     pinSortKey: text("pin_sort_key"),
-    stopRequestedAt: integer("stop_requested_at"),
     deletedAt: integer("deleted_at"),
     lastReadAt: integer("last_read_at"),
     latestAttentionAt: integer("latest_attention_at").notNull(),

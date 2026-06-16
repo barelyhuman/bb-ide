@@ -133,7 +133,6 @@ function makeThreadWithRuntime(
     parentThreadId: null,
     archivedAt: null,
     pinnedAt: null,
-    stopRequestedAt: null,
     deletedAt: null,
     runtime: {
       displayStatus: "waiting-for-host",

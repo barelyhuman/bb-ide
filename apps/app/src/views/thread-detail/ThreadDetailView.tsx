@@ -1505,6 +1505,14 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
     ? formatWorkspaceCheckoutDisplay({ checkout: workspaceStatus.checkout })
     : undefined;
   const isWorkspaceDeleted = environment?.status === "destroyed";
+  // Decision B*: a thread whose environment is gone (being torn down or already
+  // destroyed) is read-only — un-archive never resurrects it, so the composer is
+  // replaced with the "environment is gone" banner instead of allowing a send.
+  const threadEnvironmentGoneStatus =
+    environment?.status === "destroying" ||
+    environment?.status === "destroyed"
+      ? environment.status
+      : null;
   const threadGitStatusDisplay = getGitStatusDisplay(workspaceStatus, {
     mergeBaseBranch,
     showBranchComparison: showBranchComparisonUi,
@@ -1581,6 +1589,7 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
       environmentIcon={threadEnvironmentIcon ?? undefined}
       environmentLabel={threadEnvironmentDisplay?.modeLabel}
       environmentCompactLabel={threadEnvironmentDisplay?.compactModeLabel}
+      environmentGoneStatus={threadEnvironmentGoneStatus}
       isEnvironmentActionPending={requestEnvironmentAction.isPending}
       onCreateNewThreadInWorktree={onCreateNewThreadInWorktree}
       onEscapeEmptyPrompt={
@@ -1762,7 +1771,7 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
           projectId,
           resolveMentionLink,
           showOngoingIndicator:
-            thread.stopRequestedAt === null &&
+            thread.status !== "stopping" &&
             // A pending interaction (question or approval) already renders its
             // own inline shimmer row, so the bottom indicator would just
             // duplicate it.
@@ -1775,7 +1784,8 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
               ? "Waiting for reconnection"
               : undefined,
           timelineRows,
-          stopRequestedAt: thread.stopRequestedAt,
+          isStopping: thread.status === "stopping",
+          stoppingAnchorAt: thread.updatedAt,
           threadId: thread.id,
           threadRuntimeDisplayStatus: thread.runtime.displayStatus,
           unreadDividerAutoScroll: unreadDividerState.autoScroll,
