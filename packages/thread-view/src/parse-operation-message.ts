@@ -70,6 +70,8 @@ function providerDisplayName(providerId: string): string {
       return "Codex";
     case "pi":
       return "Pi";
+    case "acp-cursor":
+      return "Cursor";
     default:
       return providerId;
   }
