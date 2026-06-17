@@ -253,6 +253,7 @@ export function ThreadDetailPromptArea({
   const stopThread = useStopThread();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({
+    kind: "thread",
     projectId,
     threadId: thread.id,
   });
