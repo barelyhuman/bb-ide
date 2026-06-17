@@ -183,6 +183,22 @@ interface SeedEventLargeValueBackfillEventArgs {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+const latestMigrationWhen = Math.max(
+  ...(
+    JSON.parse(
+      readFileSync(resolve(__dirname, "../drizzle/meta/_journal.json"), "utf-8"),
+    ) as { entries: { when: number }[] }
+  ).entries.map((entry) => entry.when),
+);
+
+function dropAutomationsSchema(db: DbConnection): void {
+  // Several tests migrate to head, rewind the schema to a legacy state, then
+  // re-apply forward. The automations tables (added by 0039) must be dropped as
+  // part of that rewind so the forward re-migrate can re-create them.
+  db.$client.prepare("DROP TABLE IF EXISTS automation_runs").run();
+  db.$client.prepare("DROP TABLE IF EXISTS automations").run();
+}
+
 function requirePublishedMigrationWhen(tag: string): number {
   const when = publishedMigrationWhensByTag.get(tag);
   if (when === undefined) {
@@ -246,6 +262,21 @@ const pendingInteractionSchemaHonestyMigrationPath = resolve(
 );
 function closeConnection(db: DbConnection): void {
   db.$client.close();
+}
+
+// Thread-search replay scenarios start from a full `migrate(db)` and then roll
+// the thread-search migrations back to an earlier state. Any migration that
+// lands AFTER thread-search (e.g. the automations migration) stays applied with
+// a newer timestamp, which would block Drizzle from re-applying the canonical
+// thread-search migrations (it only replays migrations newer than the latest
+// applied row). Clear those later migrations so the replay scenario matches a
+// real upgrade, where thread-search is repaired before later migrations apply.
+// NOTE: when adding a migration after thread-search, drop its schema here too.
+function resetMigrationsAfterThreadSearch(db: DbConnection): void {
+  dropAutomationsSchema(db);
+  db.$client
+    .prepare<[number]>("DELETE FROM __drizzle_migrations WHERE created_at > ?")
+    .run(threadSearchRowidFtsMigrationWhen);
 }
 
 function dropEnvironmentNameColumn(db: DbConnection): void {
@@ -801,6 +832,7 @@ describe("migrate", () => {
           "DELETE FROM __drizzle_migrations WHERE created_at = ?",
         )
         .run(threadSearchRowidFtsMigrationWhen);
+      resetMigrationsAfterThreadSearch(db);
 
       expect(() => migrate(db)).not.toThrow();
 
@@ -891,6 +923,7 @@ describe("migrate", () => {
           "branch-local-thread-search-rowid-fts-hash",
           branchLocalThreadSearchRowidFtsMigrationWhen,
         );
+      resetMigrationsAfterThreadSearch(db);
 
       expect(() => migrate(db)).not.toThrow();
 
@@ -983,6 +1016,7 @@ describe("migrate", () => {
           branchLocalThreadSearchMigrationWhen,
           branchLocalThreadSearchRowidFtsMigrationWhen,
         );
+      resetMigrationsAfterThreadSearch(db);
 
       expect(() => migrate(db)).not.toThrow();
 
@@ -1020,6 +1054,7 @@ describe("migrate", () => {
 
     try {
       migrate(db);
+      dropAutomationsSchema(db);
       restorePre0022ThreadTypeSchema(db);
       db.$client.exec(`
         INSERT INTO projects (id, name, created_at, updated_at)
@@ -1209,6 +1244,7 @@ describe("migrate", () => {
           `,
         )
         .run(threadSourceOriginMigrationWhen);
+      dropAutomationsSchema(db);
       db.$client.exec(`
         DROP TRIGGER IF EXISTS thread_search_segments_after_text_update;
         DROP TRIGGER IF EXISTS thread_search_segments_after_delete;
@@ -2013,6 +2049,7 @@ describe("migrate", () => {
 
     try {
       migrate(db);
+      dropAutomationsSchema(db);
       restorePre0022ThreadTypeSchema(db);
       addPre0017TerminalRuntimeColumns(db);
 
@@ -2638,6 +2675,7 @@ describe("migrate", () => {
 
     try {
       migrate(db);
+      dropAutomationsSchema(db);
       restorePre0022ThreadTypeSchema(db);
       seedPre0017TerminalSessionMigration({ db });
       db.$client
@@ -2729,6 +2767,7 @@ describe("migrate", () => {
 
     try {
       migrate(db);
+      dropAutomationsSchema(db);
       seedEventLargeValueBackfillThread(db);
 
       const commandOutput = "command output ".repeat(48);
@@ -2816,11 +2855,9 @@ describe("migrate", () => {
       markEventLargeValuesMigrationUnapplied(db);
       migrate(db);
 
-      // The restore migration and every migration after it (through 0040)
-      // re-apply, so the latest applied migration is the most recent in the journal.
-      expect(readLatestAppliedMigrationCreatedAt(db)).toBe(
-        threadSearchRowidFtsMigrationWhen,
-      );
+      // The restore migration and every migration after it re-apply, so the
+      // latest applied migration is the most recent in the journal (0041).
+      expect(readLatestAppliedMigrationCreatedAt(db)).toBe(latestMigrationWhen);
       expect(readTableNames(db)).not.toContain("event_large_values");
 
       const commandData = JSON.parse(

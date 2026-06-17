@@ -304,6 +304,12 @@ const SETTLED_RESPONSE_RESULT_FIXTURES: SettledResponseResultFixtures = {
     commitSubject: "Merge feature",
     merged: true,
   },
+  "host.run_script": {
+    exitCode: 0,
+    output: "ok\n",
+    durationMs: 12,
+    timedOut: false,
+  },
 };
 
 const WORKSPACE_DIFF_FILES_AVAILABLE_RESULT: JsonObject = {
@@ -1807,7 +1813,7 @@ describe("host-daemon command schemas", () => {
 
 describe("host-daemon session schemas", () => {
   it("documents the current protocol version", () => {
-    expect(HOST_DAEMON_PROTOCOL_VERSION).toBe(36);
+    expect(HOST_DAEMON_PROTOCOL_VERSION).toBe(37);
   });
 
   it("parses valid session open and event batch payloads", () => {
