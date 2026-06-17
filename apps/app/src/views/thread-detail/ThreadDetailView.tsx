@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAtom } from "jotai";
-import type {
-  ThreadTimelineLinkHandler,
-  ThreadTimelineLocalFileLink,
-  ThreadTimelineLocalFileLinkHandler,
-  TimelineTitleActionResolver,
+import {
+  isRunningThreadRuntimeDisplayStatus,
+  type ThreadTimelineForkMessageHandler,
+  type ThreadTimelineSideChatMessageHandler,
+  type ThreadTimelineLinkHandler,
+  type ThreadTimelineLocalFileLink,
+  type ThreadTimelineLocalFileLinkHandler,
+  type TimelineTitleActionResolver,
 } from "@/components/thread/timeline";
 import {
   isActiveTerminalSessionStatus,
@@ -16,6 +19,8 @@ import {
 import type { TerminalSession } from "@bb/server-contract";
 import { appToast } from "@/components/ui/app-toast";
 import type { ThreadSecondaryPanel as ThreadSecondaryPanelTab } from "@/lib/thread-secondary-panel";
+import { useForkThreadFromMessage } from "@/hooks/useForkThreadFromMessage";
+import { isThreadForkable } from "@/lib/fork-thread-request";
 import { useRequestEnvironmentAction } from "../../hooks/mutations/environment-mutations";
 import {
   useMarkThreadRead,
@@ -37,6 +42,7 @@ import {
   type ProjectThreadSubsetFilters,
 } from "../../hooks/queries/thread-queries";
 import { useThreadComposerBootstrap } from "../../hooks/queries/thread-composer-bootstrap-query";
+import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { ThreadGitActionDialog } from "@/components/dialogs/ThreadGitActionDialog";
 import { PageShell } from "@/components/ui/page-shell.js";
 import { HEADER_ICON_BUTTON_CLASS } from "@/components/layout/AppPageHeader";
@@ -100,6 +106,7 @@ import {
   WorkspaceFilePreviewTabContent,
 } from "@/components/secondary-panel/ThreadSecondaryPanelTabContent";
 import { BrowserTabDeck } from "@/components/secondary-panel/BrowserTabDeck";
+import { SideChatTabDeck } from "@/components/secondary-panel/SideChatTabDeck";
 import { NewTabPage } from "@/components/secondary-panel/NewTabPage";
 import { resolveRightPanelFileVisual } from "@/components/secondary-panel/rightPanelFileVisuals";
 import { COARSE_POINTER_COMPACT_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
@@ -465,7 +472,12 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
   const composerHydratedDataStaleTime = hasThreadComposerBootstrapData
     ? 10_000
     : undefined;
+  const threadOriginKind = thread?.originKind ?? thread?.childOrigin ?? null;
+  const threadSourceThreadId =
+    thread?.sourceThreadId ??
+    (thread && threadOriginKind ? thread.parentThreadId : null);
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
+  const { data: sourceThread } = useThread(threadSourceThreadId ?? "");
   const { data: pendingInteractions = [] } = useThreadPendingInteractions(
     composerQueryThreadId,
     {
@@ -506,15 +518,22 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
     activeWorkspaceFilePath,
     activeWorkspaceFileSource,
     activeWorkspaceFileStatusLabel,
+    activeSideChatTabId,
+    activateSideChatTab,
     browserTabs,
     clearActiveFileTabs,
     activateTab,
     closeTab,
+    closeSideChatTab,
     isNewTabActive,
     openTab,
+    openSideChat,
+    openExistingSideChatTab,
     orderedSecondaryFileTabs,
     reorderFileTab,
     selectFileSearchResult,
+    setSideChatThreadId,
+    sideChatTabs,
     updateBrowserTab,
   } = useThreadFileTabs({
     threadId,
@@ -681,6 +700,74 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
     staleTime: 5_000,
   });
   const environment = environmentQuery.data;
+  const forkThreadFromMessage = useForkThreadFromMessage({
+    sourceThread: thread ?? null,
+    sourceEnvironment: environment ?? null,
+  });
+  const handleForkMessage =
+    useCallback<ThreadTimelineForkMessageHandler>(() => {
+      void forkThreadFromMessage();
+    }, [forkThreadFromMessage]);
+  // A fork always runs in a fresh managed worktree branched off the source's
+  // host. Drop the Fork handler (not just disable it) for a host-less source
+  // (a personal-project thread with no environment) — matching the
+  // handler-undefined contract that already removes the button from the action
+  // bar — so that case never shows a Fork button that does nothing on click.
+  // Same predicate `buildForkThreadRequest` gates on, so the button and the
+  // request stay in lockstep.
+  const isForkAvailable = isThreadForkable(environment ?? null);
+  const canUseSideChatPanel = props.surface !== "popout";
+  const canStartSideChat =
+    canUseSideChatPanel && (thread?.canSpawnChild ?? false);
+  const handleSideChatMessage =
+    useCallback<ThreadTimelineSideChatMessageHandler>(
+      (target) => {
+        if (!canStartSideChat || !threadId) return;
+        openSideChat({
+          sourceThreadId: threadId,
+          sourceMessageText: target.messageText,
+        });
+      },
+      [canStartSideChat, openSideChat, threadId],
+    );
+  // A side chat started from the new-tab page has no anchor message, so it forks
+  // from the thread's tip (empty source text ⇒ no "replying to" reference).
+  const handleStartSideChat = useCallback(() => {
+    if (!canStartSideChat || !threadId) return;
+    openSideChat({ sourceThreadId: threadId, sourceMessageText: "" });
+  }, [canStartSideChat, openSideChat, threadId]);
+  // Same scope (`projectId` + `thread.id`) the composer's `ThreadDetailPromptArea`
+  // uses, so the timeline "Add to chat" action and the composer share one
+  // localStorage-backed draft — the quoted text is appended to the draft as a
+  // `> ` blockquote block and renders inline in the composer immediately, with
+  // no duplicated draft state.
+  const selectionPromptDraft = usePromptDraftStorage({
+    kind: "thread",
+    projectId: thread?.projectId ?? projectId ?? "",
+    threadId: thread?.id ?? "",
+  });
+  const addQuoteToComposer = selectionPromptDraft.addQuote;
+  // Bumped each time a quote is appended so the composer (a sibling component
+  // sharing the localStorage draft) can focus its caret at the end, ready for
+  // the reply under the quote.
+  const [composerFocusRequestNonce, setComposerFocusRequestNonce] = useState(0);
+  const handleSelectionAddToChat = useCallback(
+    (text: string) => {
+      addQuoteToComposer(text);
+      setComposerFocusRequestNonce((nonce) => nonce + 1);
+    },
+    [addQuoteToComposer],
+  );
+  // "Reply in side chat" anchors the side chat on the user's SELECTION (passed
+  // as the side-chat source text), so the reply's visible anchor and the
+  // context handed to the agent are exactly the highlighted text — unlike the
+  // per-message Reply button, which anchors on the whole message.
+  const handleSelectionReplyInSideChat = useCallback(
+    (selectionText: string) => {
+      handleSideChatMessage({ messageText: selectionText });
+    },
+    [handleSideChatMessage],
+  );
   const canUseGitUi = environment?.isGitRepo === true;
   const canCreateTerminal =
     thread?.environmentId !== null &&
@@ -1048,13 +1135,28 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
               onSelect: () => handleActivateFileTab(tab.id),
               onClose: () => closeTab(tab.id),
             };
+          case "side-chat":
+            return {
+              id: tab.id,
+              filename: tab.title,
+              isActive: tab.id === activeSideChatTabId,
+              leadingVisual: (
+                <Icon name="SideChat" className="size-3.5" aria-hidden />
+              ),
+              statusLabel: null,
+              onSelect: () => activateSideChatTab(tab.id),
+              onClose: () => closeSideChatTab(tab.id),
+            };
         }
       },
     );
     return tabs.length > 0 ? tabs : undefined;
   }, [
+    activateSideChatTab,
     activeFixedSecondaryTabId,
+    activeSideChatTabId,
     closeTab,
+    closeSideChatTab,
     handleActivateFileTab,
     handleActivateTerminalTab,
     handleCloseTerminalTab,
@@ -1130,45 +1232,66 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
   });
   const parentThreadSection: ThreadPromptParentThreadSection | null =
     useMemo(() => {
-      if (!thread?.parentThreadId) return null;
+      const relatedThreadId =
+        threadOriginKind !== null
+          ? threadSourceThreadId
+          : thread?.parentThreadId;
+      if (!thread || !relatedThreadId) return null;
       const href = getSurfaceAwareThreadRoutePath({
         projectId: thread.projectId,
         surface: props.surface,
-        threadId: thread.parentThreadId,
+        threadId: relatedThreadId,
       });
-      if (parentThread === undefined) {
-        // Parent record not yet loaded — show id-based fallback so the user
-        // doesn't get a flicker of "no parent" before resolution.
+      const relationship =
+        threadOriginKind === "fork"
+          ? "fork"
+          : threadOriginKind === "side-chat"
+            ? "side-chat"
+            : "parent";
+      const relatedThread =
+        relationship === "parent" ? parentThread : sourceThread;
+      if (relatedThread === undefined) {
+        // Related record not yet loaded — show id-based fallback so the user
+        // doesn't get a flicker of "no related thread" before resolution.
         return {
-          parentThreadTitle: `Parent ${thread.parentThreadId.slice(0, 8)}`,
+          parentThreadTitle: relatedThreadId.slice(0, 8),
           href,
+          relationship,
         };
       }
       // Plan ownership invariants: silently exclude dirty references rather
-      // than rendering a stale or unreachable parent link.
+      // than rendering a stale or unreachable related-thread link.
       if (
-        parentThread.archivedAt !== null ||
-        parentThread.deletedAt !== null ||
-        parentThread.projectId !== thread.projectId
+        relatedThread.archivedAt !== null ||
+        relatedThread.deletedAt !== null ||
+        relatedThread.projectId !== thread.projectId
       ) {
         return null;
       }
       return {
-        parentThreadTitle: getThreadDisplayTitle(parentThread),
+        parentThreadTitle: getThreadDisplayTitle(relatedThread),
         href,
+        relationship,
       };
     }, [
       parentThread,
       props.surface,
-      thread?.parentThreadId,
-      thread?.projectId,
+      sourceThread,
+      thread,
+      threadOriginKind,
+      threadSourceThreadId,
     ]);
   const childThreadsSection: ThreadPromptChildThreadsSection | null =
     useMemo(() => {
       const list = childThreadSubsetQuery.data ?? [];
       const activeItems = list
-        .filter((entry) =>
-          isThreadDisplayStatusBannerActive(entry.runtime.displayStatus),
+        .filter(
+          (entry) =>
+            // Forks / side chats are user-driven branches opened directly, not
+            // delegated work the parent is waiting on — keep them out of the
+            // active-child banner count and drawer.
+            entry.childOrigin === null &&
+            isThreadDisplayStatusBannerActive(entry.runtime.displayStatus),
         )
         .map((entry) => ({
           id: entry.id,
@@ -1354,14 +1477,18 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
           return () => {
             openSecondaryPanelDiffFile(action.path);
           };
+        case "open-side-chat":
+          return () => {
+            openExistingSideChatTab(action.threadId);
+          };
         default:
           // Surfaces a compile-time error if a future TimelineTitleAction
           // variant is added without app-side handling, instead of silently
           // returning undefined and leaving a kind unrouted.
-          return assertNever(action.kind);
+          return assertNever(action);
       }
     },
-    [openSecondaryPanelDiffFile],
+    [openSecondaryPanelDiffFile, openExistingSideChatTab],
   );
   const metadataStorage = useMemo(
     () => ({
@@ -1570,8 +1697,7 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
   // destroyed) is read-only — un-archive never resurrects it, so the composer is
   // replaced with the "environment is gone" banner instead of allowing a send.
   const threadEnvironmentGoneStatus =
-    environment?.status === "destroying" ||
-    environment?.status === "destroyed"
+    environment?.status === "destroying" || environment?.status === "destroyed"
       ? environment.status
       : null;
   const threadGitStatusDisplay = getGitStatusDisplay(workspaceStatus, {
@@ -1632,7 +1758,13 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
     ) : (
       <ThreadDetailHeader
         actionsMenu={threadActionsMenu}
-        isChildThread={Boolean(parentThreadId)}
+        childPillLabel={
+          threadOriginKind === "side-chat"
+            ? "side chat"
+            : parentThreadId
+              ? "child"
+              : null
+        }
         isSecondaryPanelOpen={isSecondaryPanelOpen}
         activeTerminalCount={activeTerminalCount}
         onOpenThreadGitAction={gitActions.threadGitActionDialog.onOpen}
@@ -1682,6 +1814,7 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
             }
           : null
       }
+      composerFocusRequestNonce={composerFocusRequestNonce}
       sendMessage={sendMessage}
       pendingInteractions={pendingInteractions}
       pendingTodos={pendingTodos}
@@ -1709,6 +1842,7 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
       currentThreadId={thread.id}
       focusRequest={newTabFocusRequest}
       onSelect={handleSelectFileSearchResult}
+      onStartSideChat={canStartSideChat ? handleStartSideChat : undefined}
       onOpenBrowser={handleOpenBrowser}
       onStartTerminal={canCreateTerminal ? handleStartTerminal : undefined}
     />
@@ -1745,6 +1879,21 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
     />
   ) : undefined;
   const isBrowserTabActive = activeBrowserTab !== null;
+  // Side-chat tabs, like browser tabs, keep a live conversation surface mounted
+  // across tab switches so streaming + composer state survive deactivation; the
+  // deck self-collapses when no side-chat tab is active, and suppresses the
+  // normal file-content slot when one is.
+  const isSideChatTabActive = activeSideChatTabId !== null;
+  const sideChatDeck = (
+    <SideChatTabDeck
+      sideChatTabs={sideChatTabs}
+      activeSideChatTabId={activeSideChatTabId}
+      sourceThread={thread}
+      sourceEnvironment={environment ?? null}
+      sourceTimelineRows={timelineRows}
+      onSetThreadId={setSideChatThreadId}
+    />
+  );
 
   return (
     <>
@@ -1794,6 +1943,8 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
           fileTabContent,
           renderBrowserDeck,
           isBrowserTabActive,
+          sideChatDeck,
+          isSideChatTabActive,
           isOpen: isSecondaryPanelOpen,
           onClose: closeSecondaryPanel,
           onCollapse: closeSecondaryPanel,
@@ -1807,11 +1958,21 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
         }}
         timeline={{
           activeThinking,
+          canSpawnChild: thread.canSpawnChild,
+          threadChildOrigin: threadOriginKind,
           hasOlderTimelineRows,
           hostConnectionNotice,
           isLoadingOlderTimelineRows,
           isThreadTimelinePending,
           timelineError: Boolean(timelineError),
+          onForkMessage: isForkAvailable ? handleForkMessage : undefined,
+          onSideChatMessage: canStartSideChat
+            ? handleSideChatMessage
+            : undefined,
+          onSelectionAddToChat: handleSelectionAddToChat,
+          onSelectionReplyInSideChat: canStartSideChat
+            ? handleSelectionReplyInSideChat
+            : undefined,
           onLoadOlderRows: loadOlderTimelineRows,
           onOpenLink: handleOpenTimelineLink,
           onOpenLocalFileLink: handleOpenTimelineLocalFileLink,
@@ -1824,8 +1985,7 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
             // own inline shimmer row, so the bottom indicator would just
             // duplicate it.
             !hasPendingInteraction &&
-            (thread.runtime.displayStatus === "active" ||
-              thread.runtime.displayStatus === "host-reconnecting") &&
+            isRunningThreadRuntimeDisplayStatus(thread.runtime.displayStatus) &&
             !isThreadTimelinePending,
           ongoingIndicatorLabel:
             thread.runtime.displayStatus === "host-reconnecting"

@@ -38,6 +38,7 @@ import {
   maybePruneActiveThreadEventHistory,
 } from "../services/system/event-pruning.js";
 import { queueChildThreadTurnNotificationBestEffort } from "../services/threads/child-thread-notifications.js";
+import { isAgentDelegatedChildThread } from "../services/threads/thread-parent.js";
 import { runQueuedMessageAutoSendForThread } from "../services/threads/queued-messages.js";
 import { deferAfterResponse } from "../services/lib/response-deferral.js";
 import {
@@ -329,7 +330,13 @@ async function applyEventEffects(
           ...event,
           threadId: entry.threadId,
         });
-        if (turnCompleted.thread?.parentThreadId) {
+        if (
+          turnCompleted.thread &&
+          // Forks / side chats are user-initiated branches, not agent-delegated
+          // sub-tasks, so a completed turn must not post a "child finished"
+          // notification back into their parent thread.
+          isAgentDelegatedChildThread(turnCompleted.thread)
+        ) {
           // Command-result failures already notify parent threads for failed turns
           // without terminal events; late terminal events still own status effects.
           const alreadyHandledByCommandFailure =
@@ -652,18 +659,18 @@ function resolveActivePruneCandidates(
   args: ResolveActivePruneCandidatesArgs,
 ): ActivePruneCandidate[] {
   const latestPrunableSequenceByThreadId = new Map<string, number>();
-  const insertedEventIndexLookup = new Set(args.insertedEventIndexes);
 
-  for (const [index, entry] of args.events.entries()) {
-    if (!insertedEventIndexLookup.has(index)) {
-      continue;
+  for (const [acceptedIndex, acceptedEvent] of args.acceptedEvents.entries()) {
+    const inputIndex = args.insertedEventIndexes[acceptedIndex];
+    if (inputIndex === undefined) {
+      throw new Error("Missing inserted event index for accepted daemon event");
+    }
+    const entry = args.events[inputIndex];
+    if (entry === undefined) {
+      throw new Error("Missing daemon event for inserted event index");
     }
     if (!isActivePruneTriggerThreadEventType(entry.event.type)) {
       continue;
-    }
-    const acceptedEvent = args.acceptedEvents[index];
-    if (acceptedEvent === undefined) {
-      throw new Error("Missing accepted event for inserted daemon event");
     }
 
     const previousSequence = latestPrunableSequenceByThreadId.get(
@@ -824,6 +831,17 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
         }
         throw error;
       }
+      for (const index of appendResult.skippedTurnUnstartedInputIndexes) {
+        const skipped = eventInputs[index];
+        deps.logger.warn(
+          {
+            eventType: skipped?.type,
+            threadId: skipped?.threadId,
+            sessionId: session.id,
+          },
+          "Dropped orphan thread-state snapshot with no stored turn/started",
+        );
+      }
       notifyInsertedEventThreads(deps, {
         eventInputs,
         insertedInputIndexes: appendResult.insertedInputIndexes,
@@ -848,7 +866,13 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
       deferEventFollowUpBatch(deps, followUps);
       return context.json({
         acceptedEvents: appendResult.acceptedEvents.map(
-          (acceptedEvent, inputIndex) => {
+          (acceptedEvent, acceptedIndex) => {
+            const inputIndex = appendResult.insertedInputIndexes[acceptedIndex];
+            if (inputIndex === undefined) {
+              throw new Error(
+                "Missing inserted event index for accepted daemon event",
+              );
+            }
             const entry = entries[inputIndex];
             if (entry === undefined) {
               throw new Error("Missing daemon event entry for accepted event");

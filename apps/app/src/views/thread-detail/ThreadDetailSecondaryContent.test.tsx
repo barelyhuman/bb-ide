@@ -32,6 +32,10 @@ vi.mock("@/components/ui/sidebar.js", () => ({
   useOptionalIsSidebarShowing: () => true,
 }));
 
+vi.mock("@/hooks/queries/thread-queries", () => ({
+  useThreads: () => ({ data: [] }),
+}));
+
 vi.mock("jotai", async (importOriginal) => ({
   ...(await importOriginal<typeof import("jotai")>()),
   useAtomValue: () => 50,
@@ -233,6 +237,9 @@ function makeThread(
     pinnedAt: null,
     projectId: "proj-test",
     providerId: "codex",
+    sourceThreadId: null,
+    originKind: null,
+    childOrigin: null,
     status: "idle",
     stopRequestedAt: null,
     title: null,

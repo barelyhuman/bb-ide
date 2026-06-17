@@ -32,6 +32,8 @@ import {
   hasAnyThreadMetadata,
   type ThreadMetadataContentProps,
 } from "@/components/secondary-panel/ThreadMetadataContent";
+import { useThreads } from "@/hooks/queries/thread-queries";
+import { isRunningThreadRuntimeDisplayStatus } from "@/components/thread/timeline";
 import { ThreadTimelinePane } from "./ThreadTimelinePane";
 import { ConversationCollapsedRail } from "@/components/secondary-panel/ConversationCollapsedRail";
 import { PANEL_COLLAPSE_TRANSITION_CLASS } from "@/components/secondary-panel/panelTransitionTokens";
@@ -142,6 +144,8 @@ const areThreadSecondaryPanelPropsEqual: ThreadSecondaryPanelPropsEqual = (
   previous.fileTabContent === next.fileTabContent &&
   previous.renderBrowserDeck === next.renderBrowserDeck &&
   previous.isBrowserTabActive === next.isBrowserTabActive &&
+  previous.sideChatDeck === next.sideChatDeck &&
+  previous.isSideChatTabActive === next.isSideChatTabActive &&
   previous.isOpen === next.isOpen &&
   previous.showGitDiffTab === next.showGitDiffTab &&
   previous.onPanelFocus === next.onPanelFocus &&
@@ -158,16 +162,23 @@ const areThreadTimelinePanePropsEqual: ThreadTimelinePanePropsEqual = (
   next,
 ) =>
   previous.activeThinking === next.activeThinking &&
+  previous.canSpawnChild === next.canSpawnChild &&
+  previous.threadChildOrigin === next.threadChildOrigin &&
   previous.hasOlderTimelineRows === next.hasOlderTimelineRows &&
   previous.hostConnectionNotice === next.hostConnectionNotice &&
   previous.isLoadingOlderTimelineRows === next.isLoadingOlderTimelineRows &&
   previous.isThreadTimelinePending === next.isThreadTimelinePending &&
   previous.timelineError === next.timelineError &&
+  previous.onForkMessage === next.onForkMessage &&
+  previous.onSideChatMessage === next.onSideChatMessage &&
   previous.onLoadOlderRows === next.onLoadOlderRows &&
+  previous.onSelectionAddToChat === next.onSelectionAddToChat &&
+  previous.onSelectionReplyInSideChat === next.onSelectionReplyInSideChat &&
   previous.onOpenLink === next.onOpenLink &&
   previous.onOpenLocalFileLink === next.onOpenLocalFileLink &&
   previous.onTitleAction === next.onTitleAction &&
   previous.projectId === next.projectId &&
+  previous.resolveMentionLink === next.resolveMentionLink &&
   previous.showOngoingIndicator === next.showOngoingIndicator &&
   previous.ongoingIndicatorLabel === next.ongoingIndicatorLabel &&
   previous.isStopping === next.isStopping &&
@@ -247,8 +258,9 @@ export function ThreadDetailSecondaryContent({
   const isConversationCollapsedActive =
     canCollapseConversation && isConversationCollapsed;
   // Real, in-scope activity signal for the collapsed rail: the agent is running.
-  const isConversationWorking =
-    stableTimeline.threadRuntimeDisplayStatus === "active";
+  const isConversationWorking = isRunningThreadRuntimeDisplayStatus(
+    stableTimeline.threadRuntimeDisplayStatus,
+  );
   const [isCompactDrawerContentSettled, setIsCompactDrawerContentSettled] =
     useState(false);
   const compactDrawerContentSettleFrameRef = useRef<number | null>(null);
@@ -378,9 +390,19 @@ export function ThreadDetailSecondaryContent({
     }
   }, [isConversationCollapsedActive, isSecondaryPanelOpen, renderAsDrawer]);
 
+  // Mirror ForksRow's query (deduped by react-query) so the visibility gate
+  // accounts for the lazily-fetched Forks row.
+  const forksQuery = useThreads({
+    projectId: stableMetadata.thread.projectId,
+    sourceThreadId: stableMetadata.thread.id,
+    originKind: "fork",
+    archived: false,
+  });
+  const hasForks = (forksQuery.data?.length ?? 0) > 0;
+
   const metadataContent = useMemo(
     () =>
-      hasAnyThreadMetadata(stableMetadata) ? (
+      hasAnyThreadMetadata(stableMetadata, hasForks) ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <ThreadMetadataContent {...stableMetadata} />
         </div>
@@ -391,7 +413,7 @@ export function ThreadDetailSecondaryContent({
           No thread details available.
         </div>
       ),
-    [isMetadataLoading, stableMetadata],
+    [hasForks, isMetadataLoading, stableMetadata],
   );
   const inlineSecondaryPanelContent = !renderAsDrawer ? (
     <ThreadSecondaryPanel

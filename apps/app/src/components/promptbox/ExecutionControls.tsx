@@ -49,6 +49,12 @@ export interface ExecutionControlsProps {
   model: ExecutionModelConfig;
   serviceTier?: ExecutionServiceTierConfig;
   reasoning: ExecutionReasoningConfig;
+  /**
+   * Render the model/reasoning picker as a non-interactive, dimmed label
+   * (read-only surfaces, e.g. the side chat inheriting the parent thread's
+   * model). The same picker renders, just disabled.
+   */
+  disabled?: boolean;
 }
 
 export const ExecutionControls = memo(function ExecutionControls({
@@ -56,10 +62,14 @@ export const ExecutionControls = memo(function ExecutionControls({
   model,
   serviceTier,
   reasoning,
+  disabled,
 }: ExecutionControlsProps) {
   const handleServiceTierChange = serviceTier?.onChange ?? (() => {});
   const selectedProviderId = provider.selectedId ?? "";
 
+  // A disabled picker still renders (showing the inherited model) even though
+  // its provider can't be switched — the side chat lists a single model option
+  // for the inherited model so the picker has something to display.
   const canSwitchProviders = Boolean(
     provider.hasMultiple &&
     provider.onChange &&
@@ -98,6 +108,7 @@ export const ExecutionControls = memo(function ExecutionControls({
           showFastModeToggle={serviceTier?.supported ?? false}
           serviceTierSupportByProvider={serviceTier?.supportByProvider}
           muted
+          disabled={disabled}
         />
       ) : null}
     </>

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { IconName } from "@/components/ui/icon.js";
 import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/prompt-mention-link";
 import { getFollowUpPromptPlaceholder } from "@/components/promptbox/follow-up-placeholder";
@@ -137,6 +137,12 @@ interface ThreadDetailPromptAreaProps {
   /** Active child threads for parent threads. Null otherwise. */
   childThreadsSection: ThreadPromptChildThreadsSection | null;
   sendMessage: SendMessageMutationLike;
+  /**
+   * Bumped by the timeline host each time a quote is appended to the shared
+   * draft via "Add to chat", so the composer can focus its caret at the end —
+   * ready for the reply beneath the freshly inserted blockquote.
+   */
+  composerFocusRequestNonce: number;
   thread: ThreadWithRuntime;
 }
 
@@ -174,6 +180,7 @@ export function ThreadDetailPromptArea({
   parentThreadSection,
   childThreadsSection,
   sendMessage,
+  composerFocusRequestNonce,
   thread,
 }: ThreadDetailPromptAreaProps) {
   const composerQueryThreadId = composerQueriesEnabled ? thread.id : "";
@@ -445,14 +452,17 @@ export function ThreadDetailPromptArea({
   const handleSend = useCallback(async () => {
     const submittedDraft = currentPromptDraft;
     const submittedInput = currentPromptDraftInput;
-    if (submittedInput.length === 0 || isDefaultExecutionOptionsLoading) {
+    const isQueuingMessage = shouldQueueFollowUpMessage(runtimeDisplayStatus);
+    if (
+      submittedInput.length === 0 ||
+      (!isQueuingMessage && isDefaultExecutionOptionsLoading)
+    ) {
       return;
     }
 
     promptDraft.clearIfCurrentMatches(submittedDraft);
     setAttachmentError(null);
 
-    const isQueuingMessage = shouldQueueFollowUpMessage(runtimeDisplayStatus);
     try {
       if (isQueuingMessage) {
         const request = buildCreateQueuedFollowUpRequest({
@@ -613,6 +623,19 @@ export function ThreadDetailPromptArea({
     [sendQueuedMessageById],
   );
 
+  const [editFocusNonce, setEditFocusNonce] = useState(0);
+
+  // Focus the composer caret at the end whenever the timeline host appends a
+  // quote ("Add to chat"), so the user can immediately type the reply beneath
+  // the freshly inserted blockquote. Skips the initial mount (nonce starts 0).
+  const previousFocusRequestNonceRef = useRef(composerFocusRequestNonce);
+  useEffect(() => {
+    if (composerFocusRequestNonce !== previousFocusRequestNonceRef.current) {
+      previousFocusRequestNonceRef.current = composerFocusRequestNonce;
+      setEditFocusNonce((nonce) => nonce + 1);
+    }
+  }, [composerFocusRequestNonce]);
+
   const handleEditQueuedMessage = useCallback(
     (messageId: string) => {
       const queuedMessage = queuedMessagesByIdRef.current.get(messageId);
@@ -630,6 +653,9 @@ export function ThreadDetailPromptArea({
           const restoredDraft = queuedInputToDraft(queuedMessage.content);
           promptDraft.setDraft(restoredDraft);
           setAttachmentError(null);
+          // Focus the composer caret at the end so the restored draft is ready
+          // to keep typing (FollowUpPromptBox `focusEndKey`).
+          setEditFocusNonce((nonce) => nonce + 1);
         })
         .catch((nextError) => {
           appToast.error(
@@ -935,6 +961,9 @@ export function ThreadDetailPromptArea({
             queuedMessages={queuedMessages}
             sendDisabled={
               !(submitMode.kind === "ready" || submitMode.kind === "queue") ||
+              runtimeDisplayStatus === "provisioning" ||
+              runtimeDisplayStatus === "starting" ||
+              runtimeDisplayStatus === "waiting-for-host" ||
               isFollowUpSubmitting ||
               isQueueMutationPending
             }
@@ -971,6 +1000,7 @@ export function ThreadDetailPromptArea({
       pendingTodos,
       displayedProcessingQueuedMessage,
       queuedMessages,
+      runtimeDisplayStatus,
       shouldHideComposer,
       submitMode.kind,
       thread.archivedAt,
@@ -995,6 +1025,7 @@ export function ThreadDetailPromptArea({
       stack={promptStack}
       composer={shouldHideComposer ? null : composerConfig}
       zenModeResetKey={thread.id}
+      focusEndKey={editFocusNonce}
       environmentSummary={environmentSummary}
       contextWindowUsage={contextWindowUsage ?? null}
       execution={executionConfig}

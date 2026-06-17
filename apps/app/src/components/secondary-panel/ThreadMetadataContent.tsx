@@ -57,8 +57,10 @@ import {
 } from "@/components/workspace/workspace-change-summary";
 import { getGitStatusDisplay } from "@/components/workspace/workspace-status";
 import { useUnarchiveThread } from "../../hooks/mutations/thread-state-mutations";
+import { useThreads } from "@/hooks/queries/thread-queries";
 import { buildParentSelectorOptions } from "@/views/thread-detail/threadParentSelectorOptions";
 import { getThreadRoutePath } from "@/lib/route-paths";
+import { getThreadDisplayTitle } from "@/lib/thread-title";
 
 // ---------------------------------------------------------------------------
 // Each row of the Info tab is a function component that owns its own raw
@@ -210,6 +212,48 @@ export function ParentSelectorRow({
   );
 }
 
+export interface ForksRowProps {
+  thread: Thread;
+  projectId: string;
+}
+
+/**
+ * Lists the thread's forks (threads created with `originKind === "fork"`),
+ * each linking to the fork. The fork links back here via the source-thread link.
+ * Fetched with a targeted list query filtered by `sourceThreadId` + `originKind`
+ * — no load-all-and-filter. Renders nothing when the thread has no forks.
+ */
+export function ForksRow({ thread, projectId }: ForksRowProps) {
+  const forksQuery = useThreads({
+    projectId: thread.projectId,
+    sourceThreadId: thread.id,
+    originKind: "fork",
+    archived: false,
+  });
+  const forks = forksQuery.data ?? [];
+  if (forks.length === 0) {
+    return null;
+  }
+
+  return (
+    <DetailRow label="Forks" align="start" valueClassName="min-w-0">
+      <TruncatedList
+        items={forks}
+        getKey={(fork) => fork.id}
+        renderItem={(fork) => (
+          <Link
+            to={getThreadRoutePath({ projectId, threadId: fork.id })}
+            className="block min-w-0 truncate text-xs text-foreground no-underline transition-[text-decoration-color] duration-150 hover:underline hover:underline-offset-2"
+            title={getThreadDisplayTitle(fork)}
+          >
+            {getThreadDisplayTitle(fork)}
+          </Link>
+        )}
+      />
+    </DetailRow>
+  );
+}
+
 export interface EnvironmentRowProps {
   thread: Thread;
   environment: Environment | null;
@@ -242,8 +286,7 @@ export function EnvironmentRow({
     environment,
     host: environmentDisplayHost,
   });
-  const showCreateThreadButton =
-    isProvisionedWorktreeEnvironment(environment);
+  const showCreateThreadButton = isProvisionedWorktreeEnvironment(environment);
   return (
     <DetailRow
       label={
@@ -839,24 +882,31 @@ export interface ThreadMetadataContentProps {
  * The caller can use this to decide between rendering the card and rendering
  * its "no thread details available" fallback.
  */
-export function hasAnyThreadMetadata({
-  thread,
-  parentThreadDisplayName,
-  environment,
-  workspaceStatus,
-  workspaceStatusError,
-  workspaceUnavailable,
-  pullRequest,
-}: Pick<
-  ThreadMetadataContentProps,
-  | "thread"
-  | "parentThreadDisplayName"
-  | "environment"
-  | "workspaceStatus"
-  | "workspaceStatusError"
-  | "workspaceUnavailable"
-  | "pullRequest"
->): boolean {
+export function hasAnyThreadMetadata(
+  {
+    thread,
+    parentThreadDisplayName,
+    environment,
+    workspaceStatus,
+    workspaceStatusError,
+    workspaceUnavailable,
+    pullRequest,
+  }: Pick<
+    ThreadMetadataContentProps,
+    | "thread"
+    | "parentThreadDisplayName"
+    | "environment"
+    | "workspaceStatus"
+    | "workspaceStatusError"
+    | "workspaceUnavailable"
+    | "pullRequest"
+  >,
+  // The Forks row is fetched lazily; the caller passes its presence so the
+  // visibility gate and the rendered card agree on the same row set (otherwise
+  // a forks-only thread briefly shows the empty fallback while the environment
+  // query is still loading).
+  hasForks: boolean,
+): boolean {
   const parentThreadId = thread.parentThreadId ?? undefined;
   const isWorkspaceDeleted = environment?.status === "destroyed";
   const showWorkspaceStatus =
@@ -878,7 +928,8 @@ export function hasAnyThreadMetadata({
     showWorkspaceStatus ||
     showThreadChangedFiles ||
     thread.archivedAt != null ||
-    (parentThreadDisplayName && parentThreadId),
+    (parentThreadDisplayName && parentThreadId) ||
+    hasForks,
   );
 }
 
@@ -948,6 +999,7 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
         updateThreadPending={updateThreadPending}
         onAssignParent={onAssignParent}
       />
+      <ForksRow thread={thread} projectId={projectId} />
       <EnvironmentRow
         thread={thread}
         environment={environment}

@@ -15,7 +15,11 @@ import {
   type QueryCacheNotifyEvent,
   type QueryClient,
 } from "@tanstack/react-query";
-import type { ThreadRuntimeDisplayStatus, ThreadWithRuntime } from "@bb/domain";
+import type {
+  ThreadChildOrigin,
+  ThreadRuntimeDisplayStatus,
+  ThreadWithRuntime,
+} from "@bb/domain";
 import type { TimelineActivityIntent, TimelineRow } from "@bb/server-contract";
 import {
   assertNever,
@@ -24,6 +28,7 @@ import {
   buildTimelineViewRows,
   createTimelineViewRowsCache,
   findActiveLatestBundleId,
+  primaryTimelineActivityIntent,
   type BuildTimelineRowTitleOptions,
   type BuildTimelineViewRowsOptions,
   type ThreadTimelineViewRow,
@@ -40,6 +45,11 @@ import {
 } from "./timeline-auto-expand.js";
 import { isRunningThreadRuntimeDisplayStatus } from "./thread-runtime-status.js";
 import type {
+  ThreadTimelineForkMessageHandler,
+  ThreadTimelineSideChatMessageHandler,
+  ThreadTimelineSendToMainMessageHandler,
+  ThreadTimelineSelectionAddToChatHandler,
+  ThreadTimelineSelectionReplyInSideChatHandler,
   ThreadTimelineLinkHandler,
   ThreadTimelineLocalFileLinkHandler,
   ThreadTimelineImageViewSrcResolver,
@@ -48,6 +58,8 @@ import type {
   UserAttachmentImageSrcResolver,
 } from "./types.js";
 import { ConversationMessageContent } from "./ConversationMessageContent.js";
+import { TimelineSelectionMenu } from "./TimelineSelectionMenu.js";
+import type { MessageProseSelection } from "./SelectableMessageProse.js";
 import { ExpandableTimelineRow } from "./ExpandableTimelineRow.js";
 import {
   TimelineStaticRowHeader,
@@ -93,6 +105,34 @@ export interface ThreadTimelineRowsProps {
    * a running runtime status.
    */
   initialExpanded?: ReadonlySet<string>;
+  /**
+   * Whether the rendered thread may spawn a child thread (depth-cap policy from
+   * the thread response). When false the per-message Fork action renders
+   * disabled. Omit when the spawn policy is unknown (treated as not allowed).
+   */
+  canSpawnChild?: boolean;
+  /**
+   * Origin of the rendered thread as a child (`fork` / `side-chat`), or null for
+   * root threads. Selects the fork leading icon on the seed-without-run anchor.
+   */
+  threadChildOrigin?: ThreadChildOrigin | null;
+  /** Fork the rendered thread from a specific agent message. */
+  onForkMessage?: ThreadTimelineForkMessageHandler;
+  /** Open a side chat anchored on a specific agent message. */
+  onSideChatMessage?: ThreadTimelineSideChatMessageHandler;
+  /** Hand a specific side-chat agent message back to the main thread. */
+  onSendToMainMessage?: ThreadTimelineSendToMainMessageHandler;
+  /**
+   * Add the active text selection to the composer draft as a quote chip. When
+   * omitted the floating selection menu's "Add to chat" action is unavailable
+   * (so no menu is shown).
+   */
+  onSelectionAddToChat?: ThreadTimelineSelectionAddToChatHandler;
+  /**
+   * Open a side chat anchored on the active text selection. When omitted the
+   * floating selection menu's "Reply in side chat" action is unavailable.
+   */
+  onSelectionReplyInSideChat?: ThreadTimelineSelectionReplyInSideChatHandler;
   onOpenLink?: ThreadTimelineLinkHandler;
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
   onTitleAction?: TimelineTitleActionResolver;
@@ -123,7 +163,21 @@ export interface ThreadTimelineRowsProps {
  * loads.
  */
 interface TimelineRendererStaticContextValue {
+  canSpawnChild: boolean;
   getViewRows: GetTimelineViewRows;
+  onForkMessage: ThreadTimelineForkMessageHandler | undefined;
+  onSideChatMessage: ThreadTimelineSideChatMessageHandler | undefined;
+  onSendToMainMessage: ThreadTimelineSendToMainMessageHandler | undefined;
+  /**
+   * Reports an assistant message's text selection to the timeline-level
+   * controller. `undefined` when no selection action is wired (Add to chat /
+   * Reply in side chat both absent), which keeps `onSelectProse` off the
+   * messages and the floating menu unmounted.
+   */
+  reportProseSelection:
+    | ((selection: MessageProseSelection | null) => void)
+    | undefined;
+  threadChildOrigin: ThreadChildOrigin | null;
   onOpenLink: ThreadTimelineLinkHandler | undefined;
   onOpenLocalFileLink: ThreadTimelineLocalFileLinkHandler | undefined;
   onTitleAction: TimelineTitleActionResolver | undefined;
@@ -140,6 +194,7 @@ interface TimelineRendererStaticContextValue {
 
 interface SenderThreadMetadata {
   title: string | null;
+  childOrigin: ThreadChildOrigin | null;
 }
 
 interface BuildSenderThreadMetadataByIdArgs {
@@ -157,6 +212,7 @@ interface SenderThreadTitleSource {
 
 interface SenderThreadMetadataSource extends SenderThreadTitleSource {
   id: string;
+  childOrigin: ThreadChildOrigin | null;
 }
 
 /**
@@ -494,7 +550,7 @@ function addSenderThreadMetadata(
   if (existing && (existing.title !== null || title === null)) {
     return;
   }
-  metadataById.set(thread.id, { title });
+  metadataById.set(thread.id, { title, childOrigin: thread.childOrigin });
 }
 
 function buildSenderThreadMetadataById({
@@ -686,10 +742,35 @@ function timelineRowsListGapClassName(
   }
 }
 
+/**
+ * Whether a conversation row is the fork's seed anchor — the thread-start turn
+ * rendered as "Message from {source}". The thread-start user message is
+ * agent-initiated with a sender thread and carries no turn id (it predates the
+ * first executed turn), which distinguishes it from a *later* cross-thread agent
+ * message in the same thread (those belong to a turn, so `turnId` is non-null).
+ * Only this row should take the fork leading icon; later cross-thread agent rows
+ * keep their per-sourceKind icon even though the thread's `childOrigin` is fork.
+ */
+function isForkSeedAnchorRow(row: TimelineConversationViewRow): boolean {
+  return (
+    row.role === "user" &&
+    row.initiator === "agent" &&
+    row.senderThreadId !== null &&
+    row.turnId === null
+  );
+}
+
 function ConversationRow({ row }: ConversationRowProps) {
   const {
+    canSpawnChild,
+    onForkMessage,
+    onSideChatMessage,
+    onSendToMainMessage,
+    reportProseSelection,
+    threadChildOrigin,
     onOpenLink,
     onOpenLocalFileLink,
+    onTitleAction,
     projectId,
     resolveMentionLink,
     resolveSegmentLinkHref,
@@ -701,9 +782,14 @@ function ConversationRow({ row }: ConversationRowProps) {
       row.senderThreadId === null
         ? null
         : (senderThreadMetadataById.get(row.senderThreadId) ?? null);
+    // The fork leading icon is the thread's `childOrigin`, but only on the seed
+    // anchor (thread-start) row — pass null for every other generated row so a
+    // later cross-thread agent message in a forked thread keeps its own icon.
+    const childOrigin = isForkSeedAnchorRow(row) ? threadChildOrigin : null;
     return (
       <ConversationMessageContent
         attachments={row.attachments}
+        childOrigin={childOrigin}
         initiator={row.initiator}
         mentions={row.mentions}
         onOpenLocalFileLink={onOpenLocalFileLink}
@@ -712,22 +798,51 @@ function ConversationRow({ row }: ConversationRowProps) {
         resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
         role="user"
         resolveSegmentLinkHref={resolveSegmentLinkHref}
+        onTitleAction={onTitleAction}
         senderThreadId={row.senderThreadId}
         senderThreadTitle={senderThreadMetadata?.title ?? null}
+        senderChildOrigin={senderThreadMetadata?.childOrigin ?? null}
         text={row.text}
         turnRequest={row.turnRequest}
       />
     );
   }
+  // Fork clones the whole thread (native session fork), so the button forks the
+  // active thread regardless of which agent row it sits on. Omit the handler
+  // entirely when no host can fork, which keeps the Fork button out of the
+  // action bar rather than rendering it dead.
+  const onFork = onForkMessage === undefined ? undefined : onForkMessage;
+  // Side chat anchors on the same agent row text; both actions share the
+  // canSpawnChild depth guard (both spawn a child thread off the active thread).
+  const onSideChat =
+    onSideChatMessage === undefined
+      ? undefined
+      : () => onSideChatMessage({ messageText: row.text });
+  // Side chats supply this so each agent message can be handed back to the main
+  // thread; omitted on the main timeline, which keeps the action out of the bar.
+  const onSendToMain =
+    onSendToMainMessage === undefined
+      ? undefined
+      : () => onSendToMainMessage({ messageText: row.text });
   return (
     <ConversationMessageContent
       attachments={row.attachments}
+      id={row.id}
+      onFork={onFork}
+      onSideChat={onSideChat}
+      onSendToMain={onSendToMain}
+      forkDisabled={!canSpawnChild}
+      onSelectProse={reportProseSelection}
       onOpenLink={onOpenLink}
       onOpenLocalFileLink={onOpenLocalFileLink}
       projectId={projectId}
       resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
       role="assistant"
+      sourceSeqEnd={row.sourceSeqEnd}
+      sourceSeqStart={row.sourceSeqStart}
       text={row.text}
+      threadId={row.threadId}
+      turnId={row.turnId}
       turnRequest={row.turnRequest}
     />
   );
@@ -884,12 +999,17 @@ function TimelineExpandableBody({
               {row.output.trim().length > 0 ? (
                 <ConversationMessageContent
                   attachments={null}
+                  id={row.id}
                   onOpenLink={onOpenLink}
                   onOpenLocalFileLink={onOpenLocalFileLink}
                   projectId={projectId}
                   resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
                   role="assistant"
+                  sourceSeqEnd={row.sourceSeqEnd}
+                  sourceSeqStart={row.sourceSeqStart}
                   text={row.output}
+                  threadId={row.threadId}
+                  turnId={row.turnId}
                   turnRequest={null}
                 />
               ) : null}
@@ -1081,6 +1201,26 @@ export function pastRowDimClassName({
 }
 
 /**
+ * Per-intent glyph for an exploration row, shared by the bundled compact-intent
+ * listing and the unbundled standalone row so the icon for a given intent kind
+ * (search / read / list_files) is identical in both surfaces.
+ */
+function explorationIntentIcon(
+  intentType: "read" | "list_files" | "search",
+): IconName {
+  switch (intentType) {
+    case "search":
+      return "Search";
+    case "read":
+      return "FileText";
+    case "list_files":
+      return "Folder";
+    default:
+      return assertNever(intentType);
+  }
+}
+
+/**
  * A leading glyph for every tool-call (work) row, keyed by its kind so the eye
  * can tell edits from explores from commands at a glance.
  */
@@ -1092,6 +1232,16 @@ function leadingIconForWorkRow(
   }
   if ("activityIntents" in row && row.activityIntents.some(isSkillReadIntent)) {
     return "Zap";
+  }
+  // A command/tool row that carries a single exploration intent renders as a
+  // flat, non-expandable row, so the per-intent search/read/folder glyph must
+  // come from here (not the bundled compact-intent path) — otherwise it would
+  // fall through to the generic Terminal icon.
+  if (row.workKind === "command" || row.workKind === "tool") {
+    const intent = primaryTimelineActivityIntent(row);
+    if (intent !== null && intent.type !== "unknown") {
+      return explorationIntentIcon(intent.type);
+    }
   }
   switch (row.workKind) {
     case "file-change":
@@ -1133,7 +1283,7 @@ function leadingIconForActivityIntentTitle(
   if (isSkillReadIntent(entry.intent)) {
     return "Zap";
   }
-  return entry.intentType === "search" ? "Search" : "Explore";
+  return explorationIntentIcon(entry.intentType);
 }
 
 function TimelineRowView({
@@ -1452,9 +1602,53 @@ function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
         : null;
     };
   }, [projectId]);
+  // One selection controller for the whole timeline: any assistant message that
+  // reports a non-null selection replaces it (single open menu), and a report of
+  // `null` (only emitted by a message that previously had a selection) clears it.
+  const onSelectionAddToChat = props.onSelectionAddToChat;
+  const onSelectionReplyInSideChat = props.onSelectionReplyInSideChat;
+  const hasSelectionActions =
+    onSelectionAddToChat !== undefined ||
+    onSelectionReplyInSideChat !== undefined;
+  const [activeSelection, setActiveSelection] =
+    useState<MessageProseSelection | null>(null);
+  // Only hand a reporter to the messages when an action exists; otherwise the
+  // wrapper stays inert and the floating menu never mounts.
+  const reportProseSelection = useMemo<
+    ((selection: MessageProseSelection | null) => void) | undefined
+  >(
+    () => (hasSelectionActions ? setActiveSelection : undefined),
+    [hasSelectionActions],
+  );
+  const dismissSelection = useCallback(() => {
+    setActiveSelection(null);
+  }, []);
+  // "Add to chat" quotes the SELECTION text; "Reply in side chat" anchors the
+  // side chat on the SELECTION (not the whole message), so the reply's context
+  // is exactly what the user highlighted.
+  const handleSelectionAddToChat = useCallback(
+    (text: string) => {
+      onSelectionAddToChat?.(text);
+      setActiveSelection(null);
+    },
+    [onSelectionAddToChat],
+  );
+  const handleSelectionReplyInSideChat = useCallback(
+    (text: string) => {
+      onSelectionReplyInSideChat?.(text);
+      setActiveSelection(null);
+    },
+    [onSelectionReplyInSideChat],
+  );
   const staticContextValue = useMemo<TimelineRendererStaticContextValue>(
     () => ({
+      canSpawnChild: props.canSpawnChild ?? false,
       getViewRows,
+      onForkMessage: props.onForkMessage,
+      onSideChatMessage: props.onSideChatMessage,
+      onSendToMainMessage: props.onSendToMainMessage,
+      reportProseSelection,
+      threadChildOrigin: props.threadChildOrigin ?? null,
       onOpenLink: props.onOpenLink,
       onOpenLocalFileLink: props.onOpenLocalFileLink,
       onTitleAction: props.onTitleAction,
@@ -1469,7 +1663,13 @@ function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
       workspaceRootPath: props.workspaceRootPath,
     }),
     [
+      props.canSpawnChild,
       getViewRows,
+      props.onForkMessage,
+      props.onSideChatMessage,
+      props.onSendToMainMessage,
+      reportProseSelection,
+      props.threadChildOrigin,
       props.onOpenLink,
       props.onOpenLocalFileLink,
       props.onTitleAction,
@@ -1510,6 +1710,14 @@ function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
             unreadDividerPlacement={props.unreadDividerPlacement ?? null}
           />
         </AutoHeightContainer>
+        {hasSelectionActions ? (
+          <TimelineSelectionMenu
+            selection={activeSelection}
+            onAddToChat={handleSelectionAddToChat}
+            onReplyInSideChat={handleSelectionReplyInSideChat}
+            onDismiss={dismissSelection}
+          />
+        ) : null}
       </TimelineTurnStateContext.Provider>
     </TimelineRendererStaticContext.Provider>
   );
