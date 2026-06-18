@@ -805,6 +805,39 @@ describe("server-contract canonical schemas", () => {
       action: "commit",
     });
 
+    expect(
+      environmentActionRequestSchema.parse({
+        action: "pull_request_ready",
+      }),
+    ).toMatchObject({
+      action: "pull_request_ready",
+    });
+
+    expect(
+      environmentActionRequestSchema.parse({
+        action: "pull_request_merge",
+        options: { method: "rebase" },
+      }),
+    ).toMatchObject({
+      action: "pull_request_merge",
+      options: { method: "rebase" },
+    });
+
+    expect(
+      environmentActionRequestSchema.parse({
+        action: "pull_request_draft",
+      }),
+    ).toMatchObject({
+      action: "pull_request_draft",
+    });
+
+    expect(() =>
+      environmentActionRequestSchema.parse({
+        action: "pull_request_merge",
+        options: { method: "admin" },
+      }),
+    ).toThrow();
+
     expect(() =>
       environmentActionRequestSchema.parse({
         action: "commit",
@@ -832,6 +865,28 @@ describe("server-contract canonical schemas", () => {
         ok: true,
       }),
     ).toThrow();
+
+    expect(
+      contract.environmentActionResponseSchema.parse({
+        action: "pull_request_merge",
+        method: "squash",
+        message: "Pull request merge started",
+        ok: true,
+      }),
+    ).toMatchObject({
+      action: "pull_request_merge",
+      method: "squash",
+    });
+
+    expect(
+      contract.environmentActionResponseSchema.parse({
+        action: "pull_request_draft",
+        message: "Pull request converted to draft",
+        ok: true,
+      }),
+    ).toMatchObject({
+      action: "pull_request_draft",
+    });
 
     expect(
       updateEnvironmentRequestSchema.parse({
