@@ -313,9 +313,7 @@ function ThreadRowComponent({
     showActive
       ? SIDEBAR_ROW_SELECTED_STATE_CLASS
       : SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
-    parentDragBindings &&
-      !parentDragBindings.disabled &&
-      "select-none cursor-grab active:cursor-grabbing",
+    parentDragBindings && !parentDragBindings.disabled && "select-none",
   );
   const rowStyle = getThreadRowStyle(options.depth);
   const isActionsOpen = isDropdownActionsOpen || isContextActionsOpen;
@@ -426,7 +424,7 @@ function ThreadRowComponent({
             <ThreadActionsMenu
               thread={thread}
               triggerClassName={cn(
-                "text-muted-foreground",
+                "text-subtle-foreground hover:bg-transparent hover:text-foreground",
                 COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
               )}
               onOpenChange={setIsDropdownActionsOpen}

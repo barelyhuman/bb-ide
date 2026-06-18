@@ -1175,9 +1175,10 @@ function ProjectRowComponent({
                 : SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
               projectDragBindings &&
                 !projectDragBindings.disabled &&
-                "select-none cursor-grab active:cursor-grabbing",
+                "select-none",
             )}
             title={project.name}
+            onClick={handleProjectRowToggle}
             {...projectDragBindings?.attributes}
             {...(projectDragBindings?.listeners ?? {})}
           >
@@ -1241,7 +1242,7 @@ function ProjectRowComponent({
                 project={project}
                 onOpenChange={setIsDropdownActionsOpen}
                 triggerClassName={cn(
-                  "relative z-10 text-muted-foreground",
+                  "relative z-10 text-subtle-foreground hover:bg-transparent hover:text-foreground",
                   COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
                 )}
               />
@@ -1257,7 +1258,7 @@ function ProjectRowComponent({
                   handleCreateThread();
                 }}
                 className={cn(
-                  "rounded-md p-0 text-muted-foreground",
+                  "rounded-md p-0 text-subtle-foreground hover:bg-transparent hover:text-foreground",
                   COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
                 )}
               >
