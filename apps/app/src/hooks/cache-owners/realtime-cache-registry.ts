@@ -95,7 +95,7 @@ import {
   getThreadPendingInteractionInvalidationQueryKeys,
   getThreadPromptHistoryInvalidationQueryKeys,
   getThreadQueueContentInvalidationQueryKeys,
-  getThreadTimelineInvalidationQueryKeys,
+  getThreadTimelineWindowInvalidationQueryKeys,
 } from "./cache-invalidation-groups";
 
 interface CollectCachedThreadIdsForEnvironmentArgs {
@@ -499,7 +499,9 @@ function dirtyThreadSearchQueries(): QueryKey[] {
 function dirtyThreadTimelineQueries({
   threadId,
 }: ThreadRealtimeDirtyContext): QueryKey[] {
-  return getThreadTimelineInvalidationQueryKeys({ threadId });
+  // Window only: completed turn-summary-details are immutable, so realtime
+  // event batches must not refetch open detail panels (see helper docs).
+  return getThreadTimelineWindowInvalidationQueryKeys({ threadId });
 }
 
 function dirtyThreadQueueContentQueries({
