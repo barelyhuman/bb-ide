@@ -125,9 +125,13 @@ import {
   MACOS_WINDOW_DRAG_CLASS,
 } from "@/lib/bb-desktop";
 import {
-  resolveChatLinkOpenTarget,
+  openUrlByPreference,
   useOpenLinksInAppBrowserPreference,
 } from "@/lib/in-app-browser-link-preference";
+import {
+  openUrlInExternalBrowser,
+  UrlOpenRoutingProvider,
+} from "@/lib/url-open-routing";
 import { getFilePreviewLineRangeStart } from "@/lib/file-preview";
 import { getBrowserUrlHost } from "@/lib/browser-url";
 import {
@@ -639,8 +643,10 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
   }, [openTab]);
   const [openLinksInAppBrowser] = useOpenLinksInAppBrowserPreference();
   // The in-app browser surface only exists on desktop; on web this stays false
-  // and chat links keep their external-open behavior.
+  // and handled web links keep their external-open behavior.
   const desktopBrowserAvailable = isDesktopBrowserAvailable();
+  const canOpenUrlsInAppBrowser =
+    props.surface === "page" && desktopBrowserAvailable;
   const browserTabIds = useMemo(
     () => new Set(browserTabs.map((tab) => tab.id)),
     [browserTabs],
@@ -899,6 +905,17 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
     },
     [openBrowserTab, openCompactDrawer],
   );
+  const handleOpenUrlByPreference = useCallback(
+    (url: string) =>
+      openUrlByPreference({
+        desktopBrowserAvailable: canOpenUrlsInAppBrowser,
+        openExternalBrowser: openUrlInExternalBrowser,
+        openInAppBrowser: openBrowserTabAndReveal,
+        openLinksInAppBrowser,
+        url,
+      }),
+    [canOpenUrlsInAppBrowser, openBrowserTabAndReveal, openLinksInAppBrowser],
+  );
   const handleSelectFileSearchResult = useCallback(
     (selection: FileSearchSelection) => {
       selectFileSearchResult(selection);
@@ -923,7 +940,7 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
     if (browserApi.onScopedOpenTab) {
       return browserApi.onScopedOpenTab(({ tabId, url }) => {
         if (browserTabIds.has(tabId)) {
-          openBrowserTabAndReveal(url);
+          handleOpenUrlByPreference(url);
         }
       });
     }
@@ -931,9 +948,9 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
       if (isRoutePath({ path: url })) {
         return;
       }
-      openBrowserTabAndReveal(url);
+      handleOpenUrlByPreference(url);
     });
-  }, [browserTabIds, openBrowserTabAndReveal]);
+  }, [browserTabIds, handleOpenUrlByPreference]);
   const handleSelectStorageBrowserPath =
     useCallback<ThreadStoragePathSelectHandler>(
       (path) => {
@@ -1624,20 +1641,8 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
     ],
   );
   const handleOpenTimelineLink = useCallback<ThreadTimelineLinkHandler>(
-    ({ href }) => {
-      if (
-        resolveChatLinkOpenTarget({
-          desktopBrowserAvailable,
-          openInAppBrowser: openLinksInAppBrowser,
-          url: href,
-        }) !== "in-app-browser"
-      ) {
-        return false;
-      }
-      openBrowserTabAndReveal(href);
-      return true;
-    },
-    [desktopBrowserAvailable, openBrowserTabAndReveal, openLinksInAppBrowser],
+    ({ href }) => handleOpenUrlByPreference(href),
+    [handleOpenUrlByPreference],
   );
   const handleTimelineTitleAction = useCallback<TimelineTitleActionResolver>(
     (action) => {
@@ -2071,7 +2076,11 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
   );
 
   return (
-    <>
+    <UrlOpenRoutingProvider
+      openInAppBrowser={
+        canOpenUrlsInAppBrowser ? openBrowserTabAndReveal : null
+      }
+    >
       <ThreadDetailSecondaryContent
         footer={composerFooter}
         header={timelineHeader}
@@ -2202,6 +2211,6 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
           onSquashMerge={gitActions.handleSquashMergeThread}
         />
       ) : null}
-    </>
+    </UrlOpenRoutingProvider>
   );
 }

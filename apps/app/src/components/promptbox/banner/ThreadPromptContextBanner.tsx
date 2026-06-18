@@ -34,6 +34,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useUrlAnchorClickHandler } from "@/lib/url-open-routing";
 
 export interface ContextBannerMergeBaseConfig {
   branch: string;
@@ -505,6 +506,7 @@ function PullRequestBannerLink({
 }) {
   const attentionDisplay = getPullRequestAttentionDisplay(pullRequest);
   const stateDisplay = PULL_REQUEST_STATE_DISPLAY[pullRequest.state];
+  const handlePullRequestClick = useUrlAnchorClickHandler(pullRequest.url);
   const showAttentionLabel =
     showLabel && shouldShowPullRequestAttentionLabel(pullRequest);
   return (
@@ -512,6 +514,7 @@ function PullRequestBannerLink({
       href={pullRequest.url}
       target="_blank"
       rel="noopener noreferrer"
+      onClick={handlePullRequestClick}
       title={pullRequest.title}
       aria-label={`Pull request ${pullRequest.number}: ${attentionDisplay.label}`}
       className="flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 text-xs text-muted-foreground no-underline transition-colors hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"

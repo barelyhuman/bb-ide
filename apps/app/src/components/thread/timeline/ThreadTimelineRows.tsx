@@ -809,6 +809,7 @@ function ConversationRow({
         childOrigin={childOrigin}
         initiator={row.initiator}
         mentions={row.mentions}
+        onOpenLink={onOpenLink}
         onOpenLocalFileLink={onOpenLocalFileLink}
         projectId={projectId}
         resolveMentionLink={resolveMentionLink}
