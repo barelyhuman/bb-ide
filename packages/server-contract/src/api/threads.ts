@@ -112,6 +112,7 @@ export const createThreadRequestSchema = z
     environment: environmentArgsSchema,
     parentThreadId: z.string().min(1).optional(),
     sourceThreadId: z.string().min(1).optional(),
+    sourceSeqEnd: z.number().int().nonnegative().optional(),
     startedOnBehalfOf: startedOnBehalfOfSchema.nullable().default(null),
     originKind: threadOriginKindSchema.nullable().default(null),
     /** @deprecated Use originKind. */
@@ -124,6 +125,13 @@ export const createThreadRequestSchema = z
         code: "custom",
         message: "input must contain at least one entry",
         path: ["input"],
+      });
+    }
+    if (originKind === null && value.sourceSeqEnd !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "sourceSeqEnd requires an originKind",
+        path: ["sourceSeqEnd"],
       });
     }
   });

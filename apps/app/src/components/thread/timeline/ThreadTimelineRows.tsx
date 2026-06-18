@@ -781,6 +781,7 @@ function ConversationRow({ row }: ConversationRowProps) {
     resolveSegmentLinkHref,
     resolveUserAttachmentImageSrc,
     senderThreadMetadataById,
+    workspaceRootPath,
   } = useTimelineRendererStaticContext();
   if (row.role === "user") {
     const senderThreadMetadata =
@@ -814,23 +815,38 @@ function ConversationRow({ row }: ConversationRowProps) {
       />
     );
   }
-  // Fork clones the whole thread (native session fork), so the button forks the
-  // active thread regardless of which agent row it sits on. Omit the handler
-  // entirely when no host can fork, which keeps the Fork button out of the
-  // action bar rather than rendering it dead.
-  const onFork = onForkMessage === undefined ? undefined : onForkMessage;
+  // Fork clones provider history through this row's source sequence. Omit the
+  // handler entirely when no host can fork, which keeps the Fork button out of
+  // the action bar rather than rendering it dead.
+  const onFork =
+    onForkMessage === undefined
+      ? undefined
+      : () => onForkMessage({ sourceSeqEnd: row.sourceSeqEnd });
   // Side chat anchors on the same agent row text; both actions share the
   // canSpawnChild depth guard (both spawn a child thread off the active thread).
   const onSideChat =
     onSideChatMessage === undefined
       ? undefined
-      : () => onSideChatMessage({ messageText: row.text });
+      : () =>
+          onSideChatMessage({
+            messageText: row.text,
+            sourceSeqEnd: row.sourceSeqEnd,
+          });
   // Side chats supply this so each agent message can be handed back to the main
   // thread; omitted on the main timeline, which keeps the action out of the bar.
   const onSendToMain =
     onSendToMainMessage === undefined
       ? undefined
       : () => onSendToMainMessage({ messageText: row.text });
+  const onSelectProse =
+    reportProseSelection === undefined
+      ? undefined
+      : (selection: MessageProseSelection | null) =>
+          reportProseSelection(
+            selection === null
+              ? null
+              : { ...selection, sourceSeqEnd: row.sourceSeqEnd },
+          );
   return (
     <ConversationMessageContent
       attachments={row.attachments}
@@ -839,7 +855,7 @@ function ConversationRow({ row }: ConversationRowProps) {
       onSideChat={onSideChat}
       onSendToMain={onSendToMain}
       forkDisabled={!canSpawnChild}
-      onSelectProse={reportProseSelection}
+      onSelectProse={onSelectProse}
       onOpenLink={onOpenLink}
       onOpenLocalFileLink={onOpenLocalFileLink}
       projectId={projectId}
@@ -851,6 +867,7 @@ function ConversationRow({ row }: ConversationRowProps) {
       threadId={row.threadId}
       turnId={row.turnId}
       turnRequest={row.turnRequest}
+      workspaceRootPath={workspaceRootPath}
     />
   );
 }
@@ -1018,6 +1035,7 @@ function TimelineExpandableBody({
                   threadId={row.threadId}
                   turnId={row.turnId}
                   turnRequest={null}
+                  workspaceRootPath={workspaceRootPath}
                 />
               ) : null}
             </div>
@@ -1580,7 +1598,7 @@ function TimelineRowsList({
   return (
     <div
       className={cn(
-        "flex min-w-0 flex-col",
+        "flex min-w-0 flex-col [&_button:not(:disabled)]:cursor-pointer",
         timelineRowsListGapClassName(spacing),
         className,
       )}
@@ -1689,8 +1707,11 @@ function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
     [onSelectionAddToChat],
   );
   const handleSelectionReplyInSideChat = useCallback(
-    (text: string) => {
-      onSelectionReplyInSideChat?.(text);
+    (selection: MessageProseSelection) => {
+      onSelectionReplyInSideChat?.({
+        messageText: selection.text,
+        sourceSeqEnd: selection.sourceSeqEnd,
+      });
       setActiveSelection(null);
     },
     [onSelectionReplyInSideChat],

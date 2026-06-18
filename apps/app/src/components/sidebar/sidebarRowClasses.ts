@@ -45,7 +45,7 @@ export const SIDEBAR_LEADING_GLYPH_SLOT_CLASS =
   "inline-flex w-4 shrink-0 items-center justify-center";
 
 const SIDEBAR_THREAD_ROW_BASE_PADDING_PX = 8;
-const SIDEBAR_THREAD_ROW_DEPTH_STEP_PX = 24;
+const SIDEBAR_THREAD_ROW_DEPTH_STEP_PX = 16;
 const SIDEBAR_THREAD_ROW_GLYPH_CENTER_OFFSET_PX = 8;
 
 export const SIDEBAR_STANDARD_ROW_PADDING_CLASS = "pl-2";
@@ -66,6 +66,9 @@ export function getSidebarThreadGroupLineLeft(depth: number): number {
 
 export const SIDEBAR_ROW_INTERACTIVE_STATE_CLASS =
   "text-sidebar-foreground/85 dark:text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground";
+
+export const SIDEBAR_ROW_SELECTED_STATE_CLASS =
+  "bg-sidebar-accent text-sidebar-foreground";
 
 /**
  * Hairline that runs through an expanded project's thread list, sitting

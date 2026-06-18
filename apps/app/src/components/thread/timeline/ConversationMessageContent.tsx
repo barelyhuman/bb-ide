@@ -129,6 +129,7 @@ export interface ConversationMessageContentAssistantProps
    */
   onSelectProse?: (selection: MessageProseSelection | null) => void;
   turnRequest: null;
+  workspaceRootPath?: string;
 }
 
 /**
@@ -172,6 +173,7 @@ interface AssistantConversationMessageProps extends AssistantMessageRowIdentity 
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
   projectId?: string;
   text: string;
+  workspaceRootPath?: string;
 }
 
 interface CollapsibleMessageTextProps {
@@ -423,6 +425,7 @@ function AssistantConversationMessage({
   onOpenLocalFileLink,
   projectId,
   text,
+  workspaceRootPath,
 }: AssistantConversationMessageProps) {
   const linkRouting = useMemo<MarkdownLinkRouting | undefined>(() => {
     if (!onOpenLink && !onOpenLocalFileLink) {
@@ -440,9 +443,15 @@ function AssistantConversationMessage({
         },
         onOpenLink: onOpenLocalFileLink,
       };
+      if (workspaceRootPath !== undefined) {
+        routing.localFile.relativeLinks = {
+          baseDir: workspaceRootPath,
+          rootPath: workspaceRootPath,
+        };
+      }
     }
     return routing;
-  }, [onOpenLink, onOpenLocalFileLink]);
+  }, [onOpenLink, onOpenLocalFileLink, workspaceRootPath]);
 
   return (
     <div className="group/message w-full px-2 text-sm font-normal leading-relaxed">
@@ -467,15 +476,17 @@ function AssistantConversationMessage({
         fork on. `disabled` greys both fork and side chat together when the
         thread is at the spawn-depth cap (both spawn a child thread, one guard).
       */}
-      <div className="mt-1.5">
-        <MessageActionBar
-          messageText={text}
-          alignment="start"
-          onFork={onFork}
-          onSideChat={onSideChat}
-          onSendToMain={onSendToMain}
-          disabled={forkDisabled}
-        />
+      <div className="relative h-5">
+        <div className="absolute left-0 top-1">
+          <MessageActionBar
+            messageText={text}
+            alignment="start"
+            onFork={onFork}
+            onSideChat={onSideChat}
+            onSendToMain={onSendToMain}
+            disabled={forkDisabled}
+          />
+        </div>
       </div>
     </div>
   );
@@ -541,6 +552,7 @@ export function ConversationMessageContent(
       text={text}
       threadId={props.threadId}
       turnId={props.turnId}
+      workspaceRootPath={props.workspaceRootPath}
     />
   );
 }

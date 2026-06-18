@@ -898,14 +898,14 @@ export function AllPromptPills() {
         <PromptBoxStoryInstance fixture={commandPromptPillsFixture} />
       </StoryRow>
       <StoryRow
-        label="skill arg hint"
-        hint="skill pill with non-editable argument hint placeholder after the caret"
+        label="skill arg metadata"
+        hint="skill pill with argument hint metadata but no prompt placeholder text"
       >
         <PromptBoxStoryInstance fixture={skillArgumentHintFixture} />
       </StoryRow>
       <StoryRow
-        label="project arg hint"
-        hint="project command pill with non-editable argument hint placeholder"
+        label="project arg metadata"
+        hint="project command pill with argument hint metadata but no prompt placeholder text"
       >
         <PromptBoxStoryInstance fixture={projectCommandArgumentHintFixture} />
       </StoryRow>
@@ -939,13 +939,13 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="selected skill"
-        hint="skill command pill plus the SKILL.md argument hint placeholder"
+        hint="skill command pill without SKILL.md argument hint placeholder text"
       >
         <WithSkillPillRow />
       </StoryRow>
       <StoryRow
         label="live skills"
-        hint="type $ then select a skill; argument hints render as placeholders"
+        hint="type $ then select a skill; argument hints stay out of the prompt text"
       >
         <WithLiveSkillsRow />
       </StoryRow>

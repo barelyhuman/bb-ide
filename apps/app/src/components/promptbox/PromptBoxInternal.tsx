@@ -62,6 +62,10 @@ import {
   promptMentionResourceFromSuggestion,
   type PromptEditorValue,
 } from "./editor/prompt-editor-serialization";
+import {
+  exitTrailingBlockquoteBreak,
+  insertParagraphBeforeBlockquote,
+} from "./editor/prompt-editor-blockquote";
 import { MentionMenu, type TypeaheadSuggestion } from "./mentions/MentionMenu";
 import { parsePromptMentionClipboardElement } from "./mentions/prompt-mention-clipboard";
 
@@ -569,6 +573,15 @@ function isPromptBoxChromeTarget(target: EventTarget | null): boolean {
   return target.closest(PROMPTBOX_INTERACTIVE_TARGET_SELECTOR) === null;
 }
 
+export function suppressPromptEditorAnchorActivation(event: Event): boolean {
+  if (!(event.target instanceof Element)) return false;
+  if (event.target.closest("a[href]") === null) return false;
+
+  event.preventDefault();
+  event.stopPropagation();
+  return true;
+}
+
 export function PromptBoxInternal({
   id,
   value,
@@ -854,6 +867,9 @@ export function PromptBoxInternal({
         role: "textbox",
       },
       handleDOMEvents: {
+        auxclick: (_view, event) => {
+          return suppressPromptEditorAnchorActivation(event);
+        },
         blur: () => {
           triggerKeyRef.current = "";
           if (dismissedTriggerRef.current) {
@@ -866,6 +882,9 @@ export function PromptBoxInternal({
           onMentionQueryChange(null);
           onCommandQueryChange(null);
           return false;
+        },
+        click: (_view, event) => {
+          return suppressPromptEditorAnchorActivation(event);
         },
       },
       handleClick: () => {
@@ -1671,6 +1690,22 @@ export function PromptBoxInternal({
       if (isModifierSubmitKey && onModifierSubmit) {
         event.preventDefault();
         submitModifierPrompt();
+        return true;
+      }
+
+      const isBlockquoteExitKey =
+        event.key === "Enter" &&
+        event.shiftKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.ctrlKey;
+      if (
+        isBlockquoteExitKey &&
+        currentEditor &&
+        (insertParagraphBeforeBlockquote(currentEditor) ||
+          exitTrailingBlockquoteBreak(currentEditor))
+      ) {
+        event.preventDefault();
         return true;
       }
 

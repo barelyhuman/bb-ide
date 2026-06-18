@@ -220,6 +220,7 @@ export {
   getActiveStoredTurnId,
   hasStoredTurnStarted,
   getLastStoredProviderThreadId,
+  getStoredProviderThreadIdAtOrBeforeSequence,
   getLastStoredTurnRequestEvent,
   getLatestThreadOutputEventRow,
   getLatestThreadSystemErrorEventRow,

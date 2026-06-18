@@ -72,6 +72,7 @@ const OPTIONAL_SERVER_FIELD_GROUPS: readonly OptionalServerFieldGroup[] = [
       "createThreadRequestSchema.permissionMode",
       "createThreadRequestSchema.reasoningLevel",
       "createThreadRequestSchema.serviceTier",
+      "createThreadRequestSchema.sourceSeqEnd",
       "createThreadRequestSchema.sourceThreadId",
       "createThreadRequestSchema.title",
     ],
@@ -1025,14 +1026,33 @@ describe("server-contract canonical schemas", () => {
         workspace: { type: "unmanaged", path: null },
       },
       originKind: "side-chat",
+      sourceSeqEnd: 12,
       sourceThreadId: "thr_source",
       startedOnBehalfOf: null,
     });
 
     expect(parsed.input).toEqual([]);
     expect(parsed.originKind).toBe("side-chat");
+    expect(parsed.sourceSeqEnd).toBe(12);
     expect(parsed.sourceThreadId).toBe("thr_source");
     expect(parsed.startedOnBehalfOf).toBeNull();
+  });
+
+  it("rejects sourceSeqEnd on normal thread starts", () => {
+    expect(() =>
+      createThreadRequestSchema.parse({
+        projectId: "proj_123",
+        providerId: "codex",
+        origin: "app",
+        input: [{ type: "text", text: "Start normally", mentions: [] }],
+        environment: {
+          type: "host",
+          hostId: "host_abc",
+          workspace: { type: "unmanaged", path: null },
+        },
+        sourceSeqEnd: 12,
+      }),
+    ).toThrow("sourceSeqEnd requires an originKind");
   });
 
   it("accepts an agent startedOnBehalfOf with a sender thread", () => {

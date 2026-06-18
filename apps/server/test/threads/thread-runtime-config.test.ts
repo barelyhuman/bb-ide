@@ -73,44 +73,52 @@ describe("thread runtime config", () => {
       name: "defaults Pi child execution permission mode to full",
       requestedModel: "openai-codex/gpt-5.4",
     },
-  ])("$name", async ({ childProviderId, expectedPermissionMode, parentProviderId, requestedModel }) => {
-    await withTestHarness(async (harness) => {
-      const { host } = seedHostSession(harness.deps, {
-        id: `host-runtime-${childProviderId}-${parentProviderId ?? "root"}`,
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const parentThread =
-        parentProviderId === null
-          ? null
-          : seedThread(harness.deps, {
-              projectId: project.id,
-              environmentId: environment.id,
-              providerId: parentProviderId,
-            });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        parentThreadId: parentThread?.id ?? null,
-        providerId: childProviderId,
-      });
+  ])(
+    "$name",
+    async ({
+      childProviderId,
+      expectedPermissionMode,
+      parentProviderId,
+      requestedModel,
+    }) => {
+      await withTestHarness(async (harness) => {
+        const { host } = seedHostSession(harness.deps, {
+          id: `host-runtime-${childProviderId}-${parentProviderId ?? "root"}`,
+        });
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+        });
+        const environment = seedEnvironment(harness.deps, {
+          hostId: host.id,
+          projectId: project.id,
+        });
+        const parentThread =
+          parentProviderId === null
+            ? null
+            : seedThread(harness.deps, {
+                projectId: project.id,
+                environmentId: environment.id,
+                providerId: parentProviderId,
+              });
+        const thread = seedThread(harness.deps, {
+          projectId: project.id,
+          environmentId: environment.id,
+          parentThreadId: parentThread?.id ?? null,
+          providerId: childProviderId,
+        });
 
-      const execution = await resolveExecutionOptions(harness.deps, {
-        threadId: thread.id,
-        requestedExecution: {
-          model: requestedModel,
-          source: "client/turn/requested",
-        },
-      });
+        const execution = await resolveExecutionOptions(harness.deps, {
+          threadId: thread.id,
+          requestedExecution: {
+            model: requestedModel,
+            source: "client/turn/requested",
+          },
+        });
 
-      expect(execution.permissionMode).toBe(expectedPermissionMode);
-    });
-  });
+        expect(execution.permissionMode).toBe(expectedPermissionMode);
+      });
+    },
+  );
 
   it("uses project permission defaults for child threads without parent execution history", async () => {
     await withTestHarness(async (harness) => {
@@ -529,6 +537,12 @@ describe("thread runtime config", () => {
         environmentId: environment.id,
         parentThreadId: rootThread.id,
       });
+      const sideChatThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        originKind: "side-chat",
+        sourceThreadId: rootThread.id,
+      });
       const parentThread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
@@ -549,6 +563,12 @@ describe("thread runtime config", () => {
       expect(
         resolvePermissionEscalation({
           thread: childThread,
+          initiator: "user",
+        }),
+      ).toBe("deny");
+      expect(
+        resolvePermissionEscalation({
+          thread: sideChatThread,
           initiator: "user",
         }),
       ).toBe("deny");
@@ -601,7 +621,53 @@ describe("thread runtime config", () => {
       expect(runtimeConfig.instructions).toContain(
         "You are working inside bb, an agentic IDE",
       );
+      expect(runtimeConfig.dynamicTools).toEqual([]);
     });
   });
 
+  it("does not expose agent send-to-main tools for side chat threads", async () => {
+    await withTestHarness(async (harness) => {
+      const hostId = "host-side-chat-runtime";
+      seedHostSession(harness.deps, { id: hostId });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId,
+        path: "/tmp/runtime-project-root",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId,
+        projectId: project.id,
+        path: "/tmp/runtime-project-root",
+      });
+      const mainThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      const sideChatThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        originKind: "side-chat",
+        sourceThreadId: mainThread.id,
+      });
+
+      const runtimeConfig = await resolveThreadRuntimeCommandConfig(
+        harness.deps,
+        {
+          thread: sideChatThread,
+          environment: {
+            hostId: environment.hostId,
+            id: environment.id,
+            path: environment.path,
+            status: environment.status,
+            workspaceProvisionType: environment.workspaceProvisionType,
+          },
+        },
+      );
+
+      expect(runtimeConfig.dynamicTools).toEqual([]);
+      expect(runtimeConfig.instructions).not.toContain(
+        "bb_send_to_main_thread",
+      );
+      expect(runtimeConfig.instructions).not.toContain("Side chat handoff");
+    });
+  });
 });

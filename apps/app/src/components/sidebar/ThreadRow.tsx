@@ -35,13 +35,19 @@ import {
   NO_COLLAPSED_CHILD_ACTIVITY,
   type CollapsedChildActivity,
 } from "@/lib/thread-activity";
+import {
+  getEnvironmentWorkspaceDisplayIconLabel,
+  getEnvironmentWorkspaceDisplayIconName,
+} from "@/lib/environment-workspace-display";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { getThreadRoutePath } from "@/lib/route-paths";
 import { cn } from "@/lib/utils";
 import {
   SIDEBAR_ROW_BASE_CLASS,
+  SIDEBAR_LEADING_GLYPH_SLOT_CLASS,
   SIDEBAR_ROW_GLYPH_SLOT_CLASS,
   SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
+  SIDEBAR_ROW_SELECTED_STATE_CLASS,
   SIDEBAR_UNREAD_DOT_CLASS_BY_TONE,
   getSidebarThreadRowPaddingLeft,
   type SidebarUnreadDotTone,
@@ -279,6 +285,18 @@ function ThreadRowComponent({
     : showUnreadBadge;
   const trailingUnreadBadgeTone: SidebarUnreadDotTone =
     hasHiddenChildren && childActivity.unreadError ? "error" : unreadBadgeTone;
+  const leadingWorktreeIconName =
+    options.isEnvGrouped || thread.childOrigin === "fork"
+      ? null
+      : getEnvironmentWorkspaceDisplayIconName(
+          thread.environmentWorkspaceDisplayKind,
+        );
+  const leadingWorktreeIconLabel =
+    leadingWorktreeIconName === null
+      ? null
+      : getEnvironmentWorkspaceDisplayIconLabel(
+          thread.environmentWorkspaceDisplayKind,
+        );
   const linkLabel = hasComposerDraft
     ? `Open ${threadTitle} (unsubmitted draft)`
     : `Open ${threadTitle}`;
@@ -293,7 +311,7 @@ function ThreadRowComponent({
       ? COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS
       : COARSE_POINTER_ROW_HEIGHT_CLASS,
     showActive
-      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+      ? SIDEBAR_ROW_SELECTED_STATE_CLASS
       : SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
     parentDragBindings &&
       !parentDragBindings.disabled &&
@@ -327,7 +345,39 @@ function ThreadRowComponent({
         className="absolute inset-0 rounded-md outline-none ring-sidebar-ring focus-visible:ring-2"
       />
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
+        {thread.childOrigin === "fork" ? (
+          <span
+            className={cn(
+              SIDEBAR_LEADING_GLYPH_SLOT_CLASS,
+              "pointer-events-none text-muted-foreground",
+            )}
+            aria-label="Forked thread"
+            title="Forked thread"
+          >
+            <Icon
+              name="Fork"
+              className={COARSE_POINTER_ICON_SIZE_CLASS}
+              aria-hidden="true"
+            />
+          </span>
+        ) : leadingWorktreeIconName ? (
+          <span
+            className={cn(
+              SIDEBAR_LEADING_GLYPH_SLOT_CLASS,
+              "pointer-events-none text-muted-foreground",
+            )}
+            aria-label={leadingWorktreeIconLabel ?? undefined}
+            title={leadingWorktreeIconLabel ?? undefined}
+          >
+            <Icon
+              name={leadingWorktreeIconName}
+              className={COARSE_POINTER_ICON_SIZE_CLASS}
+              aria-hidden="true"
+            />
+          </span>
+        ) : null}
         <span className="min-w-0 truncate">{threadTitle}</span>
+        {hasComposerDraft ? <ThreadDraftIndicator /> : null}
         {parentOptions && hasChildren ? (
           <SidebarChildToggleChevron
             isCollapsed={isParentCollapsed}
@@ -339,7 +389,6 @@ function ThreadRowComponent({
             revealOnHover
           />
         ) : null}
-        {hasComposerDraft ? <ThreadDraftIndicator /> : null}
       </span>
       <span
         className={cn(

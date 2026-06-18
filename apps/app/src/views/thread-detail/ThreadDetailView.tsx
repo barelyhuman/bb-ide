@@ -5,6 +5,7 @@ import {
   isRunningThreadRuntimeDisplayStatus,
   type ThreadTimelineForkMessageHandler,
   type ThreadTimelineSideChatMessageHandler,
+  type ThreadTimelineSendToMainMessageHandler,
   type ThreadTimelineLinkHandler,
   type ThreadTimelineLocalFileLink,
   type ThreadTimelineLocalFileLinkHandler,
@@ -111,6 +112,7 @@ import { resolveRightPanelFileVisual } from "@/components/secondary-panel/rightP
 import { COARSE_POINTER_COMPACT_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { Icon } from "@/components/ui/icon.js";
 import {
+  getBbDesktopInfo,
   getDesktopBrowserApi,
   isDesktopBrowserAvailable,
   MACOS_APP_REGION_NO_DRAG_CLASS,
@@ -185,6 +187,7 @@ import {
 } from "./threadSecondaryPanelSelection";
 import { useRouteState } from "@/hooks/useRouteState";
 import { resolveThreadComposerBootstrapReady } from "./threadDetailComposerBootstrapState";
+import { isThreadNewTabKeyboardShortcut } from "./threadDetailNewTabShortcut";
 
 const EMPTY_PARENT_THREADS: readonly ThreadListEntry[] = [];
 const EMPTY_PROJECT_THREAD_SUBSET_FILTERS =
@@ -698,23 +701,12 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
   const environment = environmentQuery.data;
   const forkThreadFromMessage = useForkThreadFromMessage({
     sourceThread: thread ?? null,
-    sourceEnvironment: environment ?? null,
   });
   const handleForkMessage =
-    useCallback<ThreadTimelineForkMessageHandler>(() => {
-      void forkThreadFromMessage();
+    useCallback<ThreadTimelineForkMessageHandler>((target) => {
+      void forkThreadFromMessage(target);
     }, [forkThreadFromMessage]);
-  // A fork always runs in a fresh managed worktree branched off the source's
-  // host. Drop the Fork handler (not just disable it) for a host-less source
-  // (a personal-project thread with no environment) — matching the
-  // handler-undefined contract that already removes the button from the action
-  // bar — so that case never shows a Fork button that does nothing on click.
-  // Same predicate `buildForkThreadRequest` gates on, so the button and the
-  // request stay in lockstep.
-  const isForkAvailable = isThreadForkable(
-    environment ?? null,
-    thread?.providerId ?? "",
-  );
+  const isForkAvailable = isThreadForkable(thread ?? null);
   const canUseSideChatPanel = props.surface !== "popout";
   const canStartSideChat =
     canUseSideChatPanel && (thread?.canSpawnChild ?? false);
@@ -725,6 +717,7 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
         openSideChat({
           sourceThreadId: threadId,
           sourceMessageText: target.messageText,
+          sourceSeqEnd: target.sourceSeqEnd,
         });
       },
       [canStartSideChat, openSideChat, threadId],
@@ -762,11 +755,41 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
   // context handed to the agent are exactly the highlighted text — unlike the
   // per-message Reply button, which anchors on the whole message.
   const handleSelectionReplyInSideChat = useCallback(
-    (selectionText: string) => {
-      handleSideChatMessage({ messageText: selectionText });
+    (target: { messageText: string; sourceSeqEnd?: number }) => {
+      handleSideChatMessage(target);
     },
     [handleSideChatMessage],
   );
+  const sendSideChatMessageToMain =
+    useCallback<ThreadTimelineSendToMainMessageHandler>(
+      (target) => {
+        if (
+          thread?.id === undefined ||
+          threadOriginKind !== "side-chat" ||
+          threadSourceThreadId === null ||
+          sendMessage.isPending
+        ) {
+          return;
+        }
+
+        sendMessage.mutate({
+          id: threadSourceThreadId,
+          input: [{ type: "text", text: target.messageText, mentions: [] }],
+          mode: "auto",
+          senderThreadId: thread.id,
+        });
+      },
+      [
+        sendMessage,
+        thread?.id,
+        threadOriginKind,
+        threadSourceThreadId,
+      ],
+    );
+  const handleSendToMainMessage =
+    threadOriginKind === "side-chat" && threadSourceThreadId !== null
+      ? sendSideChatMessageToMain
+      : undefined;
   const canUseGitUi = environment?.isGitRepo === true;
   const canCreateTerminal =
     thread?.environmentId !== null &&
@@ -967,6 +990,31 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
     openCompactDrawer();
     setNewTabFocusRequest((current) => current + 1);
   }, [openCompactDrawer, openNewTab]);
+  useEffect(() => {
+    if (props.surface !== "page") {
+      return;
+    }
+    const desktopInfo = getBbDesktopInfo();
+    if (desktopInfo === null || desktopInfo.onOpenNewTab === undefined) {
+      return;
+    }
+    return desktopInfo.onOpenNewTab(handleOpenNewTab);
+  }, [handleOpenNewTab, props.surface]);
+  useEffect(() => {
+    if (props.surface !== "page" || getBbDesktopInfo() === null) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isThreadNewTabKeyboardShortcut(event)) {
+        return;
+      }
+      event.preventDefault();
+      handleOpenNewTab();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleOpenNewTab, props.surface]);
   const handleOpenBrowser = useCallback(() => {
     openBrowserTabAndReveal();
   }, [openBrowserTabAndReveal]);
@@ -1891,6 +1939,7 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
       sourceThread={thread}
       sourceEnvironment={environment ?? null}
       sourceTimelineRows={timelineRows}
+      resolveMentionLink={resolveMentionLink}
       onSetThreadId={setSideChatThreadId}
     />
   );
@@ -1969,6 +2018,7 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
           onSideChatMessage: canStartSideChat
             ? handleSideChatMessage
             : undefined,
+          onSendToMainMessage: handleSendToMainMessage,
           onSelectionAddToChat: handleSelectionAddToChat,
           onSelectionReplyInSideChat: canStartSideChat
             ? handleSelectionReplyInSideChat

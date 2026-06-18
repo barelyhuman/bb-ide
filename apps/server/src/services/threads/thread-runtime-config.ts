@@ -23,6 +23,7 @@ import {
   resolveExistingThreadExecutionPlan,
 } from "./thread-execution-plan.js";
 import { resolveInjectedSkillSources } from "../skills/injected-skills.js";
+import { isSideChatThread } from "./side-chat-thread.js";
 export { getSupportedReasoningLevelsForProvider } from "./thread-reasoning-policy.js";
 
 const STANDARD_AGENT_INSTRUCTIONS = renderTemplate(
@@ -82,7 +83,11 @@ function requireWorkspacePath(
 export function resolvePermissionEscalation(
   args: ResolvePermissionEscalationArgs,
 ): PermissionEscalation {
-  if (args.initiator !== "user" || args.thread.parentThreadId !== null) {
+  if (
+    args.initiator !== "user" ||
+    args.thread.parentThreadId !== null ||
+    isSideChatThread(args.thread)
+  ) {
     return "deny";
   }
 
@@ -122,7 +127,6 @@ export async function resolveThreadRuntimeCommandConfig(
     hostId: args.environment.hostId,
     threadId: args.thread.id,
   });
-
   return {
     dynamicTools: [],
     injectedSkillSources,

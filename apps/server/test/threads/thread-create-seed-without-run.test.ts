@@ -1,5 +1,10 @@
-import { getThread, listEvents } from "@bb/db";
-import { turnRequestEventDataSchema } from "@bb/domain";
+import {
+  ensurePersonalProject,
+  getEnvironment,
+  getThread,
+  listEvents,
+} from "@bb/db";
+import { PERSONAL_PROJECT_ID, turnRequestEventDataSchema } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../src/errors.js";
 import { createThreadFromRequest } from "../../src/services/threads/thread-create.js";
@@ -16,6 +21,7 @@ import { textInput } from "../helpers/prompt-input.js";
 import {
   seedEnvironment,
   seedHostSession,
+  seedPrimaryHost,
   seedProjectWithSource,
   seedQueuedMessage,
   seedThread,
@@ -115,6 +121,73 @@ describe("thread creation with startedOnBehalfOf (seed-without-run)", () => {
       expect(persistedFork?.originKind).toBe("fork");
       expect(persistedFork?.sourceThreadId).toBe(sourceThread.id);
       expect(persistedFork?.parentThreadId).toBeNull();
+    });
+  });
+
+  it("uses the source provider session at the requested source sequence", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-source-sequence-fork",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/source-sequence-fork-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/source-sequence-fork-project",
+      });
+      const sourceThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: sourceThread.id,
+        turnId: "turn-earlier-source",
+        providerThreadId: "provider-earlier-source",
+        sequence: 5,
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: sourceThread.id,
+        turnId: "turn-later-source",
+        providerThreadId: "provider-later-source",
+        sequence: 9,
+      });
+
+      const fork = await createThreadFromRequest(harness.deps, {
+        environment: {
+          type: "host",
+          hostId: host.id,
+          workspace: {
+            type: "unmanaged",
+            path: "/tmp/source-sequence-fork-project",
+          },
+        },
+        input: [],
+        origin: "app",
+        originKind: "fork",
+        projectId: project.id,
+        providerId: "codex",
+        sourceSeqEnd: 5,
+        sourceThreadId: sourceThread.id,
+        startedOnBehalfOf: {
+          initiator: "agent",
+          senderThreadId: sourceThread.id,
+        },
+      });
+
+      const queuedStart = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" && command.threadId === fork.id,
+      );
+      if (queuedStart.command.type !== "thread.start") {
+        throw new Error("Expected a thread.start command");
+      }
+      expect(queuedStart.command.fork).toEqual({
+        sourceProviderThreadId: "provider-earlier-source",
+      });
     });
   });
 
@@ -616,6 +689,67 @@ describe("thread creation child-thread boundary validation", () => {
         expect(persistedSideChat?.parentThreadId).toBeNull();
       },
     );
+  });
+
+  it("revives a retiring personal workspace when preloading a side chat", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-personal-side-chat-retiring",
+      });
+      seedPrimaryHost(harness.deps, host.id);
+      ensurePersonalProject(harness.db);
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: PERSONAL_PROJECT_ID,
+        path: "/tmp/personal-side-chat-retiring",
+        status: "retiring",
+        workspaceProvisionType: "personal",
+      });
+      const sourceThread = seedThread(harness.deps, {
+        projectId: PERSONAL_PROJECT_ID,
+        environmentId: environment.id,
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: sourceThread.id,
+        turnId: "turn-personal-side-chat-source",
+        providerThreadId: "provider-personal-side-chat-source",
+      });
+
+      const sideChat = await createThreadFromRequest(harness.deps, {
+        environment: {
+          type: "host",
+          hostId: host.id,
+          workspace: { type: "personal" },
+        },
+        input: [],
+        origin: "app",
+        originKind: "side-chat",
+        projectId: PERSONAL_PROJECT_ID,
+        providerId: "codex",
+        sourceThreadId: sourceThread.id,
+        startedOnBehalfOf: null,
+      });
+
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe("ready");
+      expect(getThread(harness.db, sideChat.id)).toMatchObject({
+        environmentId: environment.id,
+        originKind: "side-chat",
+        sourceThreadId: sourceThread.id,
+      });
+
+      const queuedStart = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" && command.threadId === sideChat.id,
+      );
+      if (queuedStart.command.type !== "thread.start") {
+        throw new Error("Expected a thread.start command");
+      }
+      expect(queuedStart.command.input).toEqual([]);
+      expect(queuedStart.command.fork).toEqual({
+        sourceProviderThreadId: "provider-personal-side-chat-source",
+      });
+    });
   });
 
   it("auto-sends a queued first side-chat message after preload settles idle", async () => {
