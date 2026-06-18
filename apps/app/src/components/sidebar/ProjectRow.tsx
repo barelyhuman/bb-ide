@@ -64,10 +64,12 @@ import {
   type ThreadRowOptions,
 } from "./ThreadRow";
 import {
+  buildChronologicalThreadList,
   buildProjectThreadGroups,
   type EnvironmentThreadGroup,
   type ProjectThreadItem,
   type ProjectThreadNode,
+  type ThreadComparator,
 } from "./projectThreadGroups";
 import {
   SIDEBAR_PROJECT_GROUP_LINE_CLASS,
@@ -125,6 +127,17 @@ export interface ProjectThreadTreeProps {
   collapsedThreadIds: Set<string>;
   collapsedEnvironmentIds: Set<string>;
   variant: ProjectThreadTreeVariant;
+  onProjectSelect?: () => void;
+  onToggleThreadCollapsed: (threadId: string) => void;
+  onToggleEnvironmentCollapsed: (environmentId: string) => void;
+}
+
+export interface ChronologicalThreadTreeProps {
+  threadListState: ProjectThreadListState;
+  compareThreads: ThreadComparator;
+  selectedThreadId?: string;
+  collapsedThreadIds: Set<string>;
+  collapsedEnvironmentIds: Set<string>;
   onProjectSelect?: () => void;
   onToggleThreadCollapsed: (threadId: string) => void;
   onToggleEnvironmentCollapsed: (environmentId: string) => void;
@@ -1104,6 +1117,87 @@ export const ProjectThreadTree = memo(function ProjectThreadTree({
           collapsedThreadIds={collapsedThreadIds}
           collapsedEnvironmentIds={collapsedEnvironmentIds}
           variant={variant}
+          onProjectSelect={onProjectSelect}
+          onToggleThreadCollapsed={onToggleThreadCollapsed}
+          onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
+        />
+      ))}
+    </ProjectThreadTreeGroup>
+  );
+});
+
+function getChronologicalItemProjectId(item: ProjectThreadItem): string {
+  return item.kind === "thread"
+    ? item.node.thread.projectId
+    : item.group.nodes[0].thread.projectId;
+}
+
+// Flat "All Threads" bucket for chronological mode: one top-level row per
+// non-pinned thread across all projects, globally ordered by the chosen
+// comparator (no parent/child nesting or worktree grouping, so nothing hides
+// behind a collapsed parent). Derives projectId per row from its own thread so
+// cross-project rows still route correctly.
+export const ChronologicalThreadTree = memo(function ChronologicalThreadTree({
+  threadListState,
+  compareThreads,
+  selectedThreadId,
+  collapsedThreadIds,
+  collapsedEnvironmentIds,
+  onProjectSelect,
+  onToggleThreadCollapsed,
+  onToggleEnvironmentCollapsed,
+}: ChronologicalThreadTreeProps) {
+  const threads =
+    threadListState.status === "ready"
+      ? threadListState.threads
+      : EMPTY_PROJECT_THREADS;
+  const rootItems = useMemo(
+    () => buildChronologicalThreadList(threads, compareThreads),
+    [threads, compareThreads],
+  );
+
+  if (threadListState.status === "loading") {
+    return (
+      <div className="group-data-[collapsible=icon]:hidden">
+        <SidebarMenuSkeleton />
+      </div>
+    );
+  }
+
+  if (threads.length === 0) {
+    return (
+      <EmptyState
+        message={
+          threadListState.status === "unavailable"
+            ? "Threads unavailable"
+            : "No threads"
+        }
+        icon={getProjectThreadTreeEmptyStateIcon("section")}
+        className={getProjectThreadTreeEmptyStateClassName("section")}
+        iconClassName="size-3.5"
+        messageClassName={getProjectThreadTreeEmptyStateMessageClassName(
+          "section",
+        )}
+      />
+    );
+  }
+
+  return (
+    <ProjectThreadTreeGroup variant="section">
+      {rootItems.map((item) => (
+        <ThreadTreeItemRow
+          key={
+            item.kind === "thread"
+              ? `thread:${item.node.thread.id}`
+              : `env:${item.group.environmentId}`
+          }
+          projectId={getChronologicalItemProjectId(item)}
+          item={item}
+          depthOffset={0}
+          selectedThreadId={selectedThreadId}
+          collapsedThreadIds={collapsedThreadIds}
+          collapsedEnvironmentIds={collapsedEnvironmentIds}
+          variant="section"
           onProjectSelect={onProjectSelect}
           onToggleThreadCollapsed={onToggleThreadCollapsed}
           onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}

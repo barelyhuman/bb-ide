@@ -39,6 +39,14 @@ export type ProjectThreadItem =
   | { kind: "thread"; node: ProjectThreadNode }
   | { kind: "environment"; group: EnvironmentThreadGroup };
 
+// Orders sibling threads. The default keeps active rows pinned to createdAt and
+// inactive rows on attention recency; chronological mode can swap in a literal
+// createdAt comparator instead.
+export type ThreadComparator = (
+  left: ThreadListEntry,
+  right: ThreadListEntry,
+) => number;
+
 type WorktreeDisplayKind = "managed-worktree" | "unmanaged-worktree";
 type SidebarProjectThreadShape = Pick<
   ThreadListEntry,
@@ -48,6 +56,7 @@ type SidebarProjectThreadShape = Pick<
 interface BuildThreadNodeArgs {
   ancestorThreadIds: ReadonlySet<string>;
   childrenByParentId: ReadonlyMap<string, readonly ThreadListEntry[]>;
+  compareThreads: ThreadComparator;
   depth: number;
   thread: ThreadListEntry;
   visitedThreadIds: Set<string>;
@@ -64,7 +73,7 @@ function isWorktreeDisplayKind(
   return kind === "managed-worktree" || kind === "unmanaged-worktree";
 }
 
-function compareByCreatedAtDescending(
+export function compareByCreatedAtDescending(
   left: ThreadListEntry,
   right: ThreadListEntry,
 ): number {
@@ -89,7 +98,7 @@ function compareByLatestAttentionAtDescending(
   return compareByCreatedAtDescending(left, right);
 }
 
-function compareStandardThreads(
+export function compareStandardThreads(
   left: ThreadListEntry,
   right: ThreadListEntry,
 ): number {
@@ -118,8 +127,9 @@ function representativeThread(item: ProjectThreadItem): ThreadListEntry {
 function compareProjectThreadItems(
   left: ProjectThreadItem,
   right: ProjectThreadItem,
+  compareThreads: ThreadComparator,
 ): number {
-  return compareStandardThreads(
+  return compareThreads(
     representativeThread(left),
     representativeThread(right),
   );
@@ -172,20 +182,26 @@ function buildEnvironmentItem(
   return { kind: "environment", group };
 }
 
-function buildSortedItems(nodes: ProjectThreadNode[]): ProjectThreadItem[] {
+function buildSortedItems(
+  nodes: ProjectThreadNode[],
+  compareThreads: ThreadComparator,
+): ProjectThreadItem[] {
   const { environmentThreadGroups, looseNodes } =
-    bucketWorktreeEnvironmentGroups(nodes);
+    bucketWorktreeEnvironmentGroups(nodes, compareThreads);
   const items = [
     ...looseNodes.map(buildThreadItem),
     ...environmentThreadGroups.map(buildEnvironmentItem),
   ];
-  items.sort(compareProjectThreadItems);
+  items.sort((left, right) =>
+    compareProjectThreadItems(left, right, compareThreads),
+  );
   return items;
 }
 
 function buildThreadNode({
   ancestorThreadIds,
   childrenByParentId,
+  compareThreads,
   depth,
   thread,
   visitedThreadIds,
@@ -203,6 +219,7 @@ function buildThreadNode({
       buildThreadNode({
         ancestorThreadIds: nextAncestorThreadIds,
         childrenByParentId,
+        compareThreads,
         depth: depth + 1,
         thread: childThread,
         visitedThreadIds,
@@ -210,7 +227,7 @@ function buildThreadNode({
     );
   }
 
-  const children = buildSortedItems(childNodes);
+  const children = buildSortedItems(childNodes, compareThreads);
   return {
     thread,
     children,
@@ -231,6 +248,7 @@ function isRootThread(
 
 export function buildProjectThreadGroups(
   allProjectThreads: readonly ThreadListEntry[],
+  compareThreads: ThreadComparator = compareStandardThreads,
 ): ProjectThreadItem[] {
   const projectThreads = allProjectThreads.filter(isSidebarProjectThread);
   const projectThreadIds = new Set(projectThreads.map((thread) => thread.id));
@@ -259,6 +277,7 @@ export function buildProjectThreadGroups(
       buildThreadNode({
         ancestorThreadIds: new Set(),
         childrenByParentId,
+        compareThreads,
         depth: 0,
         thread,
         visitedThreadIds,
@@ -275,6 +294,7 @@ export function buildProjectThreadGroups(
       buildThreadNode({
         ancestorThreadIds: new Set(),
         childrenByParentId,
+        compareThreads,
         depth: 0,
         thread,
         visitedThreadIds,
@@ -282,7 +302,33 @@ export function buildProjectThreadGroups(
     );
   }
 
-  return buildSortedItems(rootNodes);
+  return buildSortedItems(rootNodes, compareThreads);
+}
+
+// Flat ordering for the chronological "All Threads" bucket: one top-level row
+// per thread, globally ordered by the chosen comparator. Unlike
+// buildProjectThreadGroups this intentionally drops parent/child nesting and
+// worktree grouping so every thread is visible (none hidden behind a collapsed
+// parent) and the sort is global rather than per-sibling. Side chats are
+// excluded to match buildProjectThreadGroups.
+export function buildChronologicalThreadList(
+  allThreads: readonly ThreadListEntry[],
+  compareThreads: ThreadComparator = compareStandardThreads,
+): ProjectThreadItem[] {
+  return allThreads
+    .filter(isSidebarProjectThread)
+    .sort(compareThreads)
+    .map(
+      (thread): ProjectThreadItem => ({
+        kind: "thread",
+        node: {
+          thread,
+          children: [],
+          depth: 0,
+          stats: buildStatsForHiddenThreads([]),
+        },
+      }),
+    );
 }
 
 export function isSidebarProjectThread(
@@ -296,6 +342,7 @@ export function isSidebarProjectThread(
 // don't render degenerate 1-thread groups.
 function bucketWorktreeEnvironmentGroups(
   nodes: ProjectThreadNode[],
+  compareThreads: ThreadComparator,
 ): BucketWorktreeEnvironmentGroupsResult {
   const nodesByEnvironmentId = new Map<string, ProjectThreadNode[]>();
   for (const node of nodes) {
@@ -316,7 +363,7 @@ function bucketWorktreeEnvironmentGroups(
   for (const [environmentId, bucket] of nodesByEnvironmentId) {
     if (!hasAtLeastTwoThreadNodes(bucket)) continue;
     bucket.sort((left, right) =>
-      compareStandardThreads(left.thread, right.thread),
+      compareThreads(left.thread, right.thread),
     );
     groupedEnvironmentIds.add(environmentId);
     environmentThreadGroups.push(
@@ -330,7 +377,7 @@ function bucketWorktreeEnvironmentGroups(
       !groupedEnvironmentIds.has(node.thread.environmentId),
   );
   looseNodes.sort((left, right) =>
-    compareStandardThreads(left.thread, right.thread),
+    compareThreads(left.thread, right.thread),
   );
 
   return { environmentThreadGroups, looseNodes };
