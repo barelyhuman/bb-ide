@@ -24,8 +24,10 @@ import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspac
 import {
   INERT_TYPEAHEAD_COMMAND_CONFIG,
   type AttachmentsConfig,
+  type PromptBoxAction,
   type TypeaheadConfig,
 } from "@/components/promptbox/PromptBoxInternal";
+import { CREATE_LOOP_PROMPT } from "@/components/promptbox/PromptBoxActionsMenu";
 import { ThreadPromptContextBanner } from "@/components/promptbox/banner/ThreadPromptContextBanner";
 import { QueuedMessagesList } from "@/components/promptbox/banner/QueuedMessagesList";
 import { ThreadEnvironmentSummary } from "@/components/promptbox/ThreadEnvironmentSummary";
@@ -39,6 +41,8 @@ import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 import {
   makeEnvironment,
   makeExecutionControlsProps,
+  STORY_CLAUDE_CODE_MODELS,
+  STORY_CLAUDE_REASONING,
   STORY_CODEX_MODELS,
   STORY_PROVIDER_OPTIONS,
 } from "../../../.ladle/story-fixtures";
@@ -64,6 +68,33 @@ const baseExecution = makeExecutionControlsProps({
     displayName: "Codex",
   },
 });
+const claudePlanExecution = makeExecutionControlsProps({
+  provider: {
+    options: STORY_PROVIDER_OPTIONS,
+    selectedId: "claude-code",
+    hasMultiple: true,
+    displayName: "Claude Code",
+  },
+  model: {
+    active: { model: "claude-sonnet-4-6" },
+    selected: "claude-sonnet-4-6",
+    options: STORY_CLAUDE_CODE_MODELS,
+    moreOptions: [],
+    isLoading: false,
+    loadFailed: false,
+    onChange: noop,
+  },
+  serviceTier: {
+    value: undefined,
+    onChange: noop,
+    supported: false,
+  },
+  reasoning: {
+    value: "medium",
+    options: STORY_CLAUDE_REASONING,
+    onChange: noop,
+  },
+});
 const codexModelLoadError = {
   providerId: "codex",
   code: "failed",
@@ -81,6 +112,21 @@ const basePermission: ExecutionPermissionConfig = {
   onChange: noop,
   supported: true,
 };
+
+const promptActions: readonly PromptBoxAction[] = [
+  { kind: "skills", text: "/" },
+  {
+    kind: "plan",
+    command: { trigger: "/", name: "plan", trailingText: " " },
+    text: "/plan ",
+  },
+  {
+    kind: "goal",
+    command: { trigger: "/", name: "goal", trailingText: " " },
+    text: "/goal ",
+  },
+  { kind: "loop", text: CREATE_LOOP_PROMPT },
+];
 
 // Read-only footer (side chat): the side chat inherits its parent thread's
 // provider/model and is always read-only. It renders the SAME model/reasoning
@@ -517,6 +563,8 @@ interface RowConfig {
   execution?: ExecutionControlsProps;
   /** Defaults to the editable permission picker; override to show the read-only permission config. */
   permission?: RowPermission;
+  /** Active provider prompt mode banner state; used to lock plan-mode controls. */
+  activePromptMode?: Parameters<typeof FollowUpPromptBox>[0]["activePromptMode"];
   /** Render the footer pickers disabled (side chat). The same controls, non-interactive. */
   readOnly?: boolean;
 }
@@ -550,6 +598,7 @@ function Row({
   hideComposer = false,
   execution = baseExecution,
   permission = basePermission,
+  activePromptMode = null,
   readOnly = false,
 }: RowConfig) {
   const [message, setMessage] = useState(initialMessage);
@@ -599,6 +648,8 @@ function Row({
         contextWindowUsage={contextWindowUsage}
         execution={execution}
         permission={permission}
+        activePromptMode={activePromptMode}
+        promptActions={promptActions}
         readOnly={readOnly}
         typeahead={typeaheadBase}
         zenModeResetKey={zenModeResetKey}
@@ -746,6 +797,22 @@ export function Overview() {
       </StoryRow>
       <StoryRow label="with promptbox context banner">
         <Row submitMode={{ kind: "ready" }} stack={contextBannerElement} />
+      </StoryRow>
+      <StoryRow
+        label="plan mode: permission locked"
+        hint="active Claude Code plan mode shows Plan Mode and disables the dropdown"
+      >
+        <Row
+          submitMode={{ kind: "queue", onStop: noop }}
+          threadRuntimeDisplayStatus="active"
+          execution={claudePlanExecution}
+          permission={{ ...basePermission, value: "full" }}
+          activePromptMode={{
+            mode: "plan",
+            providerId: "claude-code",
+            prompt: "inspect the failing command before making changes",
+          }}
+        />
       </StoryRow>
       <StoryRow
         label="archived: composer hidden"

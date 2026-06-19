@@ -2,12 +2,14 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import type { IconName } from "@/components/ui/icon.js";
 import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/prompt-mention-link";
 import { getFollowUpPromptPlaceholder } from "@/components/promptbox/follow-up-placeholder";
+import { buildProviderPromptActionProps } from "@/components/promptbox/mentions/command-trigger";
 import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import type {
   EnvironmentStatus,
   PendingInteraction,
   ThreadQueuedMessage,
   ThreadPullRequest,
+  ThreadTimelineActivePromptMode,
   ThreadTimelineGoal,
   ThreadTimelinePendingTodos,
   ThreadWithRuntime,
@@ -28,6 +30,7 @@ import {
 } from "@/components/promptbox/banner/ThreadPromptContextBanner";
 import { ThreadGoalCard } from "@/components/promptbox/banner/ThreadGoalCard";
 import { ThreadTodoCard } from "@/components/promptbox/banner/ThreadTodoCard";
+import { ThreadPromptModeCard } from "@/components/promptbox/banner/ThreadPromptModeCard";
 import { ThreadWorkflowCard } from "@/components/promptbox/banner/ThreadWorkflowCard";
 import { ThreadBackgroundCommandsCard } from "@/components/promptbox/banner/ThreadBackgroundCommandsCard";
 import type {
@@ -70,6 +73,7 @@ import {
   FollowUpPromptBox,
   type FollowUpSubmitMode,
 } from "@/components/promptbox/FollowUpPromptBox";
+import { withLoopPromptAction } from "@/components/promptbox/PromptBoxActionsMenu";
 import { queuedInputToDraft } from "./threadQueuedMessages";
 import type { SendMessageMutationLike } from "./threadDetailMutationTypes";
 import {
@@ -138,8 +142,10 @@ interface ThreadDetailPromptAreaProps {
    * picker (e.g. thread is on default branch — no merge base to compare).
    */
   contextBannerMergeBase: ContextBannerMergeBaseConfig | null;
-  /** Latest TODO snapshot from the timeline projection. Null on older pages or when no candidate observed. */
+  /** Latest task/todo snapshot from the timeline projection. Null on older pages or when no candidate observed. */
   pendingTodos: ThreadTimelinePendingTodos | null;
+  /** Active provider prompt mode from the latest timeline projection. Null when no prompt mode is active. */
+  activePromptMode: ThreadTimelineActivePromptMode | null;
   /** Current provider goal from the timeline projection. Null when no goal is active. */
   goal: ThreadTimelineGoal | null;
   /** Running workflow row from the timeline. Null when no workflow is active. */
@@ -195,6 +201,7 @@ export function ThreadDetailPromptArea({
   workspaceStatusPending,
   contextBannerMergeBase,
   pendingTodos,
+  activePromptMode,
   goal,
   activeWorkflow,
   activeBackgroundCommands,
@@ -300,12 +307,6 @@ export function ThreadDetailPromptArea({
   // Called unconditionally (hooks rules); inert when the provider has no
   // command trigger.
   const [commandQuery, setCommandQuery] = useState<string | null>(null);
-  const commandSuggestions = useCommandSuggestions({
-    projectId: thread.projectId,
-    providerId: thread.providerId,
-    environmentId: thread.environmentId,
-    query: commandQuery,
-  });
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [expandedBannerSection, setExpandedBannerSection] =
     useState<ThreadPromptContextBannerExpandedSection | null>(null);
@@ -346,6 +347,7 @@ export function ThreadDetailPromptArea({
   );
   const [isGoalExpanded, setIsGoalExpanded] = useState(false);
   const [isTodoExpanded, setIsTodoExpanded] = useState(false);
+  const [isPromptModeExpanded, setIsPromptModeExpanded] = useState(false);
   const [isWorkflowExpanded, setIsWorkflowExpanded] = useState(false);
   const [isBackgroundCommandsExpanded, setIsBackgroundCommandsExpanded] =
     useState(false);
@@ -360,6 +362,7 @@ export function ThreadDetailPromptArea({
     providerOptions,
     hasMultipleProviders,
     selectedProviderDisplayName,
+    selectedProviderComposerActions,
     selectedModel,
     setSelectedModel,
     serviceTier,
@@ -391,6 +394,23 @@ export function ThreadDetailPromptArea({
     initialReasoningLevel: defaultExecutionOptions?.reasoningLevel,
     initialPermissionMode: defaultExecutionOptions?.permissionMode,
     initialEnvironmentSelectionValue: thread.environmentId ?? undefined,
+  });
+  const providerPromptActions = useMemo(
+    () => buildProviderPromptActionProps(selectedProviderComposerActions),
+    [selectedProviderComposerActions],
+  );
+  const providerPromptActionProps = useMemo(
+    () => ({
+      promptActions: withLoopPromptAction(providerPromptActions.promptActions),
+    }),
+    [providerPromptActions.promptActions],
+  );
+  const commandSuggestions = useCommandSuggestions({
+    projectId: thread.projectId,
+    providerId: thread.providerId,
+    skillsTrigger: providerPromptActions.skillsTrigger,
+    environmentId: thread.environmentId,
+    query: commandQuery,
   });
   const runtimeDisplayStatus = thread.runtime.displayStatus;
   const isStopRequested =
@@ -980,6 +1000,17 @@ export function ThreadDetailPromptArea({
       projectName,
     ],
   );
+  const activePromptModeCard = useMemo(
+    () => (
+      <ThreadPromptModeCard
+        activePromptMode={activePromptMode}
+        isExpanded={isPromptModeExpanded}
+        onExitPlanMode={handleStopThread}
+        onToggle={() => setIsPromptModeExpanded((value) => !value)}
+      />
+    ),
+    [activePromptMode, handleStopThread, isPromptModeExpanded],
+  );
   const promptStack = useMemo(
     () => (
       <>
@@ -993,6 +1024,7 @@ export function ThreadDetailPromptArea({
           isExpanded={isBackgroundCommandsExpanded}
           onToggle={() => setIsBackgroundCommandsExpanded((value) => !value)}
         />
+        {activePromptModeCard}
         <ThreadGoalCard
           goal={goal}
           isExpanded={isGoalExpanded}
@@ -1078,6 +1110,7 @@ export function ThreadDetailPromptArea({
       isUnarchiveCurrentThreadPending,
       isQueueMutationPending,
       goal,
+      activePromptModeCard,
       isGoalExpanded,
       isTodoExpanded,
       activeWorkflow,
@@ -1100,11 +1133,22 @@ export function ThreadDetailPromptArea({
   );
 
   if (activePendingInteraction && !shouldHideComposer) {
+    if (!activePromptMode) {
+      return (
+        <ThreadPendingInteractionBanner
+          interaction={activePendingInteraction}
+          threadId={thread.id}
+        />
+      );
+    }
     return (
-      <ThreadPendingInteractionBanner
-        interaction={activePendingInteraction}
-        threadId={thread.id}
-      />
+      <div className="space-y-2">
+        {activePromptModeCard}
+        <ThreadPendingInteractionBanner
+          interaction={activePendingInteraction}
+          threadId={thread.id}
+        />
+      </div>
     );
   }
 
@@ -1113,6 +1157,7 @@ export function ThreadDetailPromptArea({
       id={THREAD_DETAIL_COMPOSER_TEXTAREA_ID}
       attachments={attachmentsConfig}
       stack={promptStack}
+      activePromptMode={activePromptMode}
       composer={shouldHideComposer ? null : composerConfig}
       zenModeResetKey={thread.id}
       focusEndKey={focusEndKey}
@@ -1121,6 +1166,7 @@ export function ThreadDetailPromptArea({
       execution={executionConfig}
       permission={permissionConfig}
       typeahead={typeaheadConfig}
+      {...providerPromptActionProps}
     />
   );
 }

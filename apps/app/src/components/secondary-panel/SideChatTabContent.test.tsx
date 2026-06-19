@@ -185,6 +185,7 @@ vi.mock("@/components/thread/timeline", () => ({
     <div>{label ?? "Working"}</div>
   ),
   useThreadTimelineController: () => ({
+    activePromptMode: null,
     activeThinking: null,
     activeWorkflow: null,
     activeBackgroundCommands: [],
@@ -245,6 +246,7 @@ vi.mock("@/hooks/useThreadCreationOptions", () => ({
     reasoningLevel: "medium",
     reasoningOptions: [],
     selectedModel: "gpt-5",
+    selectedProviderComposerActions: [{ kind: "skills", trigger: "/" }],
     selectedProviderDisplayName: "Codex",
     selectedProviderId: "codex",
     serviceTier: undefined,
@@ -267,10 +269,10 @@ vi.mock("@/hooks/usePromptMentions", () => ({
 }));
 
 vi.mock("@/hooks/useCommandSuggestions", () => ({
-  useCommandSuggestions: (args: unknown) => {
+  useCommandSuggestions: (args: { skillsTrigger?: "/" | null }) => {
     mocks.commandSuggestionArgs.push(args);
     return {
-      trigger: "/",
+      trigger: args.skillsTrigger ?? null,
       suggestions: [],
       isLoading: false,
       isError: false,
@@ -545,6 +547,7 @@ describe("SideChatTabContent", () => {
     ).toEqual({
       projectId: "proj_parent",
       providerId: "codex",
+      skillsTrigger: "/",
       environmentId: null,
       query: null,
     });
@@ -558,6 +561,7 @@ describe("SideChatTabContent", () => {
       expect(mocks.commandSuggestionArgs).toContainEqual({
         projectId: "proj_parent",
         providerId: "codex",
+        skillsTrigger: "/",
         environmentId: null,
         query: "review",
       }),
