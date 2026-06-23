@@ -770,6 +770,7 @@ function buildFlatProjectionData(
     const operation = parseOperationMessage(decoded, meta, {
       includeProviderUnhandledOperations:
         args.options?.includeProviderUnhandledOperations,
+      providerDisplayName: args.options?.providerDisplayName,
       threadName: args.options?.threadName ?? "",
     });
     if (operation) {

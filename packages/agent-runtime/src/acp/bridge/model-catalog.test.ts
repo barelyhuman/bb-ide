@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAgentModelCatalog,
+  buildAcpNativeReasoningSupport,
+  buildModelCatalogFromConfigOptions,
+  acpNativeReasoningLevelToValue,
+  findAcpModelConfigOption,
+  findAcpThoughtLevelConfigOption,
   parseAgentModelLines,
   splitPrimaryModels,
 } from "./model-catalog.js";
@@ -121,7 +126,10 @@ describe("acp model catalog", () => {
       gpt55?.supportedReasoningEfforts.map((e) => e.reasoningEffort),
     ).toEqual(["none", "low", "medium", "xhigh"]);
     expect(
-      catalog.resolveVariant({ model: "gpt-5.5-medium", reasoningLevel: "xhigh" }),
+      catalog.resolveVariant({
+        model: "gpt-5.5-medium",
+        reasoningLevel: "xhigh",
+      }),
     ).toBe("gpt-5.5-extra-high");
   });
 
@@ -307,6 +315,150 @@ describe("acp model catalog", () => {
 
   it("returns null for an empty list", () => {
     expect(buildAgentModelCatalog([])).toBeNull();
+  });
+});
+
+describe("acp configOptions model catalog", () => {
+  it("finds the model select by category before falling back to id", () => {
+    const byId = {
+      id: "model",
+      category: "mode",
+      type: "select",
+      options: [{ value: "wrong", name: "Wrong" }],
+    };
+    const byCategory = {
+      id: "provider-model",
+      category: "model",
+      type: "select",
+      options: [{ value: "right", name: "Right" }],
+    };
+
+    expect(findAcpModelConfigOption([byId, byCategory])).toBe(byCategory);
+    expect(findAcpModelConfigOption([byId])).toBe(byId);
+  });
+
+  it("maps model configOptions values, names, and currentValue into picker models", () => {
+    const reasoningByModel = new Map([
+      [
+        "opencode/deepseek-v4-flash-free",
+        buildAcpNativeReasoningSupport({
+          id: "effort",
+          category: "thought_level",
+          type: "select",
+          currentValue: "high",
+          options: [
+            { value: "none" },
+            { value: "low" },
+            { value: "medium" },
+            { value: "high" },
+            { value: "xhigh" },
+          ],
+        }),
+      ],
+    ]);
+    const models = buildModelCatalogFromConfigOptions(
+      {
+        id: "model",
+        name: "Model",
+        category: "model",
+        type: "select",
+        currentValue: "opencode/deepseek-v4-flash-free",
+        options: [
+          {
+            value: "opencode/big-pickle",
+            name: "OpenCode Zen/Big Pickle",
+          },
+          {
+            value: "opencode/deepseek-v4-flash-free",
+            name: "OpenCode Zen/DeepSeek V4 Flash Free",
+          },
+        ],
+      },
+      reasoningByModel,
+    );
+
+    expect(models).toMatchObject([
+      {
+        id: "opencode/big-pickle",
+        model: "opencode/big-pickle",
+        displayName: "OpenCode Zen/Big Pickle",
+        isDefault: false,
+        defaultReasoningEffort: "medium",
+      },
+      {
+        id: "opencode/deepseek-v4-flash-free",
+        model: "opencode/deepseek-v4-flash-free",
+        displayName: "OpenCode Zen/DeepSeek V4 Flash Free",
+        isDefault: true,
+        defaultReasoningEffort: "high",
+        supportedReasoningEfforts: [
+          { reasoningEffort: "none" },
+          { reasoningEffort: "low" },
+          { reasoningEffort: "medium" },
+          { reasoningEffort: "high" },
+          { reasoningEffort: "xhigh" },
+        ],
+      },
+    ]);
+  });
+
+  it("finds and maps ACP thought_level config options", () => {
+    const thoughtLevel = {
+      id: "effort",
+      category: "thought_level",
+      type: "select",
+      currentValue: "medium",
+      options: [{ value: "low" }, { value: "medium" }, { value: "xhigh" }],
+    };
+    expect(findAcpThoughtLevelConfigOption([thoughtLevel])).toBe(thoughtLevel);
+    const support = buildAcpNativeReasoningSupport(thoughtLevel);
+    expect(support.defaultReasoningEffort).toBe("medium");
+    expect(
+      support.supportedReasoningEfforts.map((e) => e.reasoningEffort),
+    ).toEqual(["low", "medium", "xhigh"]);
+    expect(acpNativeReasoningLevelToValue("max", thoughtLevel)).toBe("xhigh");
+    expect(
+      acpNativeReasoningLevelToValue("high", thoughtLevel),
+    ).toBeUndefined();
+  });
+
+  it("falls back to the first model when currentValue is absent or stale", () => {
+    expect(
+      buildModelCatalogFromConfigOptions({
+        id: "model",
+        category: "model",
+        type: "select",
+        options: [
+          { value: "first", name: "First" },
+          { value: "second", name: "Second" },
+        ],
+      }).map((model) => model.isDefault),
+    ).toEqual([true, false]);
+
+    expect(
+      buildModelCatalogFromConfigOptions({
+        id: "model",
+        category: "model",
+        type: "select",
+        currentValue: "missing",
+        options: [
+          { value: "first", name: "First" },
+          { value: "second", name: "Second" },
+        ],
+      }).map((model) => model.isDefault),
+    ).toEqual([true, false]);
+  });
+
+  it("returns no models when the session has no model select options", () => {
+    expect(buildModelCatalogFromConfigOptions(undefined)).toEqual([]);
+    expect(
+      buildModelCatalogFromConfigOptions({
+        id: "model",
+        category: "model",
+        type: "select",
+        options: [],
+      }),
+    ).toEqual([]);
   });
 });
 
