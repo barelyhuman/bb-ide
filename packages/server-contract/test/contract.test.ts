@@ -12,7 +12,7 @@ import {
   TERMINAL_DATA_MAX_BASE64_LENGTH,
   TERMINAL_DATA_MAX_BYTES,
   TERMINAL_ROWS_MAX,
-  createThreadTerminalRequestSchema,
+  createTerminalRequestSchema,
   createQueuedMessageRequestSchema,
   createProjectSourceRequestSchema,
   createPublicApiClient,
@@ -28,6 +28,7 @@ import {
   terminalClientMessageSchema,
   terminalOutputChunkSchema,
   terminalOutputResponseSchema,
+  terminalSessionSchema,
   threadListResponseSchema,
   threadPendingInteractionsResponseSchema,
   timelineTurnSummaryDetailsResponseSchema,
@@ -491,17 +492,40 @@ describe("git branch name contract", () => {
 });
 
 describe("public terminal contracts", () => {
+  it("allows threadless terminal session responses", () => {
+    expect(
+      terminalSessionSchema.safeParse({
+        id: "term_1",
+        threadId: null,
+        environmentId: "env_1",
+        hostId: "host_1",
+        title: "Terminal 1",
+        initialCwd: "/tmp/workspace",
+        cols: 80,
+        rows: 24,
+        status: "running",
+        exitCode: null,
+        closeReason: null,
+        createdAt: 1,
+        updatedAt: 1,
+        lastUserInputAt: null,
+      }).success,
+    ).toBe(true);
+  });
+
   it("bounds terminal dimensions", () => {
     expect(
-      createThreadTerminalRequestSchema.safeParse({
+      createTerminalRequestSchema.safeParse({
         cols: TERMINAL_COLS_MAX,
         rows: TERMINAL_ROWS_MAX,
+        target: { kind: "thread", threadId: "thr_1" },
       }).success,
     ).toBe(true);
     expect(
-      createThreadTerminalRequestSchema.safeParse({
+      createTerminalRequestSchema.safeParse({
         cols: TERMINAL_COLS_MAX + 1,
         rows: TERMINAL_ROWS_MAX,
+        target: { kind: "thread", threadId: "thr_1" },
       }).success,
     ).toBe(false);
     expect(
@@ -1303,6 +1327,12 @@ describe("server-contract clients", () => {
         },
       }).pathname,
     ).toBe("/api/v1/projects/proj_123/paths");
+    expect(
+      publicClient.projects[":id"].files.content.$url({
+        param: { id: "proj_123" },
+        query: { path: "src/app.ts" },
+      }).pathname,
+    ).toBe("/api/v1/projects/proj_123/files/content");
     expect(
       publicClient.threads[":id"].timeline["turn-summary-details"].$url({
         param: { id: "thr_123" },
