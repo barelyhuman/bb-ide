@@ -387,6 +387,9 @@ export function AppLayout({ children }: AppLayoutProps) {
     { enabled: isAutomationDetailView },
   );
   const automationName = automationDetail?.name ?? "Automation";
+  const archivedFolderId = isArchivedView
+    ? new URLSearchParams(location.search).get("folderId")
+    : null;
   const sidebarNavigationQuery = useSidebarNavigation();
   const projects = useMemo(
     () => sidebarNavigationQuery.data?.projects.map(stripProjectThreads),
@@ -427,6 +430,11 @@ export function AppLayout({ children }: AppLayoutProps) {
   const project = projectId
     ? projects?.find((candidate) => candidate.id === projectId)
     : undefined;
+  const archivedFolderName = archivedFolderId
+    ? (sidebarNavigationQuery.data?.folders.find(
+        (folder) => folder.id === archivedFolderId,
+      )?.name ?? archivedFolderId)
+    : null;
   const projectName = projectId ? project?.name : undefined;
   const projectLabel = projectName ?? (projectId ? projectId : undefined);
   const { data: thread } = useThread(threadId ?? "", {
@@ -465,6 +473,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               subtitle: undefined,
               breadcrumbs: [
                 { label: "Threads", to: getRootComposeRoutePath() },
+                ...(archivedFolderName ? [{ label: archivedFolderName }] : []),
                 { label: "Archived" },
               ],
             }
@@ -507,7 +516,9 @@ export function AppLayout({ children }: AppLayoutProps) {
     }
     if (isArchivedView && projectId) {
       if (isProjectlessProjectId(projectId)) {
-        return "Threads · Archived";
+        return archivedFolderName
+          ? `${archivedFolderName} · Archived`
+          : "Threads · Archived";
       }
       return `${projectLabel ?? projectId} · Archived`;
     }

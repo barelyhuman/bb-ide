@@ -204,10 +204,12 @@ function dropRewindAddedTables(db: DbConnection): void {
   // Several tests migrate to head, rewind the schema to a legacy state, then
   // re-apply forward. Tables added by recent migrations must be dropped as part
   // of that rewind so the forward re-migrate can re-create them: the automations
-  // tables (added by 0039/0041) and app_theme (added by 0042).
+  // tables (added by 0039/0041), app_theme (added by 0042), and the thread
+  // folder schema (thread folder columns + thread_folders table).
   db.$client.prepare("DROP TABLE IF EXISTS automation_runs").run();
   db.$client.prepare("DROP TABLE IF EXISTS automations").run();
   db.$client.prepare("DROP TABLE IF EXISTS app_theme").run();
+  dropThreadFolderSchema(db);
 }
 
 function requirePublishedMigrationWhen(tag: string): number {
@@ -382,6 +384,24 @@ function dropPost0023Tables(db: DbConnection): void {
   ]) {
     db.$client.prepare(`DROP TABLE IF EXISTS ${table}`).run();
   }
+
+  dropThreadFolderSchema(db);
+}
+
+/**
+ * Folder schema lands in migration 0046. Replay scenarios that rewind the
+ * ledger past it must drop the schema too, or migrate() re-runs the ADD/CREATE
+ * against a DB that already has it.
+ */
+function dropThreadFolderSchema(db: DbConnection): void {
+  db.$client.exec("DROP INDEX IF EXISTS threads_folder_archived_deleted_idx;");
+  const threadColumns = db.$client
+    .prepare<[], TableInfoRow>("PRAGMA table_info(threads)")
+    .all();
+  if (threadColumns.some((row) => row.name === "folder_id")) {
+    db.$client.prepare("ALTER TABLE threads DROP COLUMN folder_id").run();
+  }
+  db.$client.exec("DROP TABLE IF EXISTS thread_folders;");
 }
 
 function restorePre0022ThreadTypeSchema(db: DbConnection): void {
@@ -505,6 +525,7 @@ function markEventLargeValuesMigrationUnapplied(db: DbConnection): void {
   restoreEnvironmentCleanupModeColumn(db);
   restoreEnvironmentCleanupRequestedAtColumn(db);
   restoreThreadStopRequestedAtColumn(db);
+  dropThreadFolderSchema(db);
   db.$client
     .prepare<DeleteMigrationParameters>(
       `
