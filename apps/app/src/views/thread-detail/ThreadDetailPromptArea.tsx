@@ -95,8 +95,6 @@ export const THREAD_DETAIL_COMPOSER_TEXTAREA_ID =
 
 interface ThreadDetailPromptAreaProps {
   canUseGitUi: boolean;
-  composerQueriesEnabled: boolean;
-  composerQueriesStaleTime?: number;
   contextWindowUsage?: ThreadTimelineResponse["contextWindowUsage"];
   environmentCheckout?: WorkspaceCheckoutDisplay;
   environmentCompactLabel?: string;
@@ -119,6 +117,7 @@ interface ThreadDetailPromptAreaProps {
   pullRequestMergeMethod: PullRequestMergeMethod;
   isEnvironmentActionPending: boolean;
   pendingInteractions: readonly PendingInteraction[];
+  pendingInteractionsInitialLoading: boolean;
   onChangedFileClick: (selection: WorkspaceChangedFileSelection) => void;
   openThreadDiffPanel: () => void;
   projectId: string;
@@ -177,8 +176,6 @@ interface SendQueuedMessageByIdArgs {
 
 export function ThreadDetailPromptArea({
   canUseGitUi,
-  composerQueriesEnabled,
-  composerQueriesStaleTime,
   contextWindowUsage,
   environmentCheckout,
   environmentCompactLabel,
@@ -193,6 +190,7 @@ export function ThreadDetailPromptArea({
   pullRequestMergeMethod,
   isEnvironmentActionPending,
   pendingInteractions,
+  pendingInteractionsInitialLoading,
   onChangedFileClick,
   openThreadDiffPanel,
   projectId,
@@ -212,12 +210,10 @@ export function ThreadDetailPromptArea({
   composerFocusRequestNonce,
   thread,
 }: ThreadDetailPromptAreaProps) {
-  const composerQueryThreadId = composerQueriesEnabled ? thread.id : "";
   const defaultExecutionOptionsQuery = useThreadDefaultExecutionOptions(
-    composerQueryThreadId,
+    thread.id,
     {
-      enabled: composerQueriesEnabled,
-      staleTime: composerQueriesStaleTime,
+      enabled: true,
     },
   );
   const defaultExecutionOptions = defaultExecutionOptionsQuery.data;
@@ -233,10 +229,9 @@ export function ThreadDetailPromptArea({
   const isDefaultExecutionOptionsLoading =
     defaultExecutionOptionsState === "loading";
   const { data: queuedMessages = [] } = useThreadQueuedMessages(
-    composerQueryThreadId,
+    thread.id,
     {
-      enabled: composerQueriesEnabled,
-      staleTime: composerQueriesStaleTime,
+      enabled: true,
     },
   );
   // Ref-backed lookup keeps queued-message action handlers stable across
@@ -276,10 +271,9 @@ export function ThreadDetailPromptArea({
     [processingQueuedMessage, queuedMessages],
   );
   const { data: promptHistoryEntries = [] } = useThreadPromptHistory(
-    composerQueryThreadId,
+    thread.id,
     {
-      enabled: composerQueriesEnabled,
-      staleTime: composerQueriesStaleTime,
+      enabled: true,
     },
   );
   const createQueuedMessage = useCreateThreadQueuedMessage();
@@ -384,7 +378,7 @@ export function ThreadDetailPromptArea({
     serviceTierSupportByProvider,
     executionInputSources,
   } = useThreadCreationOptions({
-    enabled: composerQueriesEnabled,
+    enabled: thread.archivedAt === null,
     environmentId: thread.environmentId ?? undefined,
     scope: "component-local",
     resetKey: thread.id,
@@ -438,6 +432,7 @@ export function ThreadDetailPromptArea({
     return buildFollowUpSubmitMode({
       hasPendingInteraction,
       isDefaultExecutionOptionsLoading,
+      isPendingInteractionsInitialLoading: pendingInteractionsInitialLoading,
       isStopRequested,
       onStop: handleStopThread,
       runtimeDisplayStatus,
@@ -446,6 +441,7 @@ export function ThreadDetailPromptArea({
     handleStopThread,
     hasPendingInteraction,
     isDefaultExecutionOptionsLoading,
+    pendingInteractionsInitialLoading,
     isStopRequested,
     runtimeDisplayStatus,
   ]);

@@ -649,6 +649,7 @@ export const publicApiRoutes = {
       ),
       response: jsonResponse<{ ok: true }>(),
     }),
+    /** @deprecated App code uses dedicated composer queries. */
     composerBootstrap: defineRoute({
       path: "/threads/:id/composer-bootstrap",
       method: "get",

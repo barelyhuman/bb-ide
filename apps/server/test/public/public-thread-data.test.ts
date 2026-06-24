@@ -34,19 +34,19 @@ import {
 import { renderTemplate } from "@bb/templates";
 import { z } from "zod";
 import { describe, expect, it } from "vitest";
+import { registerProviderHostRpcResponder } from "../helpers/host-rpc.js";
 import {
   reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
 } from "../helpers/commands.js";
-import { registerProviderHostRpcResponder } from "../helpers/host-rpc.js";
 import { readJson } from "../helpers/json.js";
 import { textInput } from "../helpers/prompt-input.js";
 import {
+  seedHost,
   seedQueuedMessage,
   seedEnvironment,
   seedEvent,
-  seedHost,
   seedHostSession,
   seedPrimaryHost,
   seedProjectWithSource,
@@ -2174,7 +2174,7 @@ describe("public thread data routes", () => {
     });
   });
 
-  it("loads thread composer bootstrap state", async () => {
+  it("loads legacy thread composer bootstrap state", async () => {
     await withTestHarness(async (harness) => {
       seedHostSession(harness.deps, {
         id: "host-composer-default",
@@ -2276,6 +2276,16 @@ describe("public thread data routes", () => {
         permissionMode: "workspace-write",
       });
       expect(bootstrap.queuedMessages).toHaveLength(1);
+      expect(bootstrap.queuedMessages[0]?.content).toEqual(
+        textInput("Queued message"),
+      );
+      expect(bootstrap.pendingInteractions).toEqual([]);
+      expect(bootstrap.promptHistory.map((entry) => entry.input)).toEqual(
+        expect.arrayContaining([
+          textInput("Accepted prompt"),
+          textInput("Queued message"),
+        ]),
+      );
       const { executionOptions } = bootstrap;
       if (executionOptions === null) {
         throw new Error(
@@ -2289,16 +2299,6 @@ describe("public thread data routes", () => {
         id: "codex",
       });
       expect(executionOptions.models[0]?.model).toBe("gpt-5.5");
-      expect(bootstrap.queuedMessages[0]?.content).toEqual(
-        textInput("Queued message"),
-      );
-      expect(bootstrap.pendingInteractions).toEqual([]);
-      expect(bootstrap.promptHistory.map((entry) => entry.input)).toEqual(
-        expect.arrayContaining([
-          textInput("Accepted prompt"),
-          textInput("Queued message"),
-        ]),
-      );
       expect(
         providerResponder.requests.map((request) => request.command),
       ).toEqual([
