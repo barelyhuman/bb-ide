@@ -416,8 +416,11 @@ export type {
 
 export {
   claimQueuedThreadMessage,
+  claimQueuedThreadMessageGroup,
   claimNextQueuedThreadMessage,
+  claimNextQueuedThreadMessageGroup,
   createQueuedThreadMessage,
+  deleteClaimedQueuedThreadMessageBatchInTransaction,
   deleteClaimedQueuedThreadMessage,
   deleteClaimedQueuedThreadMessageInTransaction,
   deleteQueuedThreadMessage,
@@ -427,12 +430,14 @@ export {
   releaseQueuedMessageClaim,
   releaseStaleQueuedMessageClaims,
   reorderQueuedThreadMessage,
+  setQueuedThreadMessageGroupBoundary,
 } from "./queued-thread-messages.js";
 export type {
   ClaimedQueuedThreadMessageRow,
   ClaimedQueuedThreadMessageMutationArgs,
   CreateQueuedThreadMessageInput,
   DeleteClaimedQueuedThreadMessageArgs,
+  DeleteClaimedQueuedThreadMessageBatchInTransactionArgs,
   DeleteClaimedQueuedThreadMessageInTransactionArgs,
   QueuedThreadMessageRow,
   QueuedMessageThreadRow,
@@ -440,6 +445,8 @@ export type {
   ReleaseStaleQueuedMessageClaimsArgs,
   ReorderQueuedThreadMessageArgs,
   ReorderQueuedThreadMessageResult,
+  SetQueuedThreadMessageGroupBoundaryArgs,
+  SetQueuedThreadMessageGroupBoundaryResult,
 } from "./queued-thread-messages.js";
 
 export {
