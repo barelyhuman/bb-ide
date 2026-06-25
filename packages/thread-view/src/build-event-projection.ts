@@ -124,6 +124,7 @@ interface BuildDetailedProjectionArgs {
   activeThinking: ActiveThinking | null;
   activeWorkflow: EventProjectionWorkflowMessage | null;
   activeBackgroundCommands: EventProjectionWorkflowMessage[];
+  contextOnlyToolCallIds?: ReadonlySet<string>;
   events: ThreadEventWithMeta[];
   messages: EventProjectionMessage[];
   turnMessageDetail: BuildEventProjectionOptions["turnMessageDetail"];
@@ -410,8 +411,9 @@ function shouldUseExplicitEventParentToolCallId({
     return true;
   }
   return (
-    typeof eventTurnId === "string" &&
-    state.delegationTurnIdsByCallId.get(parentToolCallId) === eventTurnId
+    typeof eventTurnId !== "string" ||
+    state.suppressedAcceptedRootParentToolCallIdsByTurnId.get(eventTurnId) !==
+      parentToolCallId
   );
 }
 
@@ -467,6 +469,16 @@ function buildFlatProjectionData(
       typeof eventTurnId === "string" &&
       acceptedRootClientTurnIds.has(eventTurnId);
     const decodedEventParentToolCallId = getEventParentToolCallId(decoded);
+    if (
+      decoded.type === "turn/started" &&
+      isAcceptedRootClientTurn &&
+      decodedEventParentToolCallId
+    ) {
+      state.suppressedAcceptedRootParentToolCallIdsByTurnId.set(
+        eventTurnId,
+        decodedEventParentToolCallId,
+      );
+    }
     const explicitEventParentToolCallId =
       shouldUseExplicitEventParentToolCallId({
         eventTurnId,
@@ -884,6 +896,8 @@ function buildDetailedProjection(
       activeWorkflow: args.activeWorkflow,
       activeBackgroundCommands: args.activeBackgroundCommands,
     },
+  }, {
+    contextOnlyToolCallIds: args.contextOnlyToolCallIds,
   });
   return applyProjectionTurnMessageDetail(
     semanticProjection,
@@ -907,6 +921,7 @@ function buildFullEventProjection(
     activeThinking: flatProjection.activeThinking,
     activeWorkflow: flatProjection.activeWorkflow,
     activeBackgroundCommands: flatProjection.activeBackgroundCommands,
+    contextOnlyToolCallIds: options.contextOnlyToolCallIds,
     events,
     messages: flatProjection.messages,
     turnMessageDetail: options.turnMessageDetail,
@@ -941,6 +956,7 @@ export function buildEventProjectionEntries(
     activeThinking: null,
     activeWorkflow: flatProjection.activeWorkflow,
     activeBackgroundCommands: flatProjection.activeBackgroundCommands,
+    contextOnlyToolCallIds: options.contextOnlyToolCallIds,
     events: orderedEvents,
     messages: flatProjection.messages,
     turnMessageDetail: options.turnMessageDetail,
