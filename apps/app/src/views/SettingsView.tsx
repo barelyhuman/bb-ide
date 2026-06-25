@@ -155,8 +155,10 @@ export interface ExperimentsSettingsSectionProps {
   onClaudeCodeMockCliTrafficEnabledChange: (enabled: boolean) => void;
   onPopoutChatEnabledChange: (enabled: boolean) => void;
   onPopoutChatHotkeyChange: (hotkey: string) => void;
+  onUiForkingEnabledChange: (enabled: boolean) => void;
   popoutChatEnabled: boolean;
   popoutChatHotkey: string;
+  uiForkingEnabled: boolean;
 }
 
 const THEME_PREFERENCE_OPTIONS: ReadonlyArray<ThemePreferenceOption> = [
@@ -662,6 +664,7 @@ export function GeneralSettingsSection({
 const CLAUDE_CODE_MOCK_CLI_TRAFFIC_EXPERIMENT_LABEL = "Mock CLI Traffic";
 const POPOUT_CHAT_EXPERIMENT_LABEL = "Popout chat";
 const POPOUT_CHAT_HOTKEY_LABEL = "Hotkey";
+const UI_FORKING_EXPERIMENT_LABEL = "UI forking";
 
 interface HotkeyRecorderProps {
   disabled: boolean;
@@ -845,8 +848,10 @@ export function ExperimentsSettingsSection({
   onClaudeCodeMockCliTrafficEnabledChange,
   onPopoutChatEnabledChange,
   onPopoutChatHotkeyChange,
+  onUiForkingEnabledChange,
   popoutChatEnabled,
   popoutChatHotkey,
+  uiForkingEnabled,
 }: ExperimentsSettingsSectionProps) {
   return (
     <SettingsSection
@@ -864,6 +869,18 @@ export function ExperimentsSettingsSection({
             disabled={disabled}
             onCheckedChange={onClaudeCodeMockCliTrafficEnabledChange}
             aria-label={CLAUDE_CODE_MOCK_CLI_TRAFFIC_EXPERIMENT_LABEL}
+          />
+        </SettingsWithControl>
+
+        <SettingsWithControl
+          label={UI_FORKING_EXPERIMENT_LABEL}
+          description="Let the bb CLI (bb ui) fork, edit, and live-reload the app's own frontend. Off keeps the shipped UI."
+        >
+          <Switch
+            checked={uiForkingEnabled}
+            disabled={disabled}
+            onCheckedChange={onUiForkingEnabledChange}
+            aria-label={UI_FORKING_EXPERIMENT_LABEL}
           />
         </SettingsWithControl>
 
@@ -1009,8 +1026,15 @@ export function SettingsView() {
               popoutChatHotkey: hotkey,
             })
           }
+          onUiForkingEnabledChange={(enabled) =>
+            updateExperimentsMutation.mutate({
+              ...experiments,
+              uiForking: enabled,
+            })
+          }
           popoutChatEnabled={experiments.popoutChat}
           popoutChatHotkey={experiments.popoutChatHotkey}
+          uiForkingEnabled={experiments.uiForking}
         />
       </div>
     </PageShell>
