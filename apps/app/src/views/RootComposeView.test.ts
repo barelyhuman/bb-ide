@@ -14,10 +14,14 @@ import {
   buildRootComposeTerminalSessions,
   buildMobileRecentThreads,
   canCreateRootComposeTerminal,
+  hasPromptBranchSelectionChanged,
+  hasPromptOptionValueChanged,
   hasSingleUseRootComposeTargetState,
+  mergeMissingPromptDraftAttachments,
   readFolderIdFromLocationState,
   readRootComposeFolderTargetFromLocationState,
   readInitialPromptFromLocationState,
+  restorePromptDraftAfterOptionChange,
   resolveRootComposeEffectiveEnvironmentValue,
   resolveRootComposePanelThreadId,
   shouldStartComposingFromLocationState,
@@ -235,6 +239,211 @@ describe("readRootComposeFolderTargetFromLocationState", () => {
   it("returns null when no folder target instruction is present", () => {
     expect(readRootComposeFolderTargetFromLocationState(null)).toBeNull();
     expect(readRootComposeFolderTargetFromLocationState({})).toBeNull();
+  });
+});
+
+describe("mergeMissingPromptDraftAttachments", () => {
+  it("restores attachments that disappeared during option changes", () => {
+    expect(
+      mergeMissingPromptDraftAttachments(
+        [
+          {
+            type: "localFile",
+            path: "notes.md",
+            name: "notes.md",
+            mimeType: "text/markdown",
+            sizeBytes: 32,
+          },
+        ],
+        [
+          {
+            type: "localImage",
+            path: "screenshot.png",
+            name: "screenshot.png",
+            mimeType: "image/png",
+            sizeBytes: 64,
+          },
+        ],
+      ),
+    ).toEqual([
+      {
+        type: "localFile",
+        path: "notes.md",
+        name: "notes.md",
+        mimeType: "text/markdown",
+        sizeBytes: 32,
+      },
+      {
+        type: "localImage",
+        path: "screenshot.png",
+        name: "screenshot.png",
+        mimeType: "image/png",
+        sizeBytes: 64,
+      },
+    ]);
+  });
+
+  it("leaves attachments alone when the preserved paths are still present", () => {
+    expect(
+      mergeMissingPromptDraftAttachments(
+        [
+          {
+            type: "localImage",
+            path: "screenshot.png",
+            name: "screenshot.png",
+            mimeType: "image/png",
+            sizeBytes: 64,
+          },
+        ],
+        [
+          {
+            type: "localImage",
+            path: "screenshot.png",
+            name: "screenshot.png",
+            mimeType: "image/png",
+            sizeBytes: 64,
+          },
+        ],
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("restorePromptDraftAfterOptionChange", () => {
+  it("restores a full text draft that an option change cleared", () => {
+    const mention = {
+      start: 0,
+      end: 7,
+      resource: {
+        kind: "path" as const,
+        path: "README.md",
+        source: "workspace" as const,
+        entryKind: "file" as const,
+        label: "README.md",
+      },
+    };
+
+    expect(
+      restorePromptDraftAfterOptionChange({
+        currentDraft: { text: "", mentions: [], attachments: [] },
+        preservedDraft: {
+          text: "README.md please",
+          mentions: [mention],
+          attachments: [
+            {
+              type: "localImage",
+              path: "screenshot.png",
+              name: "screenshot.png",
+              mimeType: "image/png",
+              sizeBytes: 64,
+            },
+          ],
+        },
+      }),
+    ).toEqual({
+      text: "README.md please",
+      mentions: [mention],
+      attachments: [
+        {
+          type: "localImage",
+          path: "screenshot.png",
+          name: "screenshot.png",
+          mimeType: "image/png",
+          sizeBytes: 64,
+        },
+      ],
+    });
+  });
+
+  it("merges missing attachments without replacing new draft text", () => {
+    expect(
+      restorePromptDraftAfterOptionChange({
+        currentDraft: {
+          text: "newer text",
+          mentions: [],
+          attachments: [],
+        },
+        preservedDraft: {
+          text: "older text",
+          mentions: [],
+          attachments: [
+            {
+              type: "localImage",
+              path: "screenshot.png",
+              name: "screenshot.png",
+              mimeType: "image/png",
+              sizeBytes: 64,
+            },
+          ],
+        },
+      }),
+    ).toEqual({
+      text: "newer text",
+      mentions: [],
+      attachments: [
+        {
+          type: "localImage",
+          path: "screenshot.png",
+          name: "screenshot.png",
+          mimeType: "image/png",
+          sizeBytes: 64,
+        },
+      ],
+    });
+  });
+
+  it("does not rewrite an unchanged draft", () => {
+    const draft = {
+      text: "ship this",
+      mentions: [],
+      attachments: [],
+    };
+
+    expect(
+      restorePromptDraftAfterOptionChange({
+        currentDraft: draft,
+        preservedDraft: draft,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("hasPromptOptionValueChanged", () => {
+  it("treats unchanged prompt option values as no-ops", () => {
+    expect(hasPromptOptionValueChanged("codex", "codex")).toBe(false);
+    expect(hasPromptOptionValueChanged(undefined, undefined)).toBe(false);
+  });
+
+  it("detects changed prompt option values", () => {
+    expect(hasPromptOptionValueChanged("codex", "claude")).toBe(true);
+    expect(hasPromptOptionValueChanged(undefined, "auto")).toBe(true);
+  });
+});
+
+describe("hasPromptBranchSelectionChanged", () => {
+  it("treats the same branch selection as a no-op", () => {
+    expect(
+      hasPromptBranchSelectionChanged(
+        { name: "main", isNew: false },
+        { name: "main", isNew: false },
+      ),
+    ).toBe(false);
+    expect(hasPromptBranchSelectionChanged(null, null)).toBe(false);
+  });
+
+  it("detects changed branch selections", () => {
+    expect(
+      hasPromptBranchSelectionChanged(
+        { name: "main", isNew: false },
+        { name: "main", isNew: true },
+      ),
+    ).toBe(true);
+    expect(
+      hasPromptBranchSelectionChanged({ name: "main", isNew: false }, null),
+    ).toBe(true);
+    expect(
+      hasPromptBranchSelectionChanged(null, { name: "develop", isNew: false }),
+    ).toBe(true);
   });
 });
 

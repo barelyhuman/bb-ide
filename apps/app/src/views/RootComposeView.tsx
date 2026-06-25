@@ -98,7 +98,13 @@ import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { promptHistoryEntriesToDrafts } from "@/lib/prompt-history";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
-import { promptDraftToInput } from "@/lib/prompt-draft";
+import {
+  arePromptDraftStatesEqual,
+  isPromptDraftEmpty,
+  promptDraftToInput,
+  type PromptDraftAttachment,
+  type PromptDraftState,
+} from "@/lib/prompt-draft";
 import {
   buildForkThreadRequest,
   FORK_THREAD_CREATE_SEED_LOCATION_STATE_KEY,
@@ -151,7 +157,10 @@ import {
   buildRootComposeBranchUiState,
   type RootComposeBranchEnvironmentMode,
 } from "./root-compose-branch-ui";
-import { resolveRootComposeThreadEnvironment } from "./root-compose-thread-environment";
+import {
+  resolveRootComposeThreadEnvironment,
+  type RootComposeSelectedBranch,
+} from "./root-compose-thread-environment";
 import { useScopedBranchSelection } from "./root-compose-branch-selection";
 import { RootComposeMobileRecents } from "./RootComposeMobileRecents";
 import { RootComposeEmptyWelcome } from "./RootComposeEmptyWelcome";
@@ -206,6 +215,90 @@ type SecondaryPanelChangeHandler = (panel: ThreadSecondaryPanelTab) => void;
 type NullableSecondaryPanelChangeHandler = (
   panel: ThreadSecondaryPanelTab | null,
 ) => void;
+
+export function mergeMissingPromptDraftAttachments(
+  currentAttachments: readonly PromptDraftAttachment[],
+  preservedAttachments: readonly PromptDraftAttachment[],
+): PromptDraftAttachment[] | null {
+  const existingPaths = new Set(
+    currentAttachments.map((attachment) => attachment.path),
+  );
+  const missingAttachments = preservedAttachments.filter(
+    (attachment) => !existingPaths.has(attachment.path),
+  );
+  if (missingAttachments.length === 0) {
+    return null;
+  }
+  return [...currentAttachments, ...missingAttachments];
+}
+
+export function restorePromptDraftAfterOptionChange({
+  currentDraft,
+  preservedDraft,
+}: {
+  currentDraft: PromptDraftState;
+  preservedDraft: PromptDraftState | null;
+}): PromptDraftState | null {
+  if (preservedDraft === null) {
+    return null;
+  }
+  if (arePromptDraftStatesEqual(currentDraft, preservedDraft)) {
+    return null;
+  }
+
+  let restoredDraft = currentDraft;
+  let changed = false;
+
+  if (isPromptDraftEmpty(currentDraft) && !isPromptDraftEmpty(preservedDraft)) {
+    restoredDraft = preservedDraft;
+    changed = true;
+  } else if (
+    currentDraft.text === preservedDraft.text &&
+    currentDraft.mentions !== preservedDraft.mentions &&
+    JSON.stringify(currentDraft.mentions) !==
+      JSON.stringify(preservedDraft.mentions)
+  ) {
+    restoredDraft = {
+      ...restoredDraft,
+      mentions: preservedDraft.mentions,
+    };
+    changed = true;
+  }
+
+  const mergedAttachments = mergeMissingPromptDraftAttachments(
+    restoredDraft.attachments,
+    preservedDraft.attachments,
+  );
+  if (mergedAttachments !== null) {
+    restoredDraft = {
+      ...restoredDraft,
+      attachments: mergedAttachments,
+    };
+    changed = true;
+  }
+
+  return changed ? restoredDraft : null;
+}
+
+export function hasPromptOptionValueChanged<T>(
+  currentValue: T,
+  nextValue: T,
+): boolean {
+  return !Object.is(currentValue, nextValue);
+}
+
+export function hasPromptBranchSelectionChanged(
+  currentBranch: RootComposeSelectedBranch | null,
+  nextBranch: RootComposeSelectedBranch | null,
+): boolean {
+  if (currentBranch === null || nextBranch === null) {
+    return currentBranch !== nextBranch;
+  }
+  return (
+    currentBranch.name !== nextBranch.name ||
+    currentBranch.isNew !== nextBranch.isNew
+  );
+}
 
 interface LegacyProjectComposeRedirectProps {
   projectId: string;
@@ -767,6 +860,7 @@ export function RootComposeView(props: RootComposeViewProps) {
   const primaryHostId = usePrimaryHost()?.id ?? null;
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ kind: "new-thread" });
+  const promptOptionDraftSnapshotRef = useRef<PromptDraftState | null>(null);
   const { data: projectPromptHistory = [] } =
     useProjectPromptHistory(projectId);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -855,6 +949,102 @@ export function RootComposeView(props: RootComposeViewProps) {
     serviceTierSupportByProvider,
   } = creationOptions;
   const executionInputSources = creationOptions.executionInputSources;
+  const snapshotPromptDraftBeforeOptionChange = useCallback(() => {
+    const currentDraft = promptDraft.getCurrent();
+    promptOptionDraftSnapshotRef.current = isPromptDraftEmpty(currentDraft)
+      ? null
+      : currentDraft;
+  }, [promptDraft]);
+  const handleSelectedProviderIdChange = useCallback(
+    (nextProviderId: string) => {
+      if (!hasPromptOptionValueChanged(selectedProviderId, nextProviderId)) {
+        return;
+      }
+      snapshotPromptDraftBeforeOptionChange();
+      setSelectedProviderId(nextProviderId);
+    },
+    [
+      selectedProviderId,
+      setSelectedProviderId,
+      snapshotPromptDraftBeforeOptionChange,
+    ],
+  );
+  const handleSelectedModelChange = useCallback(
+    (nextModel: string) => {
+      if (!hasPromptOptionValueChanged(selectedModel, nextModel)) {
+        return;
+      }
+      snapshotPromptDraftBeforeOptionChange();
+      setSelectedModel(nextModel);
+    },
+    [selectedModel, setSelectedModel, snapshotPromptDraftBeforeOptionChange],
+  );
+  const handleServiceTierChange = useCallback(
+    (nextServiceTier: ServiceTier | undefined) => {
+      if (!hasPromptOptionValueChanged(serviceTier, nextServiceTier)) {
+        return;
+      }
+      snapshotPromptDraftBeforeOptionChange();
+      setServiceTier(nextServiceTier);
+    },
+    [serviceTier, setServiceTier, snapshotPromptDraftBeforeOptionChange],
+  );
+  const handleReasoningLevelChange = useCallback(
+    (nextReasoningLevel: ReasoningLevel) => {
+      if (!hasPromptOptionValueChanged(reasoningLevel, nextReasoningLevel)) {
+        return;
+      }
+      snapshotPromptDraftBeforeOptionChange();
+      setReasoningLevel(nextReasoningLevel);
+    },
+    [reasoningLevel, setReasoningLevel, snapshotPromptDraftBeforeOptionChange],
+  );
+  const handlePermissionModeChange = useCallback(
+    (nextPermissionMode: PermissionMode) => {
+      if (!hasPromptOptionValueChanged(permissionMode, nextPermissionMode)) {
+        return;
+      }
+      snapshotPromptDraftBeforeOptionChange();
+      setPermissionMode(nextPermissionMode);
+    },
+    [permissionMode, setPermissionMode, snapshotPromptDraftBeforeOptionChange],
+  );
+  const handleEnvironmentSelectionValueChange = useCallback(
+    (nextEnvironmentValue: string) => {
+      if (
+        !hasPromptOptionValueChanged(
+          environmentSelectionValue,
+          nextEnvironmentValue,
+        )
+      ) {
+        return;
+      }
+      snapshotPromptDraftBeforeOptionChange();
+      setEnvironmentSelectionValue(nextEnvironmentValue);
+    },
+    [
+      environmentSelectionValue,
+      setEnvironmentSelectionValue,
+      snapshotPromptDraftBeforeOptionChange,
+    ],
+  );
+  useEffect(() => {
+    const preservedDraft = promptOptionDraftSnapshotRef.current;
+    if (preservedDraft === null) {
+      return;
+    }
+
+    promptOptionDraftSnapshotRef.current = null;
+    const restoredDraft = restorePromptDraftAfterOptionChange({
+      currentDraft: promptDraft.getCurrent(),
+      preservedDraft,
+    });
+    if (restoredDraft === null) {
+      return;
+    }
+
+    promptDraft.setDraft(restoredDraft);
+  });
   const providerCliSystemConfig = useSystemConfig();
   const providerCliDaemonPort = isLoopbackOrigin()
     ? (providerCliSystemConfig.data?.hostDaemonPort ?? null)
@@ -1030,6 +1220,8 @@ export function RootComposeView(props: RootComposeViewProps) {
     environmentValue: effectiveEnvironmentValue,
     projectId,
   });
+  const canChangeBranchSelection =
+    projectId !== undefined && effectiveEnvironmentValue !== "";
   const selectedBranchName = selectedBranch?.name ?? "";
   const hostBranchesQuery = useProjectSourceBranches(
     projectId,
@@ -1120,6 +1312,89 @@ export function RootComposeView(props: RootComposeViewProps) {
     },
     [refetchSourceBranches],
   );
+  const handlePromptBoxBranchChange = useCallback(
+    (branch: string) => {
+      const nextBranch: RootComposeSelectedBranch = {
+        name: branch,
+        isNew: false,
+      };
+      if (
+        !canChangeBranchSelection ||
+        !hasPromptBranchSelectionChanged(selectedBranch, nextBranch)
+      ) {
+        return;
+      }
+      snapshotPromptDraftBeforeOptionChange();
+      handleBranchChange(branch);
+    },
+    [
+      canChangeBranchSelection,
+      handleBranchChange,
+      selectedBranch,
+      snapshotPromptDraftBeforeOptionChange,
+    ],
+  );
+  const handlePromptBoxClearBranch = useCallback(() => {
+    if (
+      !canChangeBranchSelection ||
+      !hasPromptBranchSelectionChanged(selectedBranch, null)
+    ) {
+      return;
+    }
+    snapshotPromptDraftBeforeOptionChange();
+    handleClearBranch();
+  }, [
+    canChangeBranchSelection,
+    handleClearBranch,
+    selectedBranch,
+    snapshotPromptDraftBeforeOptionChange,
+  ]);
+  const handlePromptBoxCreateBranchFromSeed = useCallback(() => {
+    const branchName = selectedBranch?.name ?? branchSelectionSeed;
+    const nextBranch =
+      branchName === null
+        ? null
+        : {
+            name: branchName,
+            isNew: true,
+          };
+    if (
+      !canChangeBranchSelection ||
+      !hasPromptBranchSelectionChanged(selectedBranch, nextBranch)
+    ) {
+      return;
+    }
+    snapshotPromptDraftBeforeOptionChange();
+    handleCreateBranchFromSeed();
+  }, [
+    branchSelectionSeed,
+    canChangeBranchSelection,
+    handleCreateBranchFromSeed,
+    selectedBranch,
+    snapshotPromptDraftBeforeOptionChange,
+  ]);
+  const handlePromptBoxCreateBranchFrom = useCallback(
+    (branch: string) => {
+      const nextBranch: RootComposeSelectedBranch = {
+        name: branch,
+        isNew: true,
+      };
+      if (
+        !canChangeBranchSelection ||
+        !hasPromptBranchSelectionChanged(selectedBranch, nextBranch)
+      ) {
+        return;
+      }
+      snapshotPromptDraftBeforeOptionChange();
+      handleCreateBranchFrom(branch);
+    },
+    [
+      canChangeBranchSelection,
+      handleCreateBranchFrom,
+      selectedBranch,
+      snapshotPromptDraftBeforeOptionChange,
+    ],
+  );
 
   const selectedEnvironment = useMemo(
     () =>
@@ -1166,10 +1441,11 @@ export function RootComposeView(props: RootComposeViewProps) {
     (nextProjectId) => {
       const nextRootComposeProjectId = nextProjectId ?? PERSONAL_PROJECT_ID;
       if (nextRootComposeProjectId === projectId) return;
+      snapshotPromptDraftBeforeOptionChange();
       setForkSeed(null);
       setRootComposeProjectId(nextRootComposeProjectId);
     },
-    [projectId, setRootComposeProjectId],
+    [projectId, setRootComposeProjectId, snapshotPromptDraftBeforeOptionChange],
   );
   const shouldFocusPrompt =
     typeof location.state === "object" &&
@@ -2422,7 +2698,8 @@ export function RootComposeView(props: RootComposeViewProps) {
       provider: {
         options: providerOptions,
         selectedId: selectedProviderId,
-        onChange: forkSeed === null ? setSelectedProviderId : undefined,
+        onChange:
+          forkSeed === null ? handleSelectedProviderIdChange : undefined,
         hasMultiple: hasMultipleProviders,
       },
       model: {
@@ -2433,24 +2710,28 @@ export function RootComposeView(props: RootComposeViewProps) {
         isLoading: isLoadingModels,
         loadFailed: modelLoadFailed,
         loadError: modelLoadError,
-        onChange: setSelectedModel,
+        onChange: handleSelectedModelChange,
       },
       serviceTier: {
         value: serviceTier,
-        onChange: setServiceTier,
+        onChange: handleServiceTierChange,
         supported: supportsServiceTier,
         supportByProvider: serviceTierSupportByProvider,
       },
       reasoning: {
         value: reasoningLevel,
         options: reasoningOptions,
-        onChange: setReasoningLevel,
+        onChange: handleReasoningLevelChange,
       },
     }),
     [
       activeModel,
       forkSeed,
       hasMultipleProviders,
+      handleSelectedProviderIdChange,
+      handleReasoningLevelChange,
+      handleSelectedModelChange,
+      handleServiceTierChange,
       isLoadingModels,
       modelLoadFailed,
       modelLoadError,
@@ -2463,10 +2744,6 @@ export function RootComposeView(props: RootComposeViewProps) {
       selectedProviderId,
       serviceTier,
       serviceTierSupportByProvider,
-      setReasoningLevel,
-      setSelectedModel,
-      setSelectedProviderId,
-      setServiceTier,
       supportsServiceTier,
     ],
   );
@@ -2494,7 +2771,7 @@ export function RootComposeView(props: RootComposeViewProps) {
   const environmentConfig = useMemo(
     () => ({
       value: effectiveEnvironmentValue,
-      onChange: setEnvironmentSelectionValue,
+      onChange: handleEnvironmentSelectionValueChange,
       sources: projectSources,
       reuseDisabled: reuseThreadOptions.length === 0,
       disabled: isForkDraft,
@@ -2502,14 +2779,14 @@ export function RootComposeView(props: RootComposeViewProps) {
     [
       effectiveEnvironmentValue,
       isForkDraft,
+      handleEnvironmentSelectionValueChange,
       projectSources,
       reuseThreadOptions.length,
-      setEnvironmentSelectionValue,
     ],
   );
   const worktreeConfig = useMemo(() => {
     const handleWorktreeChange = (environmentId: string) => {
-      setEnvironmentSelectionValue(encodeReuseValue(environmentId));
+      handleEnvironmentSelectionValueChange(encodeReuseValue(environmentId));
     };
     return {
       options: reuseThreadOptions,
@@ -2522,9 +2799,9 @@ export function RootComposeView(props: RootComposeViewProps) {
     };
   }, [
     isForkDraft,
+    handleEnvironmentSelectionValueChange,
     parsedEnvironment,
     reuseThreadOptions,
-    setEnvironmentSelectionValue,
   ]);
   const branchConfig = useMemo(
     () => ({
@@ -2555,10 +2832,10 @@ export function RootComposeView(props: RootComposeViewProps) {
       createDisabledReason: branchUiState.mutationBlocker?.label,
       createDisabledTitle: branchUiState.mutationBlocker?.title,
       disabled: isForkDraft,
-      onChange: handleBranchChange,
-      onClear: handleClearBranch,
-      onCreate: handleCreateBranchFromSeed,
-      onCreateBaseChange: handleCreateBranchFrom,
+      onChange: handlePromptBoxBranchChange,
+      onClear: handlePromptBoxClearBranch,
+      onCreate: handlePromptBoxCreateBranchFromSeed,
+      onCreateBaseChange: handlePromptBoxCreateBranchFrom,
       onOpenChange: handleBranchOpenChange,
       onSearchQueryChange: setBranchSearchQuery,
     }),
@@ -2575,11 +2852,11 @@ export function RootComposeView(props: RootComposeViewProps) {
       branchUiState.placeholder,
       branchUiState.triggerLabel,
       branchUiState.triggerTitle,
-      handleBranchChange,
       handleBranchOpenChange,
-      handleClearBranch,
-      handleCreateBranchFromSeed,
-      handleCreateBranchFrom,
+      handlePromptBoxBranchChange,
+      handlePromptBoxClearBranch,
+      handlePromptBoxCreateBranchFromSeed,
+      handlePromptBoxCreateBranchFrom,
       setBranchSearchQuery,
       selectedBranch?.isNew,
       selectedBranch?.name,
@@ -2589,13 +2866,13 @@ export function RootComposeView(props: RootComposeViewProps) {
     () => ({
       value: permissionMode,
       options: permissionModeOptions,
-      onChange: setPermissionMode,
+      onChange: handlePermissionModeChange,
       supported: supportsPermissionModeSelection,
     }),
     [
+      handlePermissionModeChange,
       permissionMode,
       permissionModeOptions,
-      setPermissionMode,
       supportsPermissionModeSelection,
     ],
   );
