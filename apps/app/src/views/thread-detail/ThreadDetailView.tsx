@@ -2035,6 +2035,7 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
     <ThreadTerminalPanel
       canCreateTerminal={canCreateTerminal}
       onOpenLink={handleOpenTimelineLink}
+      onSelectionAddToChat={handleSelectionAddToChat}
       target={{ kind: "thread", threadId: thread.id }}
     />
   ) : isNewTabActive ? (
@@ -2056,6 +2057,7 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
       lineRange={activeWorkspaceFileLineRange}
       markdownLinkRouting={workspaceMarkdownLinkRouting}
       onOpenInEditor={handleOpenFileInEditor}
+      onSelectionAddToChat={handleSelectionAddToChat}
       source={activeWorkspaceFileSource}
       statusLabel={activeWorkspaceFileStatusLabel}
       threadId={thread.id}
@@ -2068,6 +2070,7 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
       lineRange={activeHostFileLineRange}
       markdownLinkRouting={hostMarkdownLinkRouting}
       onOpenInEditor={handleOpenHostFileInEditor}
+      onSelectionAddToChat={handleSelectionAddToChat}
       threadId={thread.id}
     />
   ) : activeStorageFilePath ? (
@@ -2077,6 +2080,7 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
       lineRange={activeStorageFileLineRange}
       markdownLinkRouting={storageMarkdownLinkRouting}
       onOpenInEditor={handleOpenStorageFileInEditor}
+      onSelectionAddToChat={handleSelectionAddToChat}
       threadId={thread.id}
     />
   ) : undefined;
@@ -2159,6 +2163,7 @@ export function ThreadDetailView(props: ThreadDetailViewProps) {
           onFileTabReorder: reorderFileTab,
           onOpenNewTab: handleOpenNewTab,
           onOpenFilePreview: handleOpenFilePreview,
+          onSelectionAddToChat: handleSelectionAddToChat,
           onPanelFocus: handleSecondaryPanelFocus,
           onPanelChange: handleSecondaryPanelChange,
           showGitDiffTab: canUseGitUi,
