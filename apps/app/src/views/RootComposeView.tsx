@@ -19,6 +19,7 @@ import {
   type ServiceTier,
   type ThreadListEntry,
 } from "@bb/domain";
+import type { OpenInTargetContext } from "@bb/host-daemon-contract";
 import type {
   SidebarBootstrapResponse,
   TerminalSession,
@@ -81,8 +82,7 @@ import {
 import { useEnvironment } from "@/hooks/queries/environment-queries";
 import { useProjectDefaultExecutionOptions } from "@/hooks/queries/project-default-execution-options-query";
 import {
-  useLocalProviderCliStatus,
-  useSystemConfig,
+  useHostProviderCliStatus,
 } from "@/hooks/queries/system-queries";
 import { useSidebarNavigation } from "@/hooks/queries/sidebar-navigation-query";
 import { useThreads } from "@/hooks/queries/thread-queries";
@@ -152,7 +152,6 @@ import {
   useRootComposeProjectId,
   useSetRootComposeProjectId,
 } from "@/lib/root-compose-selection";
-import { isLoopbackOrigin } from "@/lib/system-config-atoms";
 import { RootComposeSecondaryContent } from "./RootComposeSecondaryContent";
 import {
   buildRootComposeBranchUiState,
@@ -190,7 +189,7 @@ import { useThreadSecondaryPanelVisibility } from "./thread-detail/useThreadSeco
 import type { ThreadSecondaryPanelHostFileOpenHandler } from "./thread-detail/useThreadSecondaryPanelVisibility";
 import {
   buildOpenInEditorHandler,
-  resolveThreadLocalWorkspaceRootPath,
+  resolveEnvironmentOpenContext,
   resolveThreadWorkspacePreviewRootPath,
 } from "./thread-detail/threadWorkspaceOpenPath";
 import {
@@ -200,6 +199,24 @@ import {
 
 const ROOT_COMPOSE_ZEN_MODE_STORAGE_KEY = "bb.promptbox.zen-mode.root-compose";
 const ROOT_COMPOSE_SIDEBAR_ACTION_ALIGNED_TOP_PADDING_CLASS = "pt-14";
+
+function resolveHostOpenContext(args: {
+  hostId: string | null;
+  isLocal: boolean;
+  serverOrigin: string;
+}): OpenInTargetContext | null {
+  if (args.hostId === null) {
+    return null;
+  }
+  if (args.isLocal) {
+    return { kind: "local" };
+  }
+  return {
+    kind: "remote-ssh",
+    serverOrigin: args.serverOrigin,
+    hostId: args.hostId,
+  };
+}
 // Fill the scroll area and center the no-projects welcome both axes.
 const ROOT_COMPOSE_EMPTY_WELCOME_CONTENT_CLASS =
   "min-h-full flex-1 items-center justify-center pb-12";
@@ -1046,13 +1063,9 @@ export function RootComposeView(props: RootComposeViewProps) {
 
     promptDraft.setDraft(restoredDraft);
   });
-  const providerCliSystemConfig = useSystemConfig();
-  const providerCliDaemonPort = isLoopbackOrigin()
-    ? (providerCliSystemConfig.data?.hostDaemonPort ?? null)
-    : null;
-  const providerCliStatus = useLocalProviderCliStatus({
-    daemonPort: providerCliDaemonPort,
-    enabled: providerCliDaemonPort !== null,
+  const providerCliStatus = useHostProviderCliStatus({
+    hostId: primaryHostId,
+    enabled: primaryHostId !== null,
   });
   const refetchProviderCliStatus = providerCliStatus.refetch;
   const {
@@ -1060,7 +1073,7 @@ export function RootComposeView(props: RootComposeViewProps) {
     runningProvider,
     startInstall,
   } = useProviderCliInstallRunner({
-    daemonPort: providerCliDaemonPort,
+    hostId: primaryHostId,
     onStatusUpdated: () => {
       void refetchProviderCliStatus();
     },
@@ -2431,12 +2444,15 @@ export function RootComposeView(props: RootComposeViewProps) {
     ? isLocalDaemonHost(activeStorageEnvironment.hostId)
     : false;
   const activeWorkspaceFileProjectPreviewId =
-    activeWorkspaceFilePath !== null && activeWorkspaceFileEnvironmentId === null
+    activeWorkspaceFilePath !== null &&
+    activeWorkspaceFileEnvironmentId === null
       ? (activeWorkspaceFileProjectId ?? projectId)
       : null;
-  const localWorkspaceRootPath = resolveThreadLocalWorkspaceRootPath({
+  const serverOrigin = window.location.origin;
+  const activeWorkspaceOpenContext = resolveEnvironmentOpenContext({
     environment: activeWorkspaceEnvironment,
     threadEnvironmentIsLocal: activeWorkspaceEnvironmentIsLocal,
+    serverOrigin,
   });
   const workspacePreviewRootPath = resolveThreadWorkspacePreviewRootPath({
     environment: activeWorkspaceEnvironment,
@@ -2456,40 +2472,59 @@ export function RootComposeView(props: RootComposeViewProps) {
       ? (findLocalPathProjectSourceForHost(activeProjectSources, primaryHostId)
           ?.path ?? null)
       : null;
-  const {
-    canOpenPreferredFileTarget,
-    openPathInPreferredFileTarget,
-  } = useLocalOpenTargets({
-    enabled:
-      activeWorkspaceEnvironmentIsLocal ||
-      activeHostEnvironmentIsLocal ||
-      activeStorageEnvironmentIsLocal ||
-      projectSourcePreviewRootPath !== null,
+  const projectSourceOpenContext = resolveHostOpenContext({
+    hostId: projectSourcePreviewRootPath === null ? null : primaryHostId,
+    isLocal: isLocalDaemonHost(primaryHostId),
+    serverOrigin,
   });
+  const activeHostOpenContext = resolveEnvironmentOpenContext({
+    environment: activeHostEnvironment,
+    threadEnvironmentIsLocal: activeHostEnvironmentIsLocal,
+    serverOrigin,
+  });
+  const activeStorageOpenContext = resolveEnvironmentOpenContext({
+    environment: activeStorageEnvironment,
+    threadEnvironmentIsLocal: activeStorageEnvironmentIsLocal,
+    serverOrigin,
+  });
+  const activeOpenContext =
+    activeWorkspaceFilePath !== null &&
+    activeWorkspaceFileEnvironmentId !== null
+      ? activeWorkspaceOpenContext
+      : activeWorkspaceFilePath !== null &&
+          activeWorkspaceFileProjectPreviewId !== null
+        ? projectSourceOpenContext
+        : activeHostFilePath !== null
+          ? activeHostOpenContext
+          : activeStorageFilePath !== null
+            ? activeStorageOpenContext
+            : null;
+  const { canOpenPreferredFileTarget, openPathInPreferredFileTarget } =
+    useLocalOpenTargets({
+      enabled: activeOpenContext !== null,
+      ...(activeOpenContext ? { openContext: activeOpenContext } : {}),
+    });
   const handleOpenWorkspaceFileInEditor = useMemo(
     () =>
       buildOpenInEditorHandler({
-        rootPath: localWorkspaceRootPath,
+        rootPath: workspacePreviewRootPath,
         canOpenPreferredTarget: canOpenPreferredFileTarget,
         openInPreferredTarget: openPathInPreferredFileTarget,
       }),
     [
       canOpenPreferredFileTarget,
-      localWorkspaceRootPath,
       openPathInPreferredFileTarget,
+      workspacePreviewRootPath,
     ],
   );
   const handleOpenStorageFileInEditor = useMemo(
     () =>
       buildOpenInEditorHandler({
-        rootPath: activeStorageEnvironmentIsLocal
-          ? activeStorageFileRootPath
-          : null,
+        rootPath: activeStorageFileRootPath,
         canOpenPreferredTarget: canOpenPreferredFileTarget,
         openInPreferredTarget: openPathInPreferredFileTarget,
       }),
     [
-      activeStorageEnvironmentIsLocal,
       activeStorageFileRootPath,
       canOpenPreferredFileTarget,
       openPathInPreferredFileTarget,
@@ -2511,15 +2546,14 @@ export function RootComposeView(props: RootComposeViewProps) {
   const activeRootHostFileLineNumber = getFilePreviewLineRangeStart({
     lineRange: activeHostFileLineRange,
   });
-  const handleOpenHostFileInEditor =
-    activeHostEnvironmentIsLocal && canOpenPreferredFileTarget
-      ? (path: string) => {
-          void openPathInPreferredFileTarget({
-            lineNumber: activeRootHostFileLineNumber,
-            path,
-          });
-        }
-      : undefined;
+  const handleOpenHostFileInEditor = canOpenPreferredFileTarget
+    ? (path: string) => {
+        void openPathInPreferredFileTarget({
+          lineNumber: activeRootHostFileLineNumber,
+          path,
+        });
+      }
+    : undefined;
   const workspaceFileCopyPath = activeWorkspaceFilePath
     ? resolveAbsoluteFilePath({
         path: activeWorkspaceFilePath,

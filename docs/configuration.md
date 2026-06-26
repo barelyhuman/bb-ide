@@ -1,7 +1,8 @@
 # Configuration
 
 The packaged `npx bb-app` flow stores persistent package settings under
-`~/.bb/config.json` and provider environment values under `~/.bb/env.json`.
+`~/.bb/config.json`, provider environment values under `~/.bb/env.json`, and
+client SSH target mappings under `~/.bb/client.json`.
 
 Use `bb-app config` for non-secret bb settings:
 
@@ -25,12 +26,22 @@ npx bb-app env unset OPENAI_API_KEY
 `bb-app config list` shows non-secret values. `bb-app env list` redacts every
 value and only shows whether a key is set.
 
+Use `bb-app client ssh-target` to let a local helper open files from a remote
+bb server in local editors. The SSH target is the value that works after
+`ssh`, such as `devbox`, `user@devbox`, or a `Host` entry from `~/.ssh/config`:
+
+```bash
+npx bb-app client ssh-target set https://bb.example.test devbox
+npx bb-app client ssh-target list
+npx bb-app client ssh-target remove https://bb.example.test
+```
+
 ## Precedence
 
 Configuration is resolved in this order:
 
 1. Explicit launcher flags, such as `--data-dir` or `--server-port`.
-2. Persistent `bb-app config` and `bb-app env` values.
+2. Persistent `bb-app config`, `bb-app env`, and client values.
 3. Ambient shell environment.
 4. Built-in defaults.
 
@@ -74,6 +85,33 @@ provider env keys only when opting into a non-Codex provider route.
 `BB_SERVER_URL` does not change where full `npx bb-app` startup binds locally.
 It is for commands that need to target an already-running server, such as the
 bundled `bb` CLI or a standalone host daemon.
+
+## Client SSH Targets
+
+`~/.bb/client.json` is local to the machine showing the UI. The CLI resolves the
+remote server's host ID and stores a mapping from that server/work-host to an SSH
+target known to the local machine. The remote server does not read this file.
+
+Example:
+
+```json
+{
+  "servers": {
+    "https://bb.example.test": {
+      "hosts": {
+        "host_abc": {
+          "sshAuthority": "devbox"
+        }
+      }
+    }
+  }
+}
+```
+
+When a remote bb page asks the local helper to open a work-host path, the helper
+uses this mapping to launch remote-capable editors and terminals over SSH.
+Browsers or devices without a helper can still use bb; local editor actions are
+simply unavailable.
 
 ## Custom ACP Agents
 

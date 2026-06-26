@@ -6,6 +6,13 @@ import {
   buildLocalAppOrigins,
   type BuildLocalAppOriginsArgs,
 } from "@bb/config/local-app-origins";
+import {
+  formatClientConfigPath,
+  normalizeClientServerOrigin,
+  parseClientConfig,
+  resolveClientSshAuthority,
+  type ClientConfig,
+} from "@bb/config/client-config";
 import { assignIfDefined } from "@bb/config/objects";
 import {
   healthResponseSchema,
@@ -15,21 +22,24 @@ import {
   providerCliInstallRequestSchema,
   providerCliStatusResponseSchema,
   typedRoutes,
+  workspaceOpenTargetsQuerySchema,
   type HostDaemonLocalSchema,
   type HostPlatform,
   type OpenInTargetRequest,
   type WorkspaceOpenTarget,
+  type WorkspaceOpenTargetsQuery,
 } from "@bb/host-daemon-contract";
+import {
+  listWorkspaceOpenTargets,
+  openPathInTarget,
+  type OpenPathInTargetArgs,
+  WorkspaceOpenTargetError,
+} from "@bb/local-open-targets";
 import { sanitizeInheritedChildProcessEnv } from "@bb/process-utils";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import type { HostDaemonLocalApiConfig } from "./local-api-config.js";
-import {
-  listWorkspaceOpenTargets,
-  openPathInTarget,
-  WorkspaceOpenTargetError,
-} from "./workspace-open-targets.js";
 import {
   getProviderCliStatus,
   ProviderCliInstallInProgressError,
@@ -37,14 +47,24 @@ import {
 } from "./provider-cli-health.js";
 
 const execFileAsync = promisify(execFile);
-export type WorkspaceOpenTargetListHandler = () => Promise<
-  WorkspaceOpenTarget[]
->;
+export type WorkspaceOpenTargetListHandler = (
+  query: WorkspaceOpenTargetsQuery,
+) => Promise<WorkspaceOpenTarget[]>;
 export type OpenInTargetHandler = (
-  request: OpenInTargetRequest,
+  request: OpenPathInTargetArgs,
 ) => Promise<void>;
 
+/**
+ * Browser-reachable local HTTP API for colocated setups.
+ *
+ * Route ownership is documented in `@bb/host-daemon-contract/src/local.ts`.
+ * Some routes describe the UI/client machine, while others describe the
+ * work-host machine. Remote-client support should route work-host operations
+ * through the server and connected work host daemon instead of adding them to a
+ * client.
+ */
 export interface StartLocalApiServerOptions {
+  dataDir?: string;
   hostId: string;
   localApiConfig: HostDaemonLocalApiConfig;
   serverUrl: string;
@@ -77,6 +97,118 @@ export interface ResolveNativeFolderPickerOptions {
   platform?: NodeJS.Platform;
 }
 
+interface ClientConfigLoader {
+  load(): Promise<ClientConfig>;
+}
+
+interface ResolveOpenPathInTargetArgs {
+  configLoader: ClientConfigLoader;
+  request: OpenInTargetRequest;
+}
+
+const CLIENT_CONFIG_CACHE_TTL_MS = 1_000;
+const EMPTY_CLIENT_CONFIG: ClientConfig = { servers: {} };
+
+function isNoEntryError(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
+
+function createClientConfigLoader(
+  dataDir: string | undefined,
+  nowMs: () => number = Date.now,
+): ClientConfigLoader {
+  let cache: {
+    expiresAtMs: number;
+    promise: Promise<ClientConfig>;
+  } | null = null;
+
+  return {
+    async load(): Promise<ClientConfig> {
+      if (dataDir === undefined) {
+        return EMPTY_CLIENT_CONFIG;
+      }
+      const now = nowMs();
+      if (cache !== null && cache.expiresAtMs > now) {
+        return cache.promise;
+      }
+      cache = {
+        expiresAtMs: now + CLIENT_CONFIG_CACHE_TTL_MS,
+        promise: readClientConfig(dataDir),
+      };
+      return cache.promise;
+    },
+  };
+}
+
+async function readClientConfig(dataDir: string): Promise<ClientConfig> {
+  try {
+    return parseClientConfig(
+      JSON.parse(await fs.readFile(formatClientConfigPath(dataDir), "utf8")),
+    );
+  } catch (error) {
+    if (!isNoEntryError(error)) {
+      throw error;
+    }
+    return EMPTY_CLIENT_CONFIG;
+  }
+}
+
+async function isConfiguredClientOrigin(
+  origin: string,
+  configLoader: ClientConfigLoader,
+): Promise<boolean> {
+  try {
+    const serverOrigin = normalizeClientServerOrigin(origin);
+    const config = await configLoader.load();
+    return config.servers[serverOrigin] !== undefined;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveOpenPathInTargetArgs({
+  configLoader,
+  request,
+}: ResolveOpenPathInTargetArgs): Promise<OpenPathInTargetArgs> {
+  if (request.context.kind === "local") {
+    return {
+      columnNumber: request.columnNumber,
+      context: { kind: "local" },
+      lineNumber: request.lineNumber,
+      path: request.path,
+      targetId: request.targetId,
+    };
+  }
+
+  const serverOrigin = normalizeClientServerOrigin(
+    request.context.serverOrigin,
+  );
+  const config = await configLoader.load();
+  const sshAuthority = resolveClientSshAuthority(config, {
+    serverOrigin,
+    hostId: request.context.hostId,
+  });
+  if (sshAuthority === null) {
+    throw new WorkspaceOpenTargetError({
+      code: "remote_mapping_missing",
+      message: `No SSH target configured for host ${request.context.hostId} on ${serverOrigin}. Run: bb-app client ssh-target set ${serverOrigin} <ssh-target>`,
+    });
+  }
+
+  return {
+    columnNumber: request.columnNumber,
+    context: {
+      kind: "remote-ssh",
+      serverOrigin,
+      hostId: request.context.hostId,
+      sshAuthority,
+    },
+    lineNumber: request.lineNumber,
+    path: request.path,
+    targetId: request.targetId,
+  };
+}
+
 export function resolveNativeFolderPicker(
   options: ResolveNativeFolderPickerOptions,
 ): FolderPickerHandler | null {
@@ -105,6 +237,7 @@ export async function startLocalApiServer(
   options: StartLocalApiServerOptions,
 ): Promise<LocalApiServer> {
   const app = new Hono();
+  const clientConfigLoader = createClientConfigLoader(options.dataDir);
   const originArgs: BuildLocalAppOriginsArgs = {
     serverPort: options.serverPort,
   };
@@ -122,9 +255,13 @@ export async function startLocalApiServer(
   app.use(
     "*",
     cors({
-      origin: (origin, context) => {
+      origin: async (origin, context) => {
         const requestOrigin = new URL(context.req.url).origin;
-        if (origin === requestOrigin || allowedCorsOrigins.has(origin)) {
+        if (
+          origin === requestOrigin ||
+          allowedCorsOrigins.has(origin) ||
+          (await isConfiguredClientOrigin(origin, clientConfigLoader))
+        ) {
           return origin;
         }
         return null;
@@ -213,17 +350,25 @@ export async function startLocalApiServer(
     return c.json({ existence: Object.fromEntries(entries) });
   });
 
-  get("/workspace-open-targets", async (c) =>
-    c.json({
-      targets: await (
-        options.listWorkspaceOpenTargets ?? listWorkspaceOpenTargets
-      )(),
-    }),
+  get(
+    "/workspace-open-targets",
+    workspaceOpenTargetsQuerySchema,
+    async (c, query) =>
+      c.json({
+        targets: await (
+          options.listWorkspaceOpenTargets ?? listWorkspaceOpenTargets
+        )(query),
+      }),
   );
 
   post("/open-in-target", openInTargetRequestSchema, async (c, payload) => {
     try {
-      await (options.openInTarget ?? openPathInTarget)(payload);
+      await (options.openInTarget ?? openPathInTarget)(
+        await resolveOpenPathInTargetArgs({
+          configLoader: clientConfigLoader,
+          request: payload,
+        }),
+      );
     } catch (error) {
       if (error instanceof WorkspaceOpenTargetError) {
         throw new HTTPException(400, { message: error.message });

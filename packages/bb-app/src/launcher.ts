@@ -29,6 +29,12 @@ import {
   type BbAppManagedEnvFile,
 } from "@bb/config/bb-app-managed-config";
 import {
+  formatClientConfigPath,
+  normalizeClientServerOrigin,
+  parseClientConfig,
+  type ClientConfig,
+} from "@bb/config/client-config";
+import {
   validateInferenceModel,
   validateTranscriptionModel,
 } from "@bb/config/inference-model";
@@ -55,9 +61,12 @@ const MANAGED_PROCESS_RESTART_RETRY_DELAY_MS = 1_000;
 const START_COMMAND = "start";
 const HOST_DAEMON_COMMAND = "host-daemon";
 const HOST_DAEMON_JOIN_COMMAND = "join";
+const CLIENT_COMMAND = "client";
+const CLIENT_SSH_TARGET_COMMAND = "ssh-target";
 const CONFIG_COMMAND = "config";
 const ENV_COMMAND = "env";
 const SET_COMMAND = "set";
+const REMOVE_COMMAND = "remove";
 const CONFIG_UNSET_COMMAND = "unset";
 const CONFIG_LIST_COMMAND = "list";
 const CONFIG_REFRESH_COMMAND = "refresh";
@@ -84,11 +93,21 @@ const hostEnrollKeyResponseSchema = z
   })
   .passthrough();
 
+const clientHostSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1).optional(),
+    status: z.string().min(1).optional(),
+  })
+  .passthrough();
+const clientHostsResponseSchema = z.array(clientHostSchema);
+
 const apiErrorResponseSchema = z.object({
   message: z.string(),
 });
 
 export type HostEnrollKeyResponse = z.infer<typeof hostEnrollKeyResponseSchema>;
+type ClientHost = z.infer<typeof clientHostSchema>;
 export type ManagedConfigValues = BbAppManagedConfigValues;
 export type ManagedEnvConfig = BbAppManagedEnvConfig;
 export type ManagedEnvFile = BbAppManagedEnvFile;
@@ -170,6 +189,11 @@ export interface HostDaemonCommand {
   kind: "host-daemon";
 }
 
+export interface ClientCommand {
+  args: string[];
+  kind: "client";
+}
+
 export interface ConfigCommand {
   args: string[];
   kind: "config";
@@ -197,6 +221,7 @@ export interface LauncherCliOptions {
   hostId?: string;
   hostType?: string;
   joinCode?: string;
+  json?: boolean;
   serverPort?: string;
   serverUrl?: string;
 }
@@ -235,6 +260,7 @@ type ResolveWaitForProcessExitWithTimeout = (
   result: WaitForProcessExitWithTimeoutResult,
 ) => void;
 type BbAppCommand =
+  | ClientCommand
   | ConfigCommand
   | EnvCommand
   | HelpCommand
@@ -429,6 +455,11 @@ interface WriteManagedEnvFileArgs {
   dataDir: string;
 }
 
+interface WriteClientConfigFileArgs {
+  config: ClientConfig;
+  dataDir: string;
+}
+
 interface ResolveServerUrlArgs {
   config: ManagedConfig;
   defaultServerUrl: string;
@@ -460,6 +491,16 @@ interface RunEnvCommandArgs {
   args: string[];
   dataDir: string;
   serverUrl: string;
+}
+
+interface RunClientCommandArgs {
+  args: string[];
+  dataDir: string;
+  json: boolean;
+}
+
+interface ResolveClientSshTargetHostIdArgs {
+  serverOrigin: string;
 }
 
 interface RefreshRunningServerConfigArgs {
@@ -553,7 +594,7 @@ function supportedConfigKeysText(): string {
 }
 
 function createDefaultLauncherOptions(): LauncherCliOptions {
-  return { help: false };
+  return { help: false, json: false };
 }
 
 function trimToUndefined(value: string | undefined): string | undefined {
@@ -603,11 +644,13 @@ export function parseLauncherArgs(args: string[]): ParsedLauncherArgs {
       "server-port": { type: "string" },
       "server-url": { type: "string" },
       help: { short: "h", type: "boolean" },
+      json: { type: "boolean" },
       server: { type: "string" },
     },
   });
   const options: LauncherCliOptions = {
     help: readBooleanOption(parsed.values.help),
+    json: readBooleanOption(parsed.values.json),
   };
   const dataDir = readStringOption(parsed.values["data-dir"]);
   const enrollKey = readStringOption(parsed.values["enroll-key"]);
@@ -772,10 +815,7 @@ async function readManagedConfigForWrite(
     const parsedConfig = parseBbAppManagedConfig(parsedJson, {
       logger: launcherConfigWarningLogger,
     });
-    if (
-      isJsonObject(parsedJson) &&
-      Array.isArray(parsedJson.customAcpAgents)
-    ) {
+    if (isJsonObject(parsedJson) && Array.isArray(parsedJson.customAcpAgents)) {
       return {
         ...parsedConfig,
         customAcpAgents: parsedJson.customAcpAgents,
@@ -822,6 +862,36 @@ async function readManagedEnvFile(
     }
     throw error;
   }
+}
+
+async function readClientConfig(
+  args: ResolveManagedConfigArgs,
+): Promise<ClientConfig> {
+  try {
+    const rawConfig = await readFile(
+      formatClientConfigPath(args.dataDir),
+      "utf8",
+    );
+    return parseClientConfig(JSON.parse(rawConfig));
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error(
+        `Invalid client config JSON at ${formatClientConfigPath(args.dataDir)}`,
+      );
+    }
+    if (error instanceof z.ZodError) {
+      throw new Error(
+        `Invalid client config at ${formatClientConfigPath(args.dataDir)}: ${error.message}`,
+      );
+    }
+    if (
+      !(error instanceof Error && "code" in error && error.code === "ENOENT")
+    ) {
+      throw error;
+    }
+  }
+
+  return { servers: {} };
 }
 
 function createManagedConfigValuePatch(
@@ -997,6 +1067,28 @@ async function writeManagedEnvFile(
   }
 }
 
+async function writeClientConfigFile(
+  args: WriteClientConfigFileArgs,
+): Promise<void> {
+  await mkdir(args.dataDir, { recursive: true });
+  const configPath = formatClientConfigPath(args.dataDir);
+  const tempPath = join(
+    args.dataDir,
+    `.client.json.${process.pid}.${randomUUID()}.tmp`,
+  );
+
+  try {
+    await writeFile(tempPath, `${JSON.stringify(args.config, null, 2)}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    await rename(tempPath, configPath);
+  } catch (error) {
+    await unlink(tempPath).catch(() => undefined);
+    throw error;
+  }
+}
+
 const BB_APP_VERSION_DEV_FALLBACK = "0.0.0-dev";
 
 export function readBbAppPackageVersion(packageRoot: string): string {
@@ -1147,6 +1239,13 @@ export function resolveBbAppCommand(args: string[]): BbAppCommand {
     };
   }
 
+  if (args[0] === CLIENT_COMMAND) {
+    return {
+      args: args.slice(1),
+      kind: "client",
+    };
+  }
+
   if (args[0] === CONFIG_COMMAND) {
     return {
       args: args.slice(1),
@@ -1200,6 +1299,19 @@ Usage:
 
 Env file:
   ${formatBbAppEnvPath(dataDir)}
+`);
+}
+
+function printClientHelp(dataDir: string): void {
+  process.stdout.write(`bb-app client
+
+Usage:
+  bb-app client ssh-target list [--json]
+  bb-app client ssh-target set <server-origin> <ssh-target>
+  bb-app client ssh-target remove <server-origin>
+
+Config file:
+  ${formatClientConfigPath(dataDir)}
 `);
 }
 
@@ -1302,9 +1414,7 @@ function formatManagedConfig(config: ManagedConfig): string {
       `customModels[${index}]=${customModel.providerId}:${customModel.model}`,
     );
   }
-  for (const [index, customAgent] of (
-    config.customAcpAgents ?? []
-  ).entries()) {
+  for (const [index, customAgent] of (config.customAcpAgents ?? []).entries()) {
     lines.push(
       `customAcpAgents[${index}]=${formatCustomAcpAgentProviderId(customAgent.id)}:${customAgent.command}`,
     );
@@ -1322,6 +1432,96 @@ function formatManagedEnv(config: ManagedEnvFile): string {
     return "No bb-app env set.\n";
   }
   return `${keys.map((key) => `${key}=<set>`).join("\n")}\n`;
+}
+
+function formatClientHost(host: ClientHost): string {
+  return host.name === undefined || host.name === host.id
+    ? host.id
+    : `${host.id} (${host.name})`;
+}
+
+async function resolveClientSshTargetHostId(
+  args: ResolveClientSshTargetHostIdArgs,
+): Promise<string> {
+  const serverOrigin = normalizeClientServerOrigin(args.serverOrigin);
+  const hostsUrl = new URL("/api/v1/hosts", serverOrigin);
+  const response = await fetch(hostsUrl);
+  if (!response.ok) {
+    throw new Error(
+      `Failed to list hosts from ${serverOrigin}: HTTP ${response.status}`,
+    );
+  }
+
+  const hosts = clientHostsResponseSchema.parse(await response.json());
+  const connectedHosts = hosts.filter((host) => host.status === "connected");
+  const candidates = connectedHosts.length > 0 ? connectedHosts : hosts;
+
+  if (candidates.length === 1) {
+    return candidates[0].id;
+  }
+  if (candidates.length === 0) {
+    throw new Error(`No hosts found on ${serverOrigin}`);
+  }
+
+  throw new Error(
+    [
+      `Expected exactly one host on ${serverOrigin}, but found ${candidates.length}.`,
+      `Hosts: ${candidates.map(formatClientHost).join(", ")}`,
+    ].join(" "),
+  );
+}
+
+function setClientSshTarget(
+  config: ClientConfig,
+  rawServerOrigin: string,
+  hostId: string,
+  sshAuthority: string,
+): ClientConfig {
+  const serverOrigin = normalizeClientServerOrigin(rawServerOrigin);
+  const nextConfig: ClientConfig = {
+    servers: {
+      ...config.servers,
+    },
+  };
+  const serverConfig = nextConfig.servers[serverOrigin] ?? { hosts: {} };
+  nextConfig.servers[serverOrigin] = {
+    hosts: {
+      ...serverConfig.hosts,
+      [hostId]: { sshAuthority },
+    },
+  };
+  return parseClientConfig(nextConfig);
+}
+
+function removeClientSshTarget(
+  config: ClientConfig,
+  rawServerOrigin: string,
+): ClientConfig {
+  const serverOrigin = normalizeClientServerOrigin(rawServerOrigin);
+  const nextServers = { ...config.servers };
+  delete nextServers[serverOrigin];
+  return { servers: nextServers };
+}
+
+function formatClientSshTargets(config: ClientConfig, json: boolean): string {
+  if (json) {
+    return `${JSON.stringify(config, null, 2)}\n`;
+  }
+
+  const lines: string[] = [];
+  for (const serverOrigin of Object.keys(config.servers).sort()) {
+    const hosts = config.servers[serverOrigin]?.hosts ?? {};
+    for (const hostId of Object.keys(hosts).sort()) {
+      const sshAuthority = hosts[hostId]?.sshAuthority;
+      if (sshAuthority !== undefined) {
+        lines.push(`${serverOrigin} ${hostId} ${sshAuthority}`);
+      }
+    }
+  }
+
+  return lines.length > 0
+    ? `${lines.join("\n")}\n`
+    : "No client SSH targets set.\n";
 }
 
 async function refreshRunningServerConfig(
@@ -1486,6 +1686,91 @@ async function runEnvCommand(args: RunEnvCommandArgs): Promise<void> {
   });
   process.stdout.write(`Set ${key} in ${formatBbAppEnvPath(args.dataDir)}\n`);
   await refreshRunningServerConfigAfterWrite(args.serverUrl);
+}
+
+async function runClientCommand(args: RunClientCommandArgs): Promise<void> {
+  const commandArgs = args.args;
+  if (
+    commandArgs.length === 0 ||
+    (commandArgs.length === 1 &&
+      (commandArgs[0] === "help" ||
+        commandArgs[0] === "--help" ||
+        commandArgs[0] === "-h"))
+  ) {
+    printClientHelp(args.dataDir);
+    return;
+  }
+
+  if (commandArgs[0] !== CLIENT_SSH_TARGET_COMMAND) {
+    throw new Error(
+      `Unsupported bb-app client command "${commandArgs[0]}". Use "ssh-target".`,
+    );
+  }
+
+  const subcommand = commandArgs[1];
+  if (subcommand === CONFIG_LIST_COMMAND || subcommand === undefined) {
+    if (commandArgs.length > 2) {
+      throw new Error("Usage: bb-app client ssh-target list [--json]");
+    }
+    process.stdout.write(
+      formatClientSshTargets(
+        await readClientConfig({ dataDir: args.dataDir }),
+        args.json,
+      ),
+    );
+    return;
+  }
+
+  if (subcommand === SET_COMMAND) {
+    if (commandArgs.length !== 4) {
+      throw new Error(
+        "Usage: bb-app client ssh-target set <server-origin> <ssh-target>",
+      );
+    }
+    const serverOrigin = commandArgs[2];
+    const sshAuthority = commandArgs[3].trim();
+    if (sshAuthority.length === 0) {
+      throw new Error("SSH target must not be empty");
+    }
+    const hostId = await resolveClientSshTargetHostId({
+      serverOrigin,
+    });
+    const nextConfig = setClientSshTarget(
+      await readClientConfig({ dataDir: args.dataDir }),
+      serverOrigin,
+      hostId,
+      sshAuthority,
+    );
+    await writeClientConfigFile({
+      config: nextConfig,
+      dataDir: args.dataDir,
+    });
+    process.stdout.write(
+      `Set client SSH target in ${formatClientConfigPath(args.dataDir)}\n`,
+    );
+    return;
+  }
+
+  if (subcommand === REMOVE_COMMAND) {
+    if (commandArgs.length !== 3) {
+      throw new Error("Usage: bb-app client ssh-target remove <server-origin>");
+    }
+    await writeClientConfigFile({
+      config: removeClientSshTarget(
+        await readClientConfig({ dataDir: args.dataDir }),
+        commandArgs[2],
+      ),
+      dataDir: args.dataDir,
+    });
+    process.stdout.write(
+      `Removed client SSH target from ${formatClientConfigPath(args.dataDir)}\n`,
+    );
+    return;
+  }
+
+  throw new Error(
+    `Unsupported bb-app client ssh-target command "${subcommand}". Use list, set, or remove.`,
+  );
 }
 
 function requiredArtifactPaths(context: BbAppStartContext): ArtifactPath[] {
@@ -2199,6 +2484,7 @@ Usage:
   bb-app config set <key> <value>
   bb-app config refresh
   bb-app env set <key> <value>
+  bb-app client ssh-target set <server-origin> <ssh-target>
   bb-app host-daemon [--server-url <url>] [--host-id <id>] [--host-type <type>] [--enroll-key <key>]
   bb-app host-daemon join --server-url <url>
 
@@ -2457,6 +2743,15 @@ export async function runBbApp(
       args: command.args,
       dataDir: runtime.context.dataDir,
       serverUrl: runtime.context.serverUrl,
+    });
+    return;
+  }
+
+  if (command.kind === "client") {
+    await runClientCommand({
+      args: command.args,
+      dataDir: runtime.context.dataDir,
+      json: parsedArgs.options.json === true,
     });
     return;
   }

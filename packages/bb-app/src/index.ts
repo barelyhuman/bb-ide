@@ -17,6 +17,7 @@ export {
 export type {
   BbAppStartContext,
   BbAppRuntimeState,
+  ClientCommand,
   ConfigCommand,
   CreateHostEnrollKeyRequestBodyArgs,
   EnvCommand,

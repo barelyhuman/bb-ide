@@ -65,6 +65,12 @@ interface ConfigReloadTestServer {
   url: string;
 }
 
+interface HostListTestServer {
+  close(): Promise<void>;
+  requests(): string[];
+  url: string;
+}
+
 interface ConfigReloadRequest {
   host: string | undefined;
   method: string | undefined;
@@ -360,6 +366,55 @@ async function startConfigReloadTestServer(): Promise<ConfigReloadTestServer> {
   };
 }
 
+async function startHostListTestServer(
+  hosts: unknown[],
+): Promise<HostListTestServer> {
+  const requests: string[] = [];
+  const server = createServer(
+    (request: IncomingMessage, response: ServerResponse) => {
+      requests.push(`${request.method ?? ""} ${request.url ?? ""}`);
+      if (request.method === "GET" && request.url === "/api/v1/hosts") {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify(hosts));
+        return;
+      }
+      response.writeHead(404, { "content-type": "application/json" });
+      response.end(JSON.stringify({ code: "not_found", message: "Not found" }));
+    },
+  );
+
+  await new Promise<void>((resolvePromise, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      resolvePromise();
+    });
+  });
+
+  const address = server.address();
+  if (typeof address === "string" || address === null) {
+    throw new Error("Expected test server to listen on a TCP port");
+  }
+  const addressInfo: AddressInfo = address;
+
+  return {
+    async close(): Promise<void> {
+      await new Promise<void>((resolvePromise, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolvePromise();
+        });
+      });
+    },
+    requests(): string[] {
+      return [...requests];
+    },
+    url: `http://127.0.0.1:${addressInfo.port}`,
+  };
+}
+
 function readPackageMetadata(): PackageMetadata {
   const testDir = dirname(fileURLToPath(import.meta.url));
   return packageMetadataSchema.parse(
@@ -492,6 +547,21 @@ describe("bb-app launcher", () => {
     });
   });
 
+  it("resolves client commands", () => {
+    expect(
+      resolveBbAppCommand([
+        "client",
+        "ssh-target",
+        "set",
+        "https://bb.example.test",
+        "devbox",
+      ]),
+    ).toEqual({
+      args: ["ssh-target", "set", "https://bb.example.test", "devbox"],
+      kind: "client",
+    });
+  });
+
   it("prints help for help requests", () => {
     expect(resolveBbAppCommand(["--help"])).toEqual({ kind: "help" });
     expect(resolveBbAppCommand(["help"])).toEqual({ kind: "help" });
@@ -517,9 +587,22 @@ describe("bb-app launcher", () => {
         help: false,
         hostDaemonPort: "48887",
         hostType: "persistent",
+        json: false,
         serverUrl: "https://bb.example.test",
       },
       positionals: ["host-daemon", "join"],
+    });
+  });
+
+  it("parses the json launcher flag", () => {
+    expect(
+      parseLauncherArgs(["client", "ssh-target", "list", "--json"]),
+    ).toEqual({
+      options: {
+        help: false,
+        json: true,
+      },
+      positionals: ["client", "ssh-target", "list"],
     });
   });
 
@@ -692,6 +775,62 @@ describe("bb-app launcher", () => {
     );
     expect(statSync(join(dataDir, "config.json")).mode & 0o777).toBe(0o600);
     expect(statSync(join(dataDir, "env.json")).mode & 0o777).toBe(0o600);
+  });
+
+  it("stores client SSH targets from the client command", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "bb-client-command-"));
+    const server = await startHostListTestServer([
+      {
+        id: "host_1",
+        name: "mbp-intel",
+        status: "connected",
+      },
+    ]);
+
+    try {
+      await runBbApp([
+        "--data-dir",
+        dataDir,
+        "client",
+        "ssh-target",
+        "set",
+        `${server.url}/projects/proj_1`,
+        "mbp-intel",
+      ]);
+
+      expect(server.requests()).toContain("GET /api/v1/hosts");
+      expect(
+        JSON.parse(readFileSync(join(dataDir, "client.json"), "utf8")),
+      ).toEqual({
+        servers: {
+          [server.url]: {
+            hosts: {
+              host_1: {
+                sshAuthority: "mbp-intel",
+              },
+            },
+          },
+        },
+      });
+      expect(statSync(join(dataDir, "client.json")).mode & 0o777).toBe(0o600);
+
+      await runBbApp([
+        "--data-dir",
+        dataDir,
+        "client",
+        "ssh-target",
+        "remove",
+        server.url,
+      ]);
+
+      expect(
+        JSON.parse(readFileSync(join(dataDir, "client.json"), "utf8")),
+      ).toEqual({
+        servers: {},
+      });
+    } finally {
+      await server.close();
+    }
   });
 
   it("preserves customModels across managed config writes", async () => {
