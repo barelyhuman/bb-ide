@@ -1486,25 +1486,16 @@ describe("bridge", () => {
         isDefault: false,
       }),
       expect.objectContaining({
-        id: "claude-sonnet-4-6[1m]",
-        model: "claude-sonnet-4-6[1m]",
-        displayName: "Sonnet 4.6 (1M)",
-        isDefault: false,
-      }),
-      expect.objectContaining({
-        id: "claude-sonnet-4-6",
-        model: "claude-sonnet-4-6",
-        displayName: "Sonnet 4.6",
-        isDefault: false,
-      }),
-      expect.objectContaining({
-        id: "claude-haiku-4-5",
-        model: "claude-haiku-4-5",
-        displayName: "Haiku 4.5",
+        id: "claude-sonnet-5",
+        model: "claude-sonnet-5",
+        displayName: "Sonnet 5",
         isDefault: false,
       }),
     ]);
     expect(selectedOnlyModels.map((model) => model.model)).toEqual([
+      "claude-sonnet-4-6[1m]",
+      "claude-sonnet-4-6",
+      "claude-haiku-4-5",
       "claude-opus-4-8",
       "claude-opus-4-7",
       "claude-opus-4-6[1m]",

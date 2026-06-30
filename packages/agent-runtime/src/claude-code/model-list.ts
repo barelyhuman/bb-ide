@@ -56,6 +56,7 @@ const CLAUDE_MYTHOS_5_MODEL = "claude-mythos-5";
 const CLAUDE_OPUS_4_8_MODEL = "claude-opus-4-8";
 const CLAUDE_OPUS_4_7_MODEL = "claude-opus-4-7";
 const CLAUDE_OPUS_4_6_MODEL = "claude-opus-4-6";
+const CLAUDE_SONNET_5_MODEL = "claude-sonnet-5";
 const CLAUDE_SONNET_4_6_MODEL = "claude-sonnet-4-6";
 const CLAUDE_HAIKU_4_5_MODEL = "claude-haiku-4-5";
 
@@ -65,9 +66,9 @@ function withOneMillionContext(model: string): string {
 
 const DEFAULT_CLAUDE_CODE_MODEL = withOneMillionContext(CLAUDE_OPUS_4_8_MODEL);
 
-// Keep the active catalog version-pinned. Moving aliases and retired model
-// strings live in the selected-only catalog so existing stored selections can
-// render with their proper label without being offered as fresh choices.
+// Keep the active catalog version-pinned. Secondary "More models" choices,
+// moving aliases, and retired model strings live in the selected-only catalog
+// so existing stored selections can render with their proper label.
 const CLAUDE_CODE_CATALOG: readonly ClaudeCodeCatalogEntry[] = [
   {
     id: CLAUDE_FABLE_5_MODEL,
@@ -103,6 +104,17 @@ const CLAUDE_CODE_CATALOG: readonly ClaudeCodeCatalogEntry[] = [
     defaultReasoningEffort: "medium",
   },
   {
+    id: CLAUDE_SONNET_5_MODEL,
+    model: CLAUDE_SONNET_5_MODEL,
+    displayName: "Sonnet 5",
+    description: "Sonnet 5 for everyday coding tasks with deeper reasoning",
+    supportedReasoningEfforts: XHIGH_CAPABLE_REASONING_EFFORTS,
+    defaultReasoningEffort: "medium",
+  },
+];
+
+const CLAUDE_CODE_SELECTED_ONLY_CATALOG: readonly ClaudeCodeCatalogEntry[] = [
+  {
     id: withOneMillionContext(CLAUDE_SONNET_4_6_MODEL),
     model: withOneMillionContext(CLAUDE_SONNET_4_6_MODEL),
     displayName: "Sonnet 4.6 (1M)",
@@ -126,9 +138,6 @@ const CLAUDE_CODE_CATALOG: readonly ClaudeCodeCatalogEntry[] = [
     supportedReasoningEfforts: HAIKU_REASONING_EFFORTS,
     defaultReasoningEffort: "low",
   },
-];
-
-const CLAUDE_CODE_SELECTED_ONLY_CATALOG: readonly ClaudeCodeCatalogEntry[] = [
   {
     id: CLAUDE_OPUS_4_8_MODEL,
     model: CLAUDE_OPUS_4_8_MODEL,
