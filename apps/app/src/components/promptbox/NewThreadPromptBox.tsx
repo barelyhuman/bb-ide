@@ -61,6 +61,7 @@ export interface NewThreadEnvironmentConfig {
   /** When true, the picker's "Reuse existing worktree" entry is disabled.
    * Caller signals the project has no worktree envs available. */
   reuseDisabled?: boolean;
+  worktreeDisabledReason?: string | null;
   disabled?: boolean;
 }
 
@@ -68,6 +69,7 @@ export interface NewThreadBranchConfig {
   value: string | null;
   currentBranch?: string | null;
   isNew: boolean;
+  hidden?: boolean;
   options: readonly string[];
   remoteOptions?: readonly string[];
   priorityOptions?: readonly string[];
@@ -315,13 +317,18 @@ interface ThreadEnvSlotProps {
   worktree: NewThreadWorktreeConfig;
 }
 
-function ThreadEnvSlot({ environment, branch, worktree }: ThreadEnvSlotProps) {
+export function ThreadEnvSlot({
+  environment,
+  branch,
+  worktree,
+}: ThreadEnvSlotProps) {
   const parsedEnvironment = useMemo(
     () => parseEnvironmentValue(environment.value),
     [environment.value],
   );
   const branchMenuKind = getBranchPickerMenuKind({ parsedEnvironment });
-  const showBranchPicker = parsedEnvironment?.type === "host";
+  const showBranchPicker =
+    parsedEnvironment?.type === "host" && branch.hidden !== true;
   const showWorktreePicker = parsedEnvironment?.type === "reuse";
   return (
     <>
@@ -332,6 +339,7 @@ function ThreadEnvSlot({ environment, branch, worktree }: ThreadEnvSlotProps) {
         host={environment.host}
         isLocal={environment.isLocal}
         reuseDisabled={environment.reuseDisabled}
+        worktreeDisabledReason={environment.worktreeDisabledReason}
         disabled={environment.disabled}
         className="shrink-0"
         muted
@@ -386,6 +394,7 @@ export interface NewThreadConnectedEnvironmentConfig {
   /** When true, the "Reuse existing worktree" entry in the env picker is
    * disabled — caller signals the project has no worktree envs available. */
   reuseDisabled?: boolean;
+  worktreeDisabledReason?: string | null;
   disabled?: boolean;
 }
 
@@ -393,6 +402,7 @@ export interface NewThreadConnectedBranchConfig {
   value: string | null;
   currentBranch?: string | null;
   isNew: boolean;
+  hidden?: boolean;
   options: readonly string[];
   remoteOptions?: readonly string[];
   loading?: boolean;
@@ -481,6 +491,7 @@ function ConnectedThreadModeBranch({
       value: branch.value,
       currentBranch: branch.currentBranch,
       isNew: allowCreate && branch.isNew,
+      hidden: branch.hidden,
       options: branch.options,
       remoteOptions: branch.remoteOptions,
       loading: branch.loading,

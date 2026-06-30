@@ -21,6 +21,7 @@ import {
 } from "@bb/domain";
 import type { OpenInTargetContext } from "@bb/host-daemon-contract";
 import type {
+  ProjectBranchesResponse,
   SidebarBootstrapResponse,
   TerminalSession,
 } from "@bb/server-contract";
@@ -387,6 +388,9 @@ interface ResolveRootComposeEffectiveEnvironmentValueArgs {
   reuseThreadOptionsLoading: boolean;
 }
 
+const PROJECT_SOURCE_WORKTREE_DISABLED_REASON =
+  "Project source is not a git repository";
+
 interface ShouldNavigateAfterThreadCreateArgs {
   isForkDraft: boolean;
   navigateToThreadAfterCreate: boolean;
@@ -620,6 +624,12 @@ function buildReuseThreadOptions(
     return left.environmentId.localeCompare(right.environmentId);
   });
   return options;
+}
+
+export function isProjectSourceWorktreeUnavailable(
+  data: ProjectBranchesResponse | undefined,
+): boolean {
+  return data?.checkout.kind === "unknown";
 }
 
 export function resolveRootComposeEffectiveEnvironmentValue({
@@ -966,6 +976,7 @@ export function RootComposeView(props: RootComposeViewProps) {
     null;
   const creationOptions = useThreadCreationOptions({
     scope: "new-thread",
+    preferenceProjectId: projectId,
     initialProviderId: projectDefaultExecutionOptions?.providerId,
     initialModel: projectDefaultExecutionOptions?.model,
     initialServiceTier: projectDefaultExecutionOptions?.serviceTier,
@@ -1283,6 +1294,34 @@ export function RootComposeView(props: RootComposeViewProps) {
     },
   );
   const activeBranchesQuery = hostBranchesQuery;
+  const projectSourceWorktreeUnavailable = isProjectSourceWorktreeUnavailable(
+    activeBranchesQuery.data,
+  );
+  const selectedEnvironmentRequestsManagedWorktree =
+    parsedEnvironment?.type === "host" && parsedEnvironment.mode === "worktree";
+  const managedWorktreeAvailabilityPending =
+    selectedEnvironmentRequestsManagedWorktree &&
+    !isProjectless &&
+    activeBranchesQuery.isLoading;
+  const managedWorktreeUnavailable =
+    selectedEnvironmentRequestsManagedWorktree &&
+    projectSourceWorktreeUnavailable;
+  useEffect(() => {
+    if (
+      !projectSourceWorktreeUnavailable ||
+      parsedEnvironment?.type !== "host" ||
+      parsedEnvironment.mode !== "worktree"
+    ) {
+      return;
+    }
+    setEnvironmentSelectionValue(
+      encodeHostValue(parsedEnvironment.hostId, "local"),
+    );
+  }, [
+    parsedEnvironment,
+    projectSourceWorktreeUnavailable,
+    setEnvironmentSelectionValue,
+  ]);
   const branchOptions = useMemo(() => {
     const branches = activeBranchesQuery.data?.branches ?? [];
     const selectedRef = activeBranchesQuery.data?.selectedBranch;
@@ -1555,6 +1594,8 @@ export function RootComposeView(props: RootComposeViewProps) {
       submittedInput.length === 0 ||
       createThread.isPending ||
       isCodexCliVersionBlocked ||
+      managedWorktreeAvailabilityPending ||
+      managedWorktreeUnavailable ||
       (forkSeed === null && !selectedEnvironment)
     ) {
       return;
@@ -1622,6 +1663,8 @@ export function RootComposeView(props: RootComposeViewProps) {
     executionInputSources,
     forkSeed,
     isCodexCliVersionBlocked,
+    managedWorktreeAvailabilityPending,
+    managedWorktreeUnavailable,
     navigate,
     navigateToThreadAfterCreate,
     permissionMode,
@@ -1647,6 +1690,8 @@ export function RootComposeView(props: RootComposeViewProps) {
     createThread.isPending ||
     promptInput.length === 0 ||
     (forkSeed === null && !selectedEnvironment) ||
+    managedWorktreeAvailabilityPending ||
+    managedWorktreeUnavailable ||
     (branchEnvironmentMode === "local" &&
       selectedBranch !== null &&
       branchUiState.mutationBlocker !== null);
@@ -2878,12 +2923,16 @@ export function RootComposeView(props: RootComposeViewProps) {
       onChange: handleEnvironmentSelectionValueChange,
       sources: projectSources,
       reuseDisabled: reuseThreadOptions.length === 0,
+      worktreeDisabledReason: projectSourceWorktreeUnavailable
+        ? PROJECT_SOURCE_WORKTREE_DISABLED_REASON
+        : null,
       disabled: isForkDraft,
     }),
     [
       effectiveEnvironmentValue,
       isForkDraft,
       handleEnvironmentSelectionValueChange,
+      projectSourceWorktreeUnavailable,
       projectSources,
       reuseThreadOptions.length,
     ],
@@ -2931,6 +2980,7 @@ export function RootComposeView(props: RootComposeViewProps) {
         branchEnvironmentMode === "local"
           ? (branchUiState.currentOptionLabel ?? undefined)
           : undefined,
+      hidden: projectSourceWorktreeUnavailable,
       optionDisabledReason: branchUiState.mutationBlocker?.label,
       optionDisabledTitle: branchUiState.mutationBlocker?.title,
       createDisabledReason: branchUiState.mutationBlocker?.label,
@@ -2949,6 +2999,7 @@ export function RootComposeView(props: RootComposeViewProps) {
       branchEnvironmentMode,
       isForkDraft,
       priorityBranchOptions,
+      projectSourceWorktreeUnavailable,
       remoteBranchOptions,
       branchUiState.currentBranch,
       branchUiState.currentOptionLabel,
