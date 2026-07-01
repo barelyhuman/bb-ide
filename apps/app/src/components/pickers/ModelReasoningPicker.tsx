@@ -14,6 +14,7 @@ import { stripModelBrandPrefix } from "./model-brand-prefix";
 import { REASONING_LABELS } from "@/lib/reasoning-labels";
 import { Button } from "@/components/ui/button.js";
 import { Icon, type IconName } from "@/components/ui/icon.js";
+import { Input } from "@/components/ui/input.js";
 import {
   COARSE_POINTER_ICON_SIZE_CLASS,
   COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
@@ -36,6 +37,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useSystemExecutionOptions } from "@/hooks/queries/system-queries";
 import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport.js";
+import { usePointerCoarse } from "@/components/ui/hooks/use-pointer-coarse.js";
 import {
   OPTION_BASE_CLASS_NAME,
   OPTION_INTERACTIVE_CLASS_NAME,
@@ -65,6 +67,28 @@ function splitModelLabelTag(label: string): ModelLabelParts {
     return { base: label, tag: null };
   }
   return { base: match[1], tag: match[2] };
+}
+
+/**
+ * Build a loose fuzzy RegExp from a plain-text query.
+ * Each character is matched in order with `.*` between them, so
+ * "gpt4" matches "GPT-4 Turbo".
+ */
+function buildFuzzyRegex(query: string): RegExp {
+  const pattern = query
+    .split("")
+    .map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join(".*");
+  return new RegExp(pattern, "i");
+}
+
+function fuzzyFilter<T extends PickerOption<string>>(
+  options: readonly T[],
+  normalizedQuery: string,
+): readonly T[] {
+  if (!normalizedQuery) return options;
+  const regex = buildFuzzyRegex(normalizedQuery);
+  return options.filter((option) => regex.test(option.label));
 }
 
 interface ModelReasoningPickerProps {
@@ -153,7 +177,13 @@ export function ModelReasoningPicker({
   footerAction,
 }: ModelReasoningPickerProps) {
   const isCompactViewport = useIsCompactViewport();
+  const isPointerCoarse = usePointerCoarse();
   const [open, setOpen] = useState(defaultOpen);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+
   // While the popover is open, the user can browse other providers without
   // committing. `previewProviderId` tracks which provider tab is active;
   // null means "showing the committed provider".
@@ -188,9 +218,9 @@ export function ModelReasoningPicker({
   const selectedModelLoadErrorText =
     selectedModelLoadErrorMatches && modelLoadError
       ? formatModelLoadErrorText({
-          error: modelLoadError,
-          providerLabel: selectedProviderLabel,
-        })
+        error: modelLoadError,
+        providerLabel: selectedProviderLabel,
+      })
       : "Could not load models.";
   // Strip the brand prefix at render — the trigger always shows the committed
   // provider, so we use `selectedProviderId` (not `activeProviderId`, which
@@ -300,9 +330,9 @@ export function ModelReasoningPicker({
   const activeModelLoadErrorMessage =
     activeModelLoadErrorMatches && activeModelLoadError
       ? formatModelLoadErrorText({
-          error: activeModelLoadError,
-          providerLabel: activeProviderLabel,
-        })
+        error: activeModelLoadError,
+        providerLabel: activeProviderLabel,
+      })
       : null;
   const activeModelLoadFailed = isPreviewing
     ? previewQuery.isError || activeModelLoadErrorMatches
@@ -321,6 +351,16 @@ export function ModelReasoningPicker({
     onSelectedProviderChange !== undefined &&
     providerOptions.length > 1 &&
     (!isShowingModelError || activeModelErrorIsProviderSpecific);
+
+  // Filtered model lists (client-side fuzzy search scoped to the active
+  // provider).
+  const filteredModelOptions = useMemo(() => {
+    return fuzzyFilter(activeModelOptions, normalizedQuery);
+  }, [activeModelOptions, normalizedQuery]);
+
+  const filteredMoreModelOptions = useMemo(() => {
+    return fuzzyFilter(activeMoreModelOptions, normalizedQuery);
+  }, [activeMoreModelOptions, normalizedQuery]);
 
   // When previewing a different provider, resolve fast-mode toggle from that
   // provider's capabilities instead of the committed provider's.
@@ -347,6 +387,8 @@ export function ModelReasoningPicker({
     setPreviewProviderId(null);
     setShowMoreModels(false);
     setMoreModelsOpen(false);
+    setSearchQuery("");
+    setActiveIndex(-1);
   }, []);
 
   const openSub = useCallback(() => {
@@ -404,6 +446,130 @@ export function ModelReasoningPicker({
     setPreviewProviderId(null);
     setMoreModelsOpen(false);
   }, [footerAction]);
+
+  // Keyboard navigation inside the model list while the search input has focus.
+  const handleSearchKeyDown = useCallback<KeyboardEventHandler<HTMLInputElement>>(
+    (event) => {
+      const getTotal = () => {
+        let count = filteredModelOptions.length;
+        if (filteredMoreModelOptions.length > 0) {
+          count += 1; // toggle or submenu trigger
+          if (isCompactViewport && showMoreModels) {
+            count += filteredMoreModelOptions.length;
+          }
+        }
+        return count;
+      };
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        const total = getTotal();
+        if (total === 0) return;
+        setActiveIndex((current) =>
+          current >= total - 1 ? 0 : current + 1,
+        );
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        const total = getTotal();
+        if (total === 0) return;
+        setActiveIndex((current) =>
+          current <= 0 ? total - 1 : current - 1,
+        );
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        if (activeIndex < 0) return;
+
+        let idx = activeIndex;
+        if (idx < filteredModelOptions.length) {
+          handleModelSelect(filteredModelOptions[idx]!.value);
+          return;
+        }
+        idx -= filteredModelOptions.length;
+
+        if (filteredMoreModelOptions.length > 0) {
+          if (idx === 0) {
+            if (isCompactViewport) {
+              setShowMoreModels((current) => !current);
+            } else {
+              openSub();
+            }
+            return;
+          }
+          idx -= 1;
+          if (
+            isCompactViewport &&
+            showMoreModels &&
+            idx >= 0 &&
+            idx < filteredMoreModelOptions.length
+          ) {
+            handleModelSelect(filteredMoreModelOptions[idx]!.value);
+            return;
+          }
+        }
+      }
+
+    },
+    [
+      activeIndex,
+      filteredModelOptions,
+      filteredMoreModelOptions,
+      isCompactViewport,
+      showMoreModels,
+      handleModelSelect,
+      openSub,
+    ],
+  );
+
+  // Clamp active index when the visible list changes size.
+  useEffect(() => {
+    let count = filteredModelOptions.length;
+    if (filteredMoreModelOptions.length > 0) {
+      count += 1;
+      if (isCompactViewport && showMoreModels) {
+        count += filteredMoreModelOptions.length;
+      }
+    }
+    setActiveIndex((current) => {
+      if (count === 0) return -1;
+      if (current >= count) return count - 1;
+      if (current < 0) return 0;
+      return current;
+    });
+  }, [
+    filteredModelOptions.length,
+    filteredMoreModelOptions.length,
+    isCompactViewport,
+    showMoreModels,
+  ]);
+
+  // Scroll the active item into view.
+  useEffect(() => {
+    if (activeIndex < 0) return;
+    const el = document.getElementById(`model-nav-${activeIndex}`);
+    el?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex]);
+
+  // Clear search when the active provider changes (tab switch).
+  useEffect(() => {
+    setSearchQuery("");
+    setActiveIndex(-1);
+  }, [activeProviderId]);
+
+  // Auto-focus the search input on open (desktop only).
+  useEffect(() => {
+    if (!open || isCompactViewport || isPointerCoarse) return;
+    const frame = window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [open, isCompactViewport, isPointerCoarse]);
 
   const TriggerIcon = hasSelectedModel ? ProviderIcon : undefined;
   const triggerTitleModelLabel = modelIsLoading
@@ -482,6 +648,9 @@ export function ModelReasoningPicker({
     return trigger;
   }
 
+  const showSearchInput =
+    hasActiveModelOptions && !activeModelIsLoading && !isShowingModelError;
+
   return (
     <Popover open={open} onOpenChange={setOpen} modal={modal}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
@@ -545,6 +714,15 @@ export function ModelReasoningPicker({
           </div>
         ) : null}
 
+        {showSearchInput ? (
+          <ModelSearchInput
+            inputRef={searchInputRef}
+            query={searchQuery}
+            onQueryChange={setSearchQuery}
+            onKeyDown={handleSearchKeyDown}
+          />
+        ) : null}
+
         <MenuHoverProvider>
           {/* Model list — keyed by the active provider so each provider mounts a
             fresh subtree. Rows are keyed by model id, but reusing one subtree
@@ -556,7 +734,7 @@ export function ModelReasoningPicker({
             className={cn(
               "overflow-y-auto px-1 pb-1 pt-0",
               !isCompactViewport &&
-                "max-h-[min(250px,var(--radix-popover-content-available-height,250px)-80px)]",
+              "max-h-[min(250px,var(--radix-popover-content-available-height,250px)-80px)]",
             )}
           >
             {isShowingModelError ? null : (
@@ -573,9 +751,11 @@ export function ModelReasoningPicker({
               </div>
             ) : hasActiveModelOptions ? (
               <>
-                {activeModelOptions.map((option) => (
+                {filteredModelOptions.map((option, index) => (
                   <MenuRowButton
                     key={option.value}
+                    id={`model-nav-${index}`}
+                    isActive={activeIndex === index}
                     // The menu always reflects the provider whose models it lists
                     // (either committed or previewed) — strip with `activeProviderId`.
                     label={stripModelBrandPrefix(
@@ -586,43 +766,64 @@ export function ModelReasoningPicker({
                     onClick={() => handleModelSelect(option.value)}
                   />
                 ))}
-                {activeMoreModelOptions.length > 0 ? (
+                {filteredMoreModelOptions.length > 0 ? (
                   isCompactViewport ? (
                     <>
                       <MoreModelsToggleRow
+                        id={`model-nav-${filteredModelOptions.length}`}
+                        isActive={activeIndex === filteredModelOptions.length}
                         expanded={showMoreModels}
                         onToggle={() =>
                           setShowMoreModels((current) => !current)
                         }
                       />
                       {showMoreModels
-                        ? activeMoreModelOptions.map((option) => (
-                            <MenuRowButton
-                              key={option.value}
-                              label={stripModelBrandPrefix(
-                                option.label,
-                                activeProviderId,
-                              )}
-                              selected={
-                                !isPreviewing && option.value === modelValue
-                              }
-                              onClick={() => handleModelSelect(option.value)}
-                            />
-                          ))
+                        ? filteredMoreModelOptions.map((option, idx) => (
+                          <MenuRowButton
+                            key={option.value}
+                            id={`model-nav-${filteredModelOptions.length + 1 + idx}`}
+                            isActive={
+                              activeIndex ===
+                              filteredModelOptions.length + 1 + idx
+                            }
+                            label={stripModelBrandPrefix(
+                              option.label,
+                              activeProviderId,
+                            )}
+                            selected={
+                              !isPreviewing && option.value === modelValue
+                            }
+                            onClick={() => handleModelSelect(option.value)}
+                          />
+                        ))
                         : null}
                     </>
                   ) : (
                     <MoreModelsSubmenu
+                      id={`model-nav-${filteredModelOptions.length}`}
+                      isActive={activeIndex === filteredModelOptions.length}
                       open={moreModelsOpen}
                       onOpenChange={setMoreModelsOpen}
                       openSub={openSub}
                       activeProviderId={activeProviderId}
                       isPreviewing={isPreviewing}
                       modelValue={modelValue}
-                      options={activeMoreModelOptions}
+                      options={filteredMoreModelOptions}
                       onSelect={handleModelSelect}
                     />
                   )
+                ) : null}
+                {normalizedQuery &&
+                  filteredModelOptions.length === 0 &&
+                  filteredMoreModelOptions.length === 0 ? (
+                  <div
+                    className={cn(
+                      "px-2 text-xs text-muted-foreground",
+                      isCompactViewport ? "py-2" : "py-[0.3125rem]",
+                    )}
+                  >
+                    No models match your search
+                  </div>
                 ) : null}
               </>
             ) : (
@@ -731,11 +932,15 @@ function MenuSectionLabel({ children }: { children: ReactNode }) {
 function MoreModelsToggleRow({
   expanded,
   onToggle,
+  isActive,
+  id,
   onPointerEnter: callerPointerEnter,
   onKeyDown: callerKeyDown,
 }: {
   expanded: boolean;
   onToggle: () => void;
+  isActive?: boolean;
+  id?: string;
   onPointerEnter?: PointerEventHandler<HTMLButtonElement>;
   onKeyDown?: KeyboardEventHandler<HTMLButtonElement>;
 }) {
@@ -747,12 +952,14 @@ function MoreModelsToggleRow({
   return (
     <button
       type="button"
+      id={id}
       onClick={onToggle}
       aria-expanded={expanded}
       className={cn(
         "relative flex w-full cursor-default select-none items-center gap-1 rounded-sm px-2 text-xs text-muted-foreground outline-none hover:bg-state-hover hover:text-foreground",
         LIST_HOVER_TRANSITION,
         MENU_ITEM_LAST_HOVERED_CLASS,
+        isActive && "bg-state-active",
         isCompactViewport ? "py-2" : "py-[0.3125rem]",
       )}
       {...hoverProps}
@@ -775,6 +982,8 @@ function MoreModelsSubmenu({
   modelValue,
   options,
   onSelect,
+  isActive,
+  id,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -784,6 +993,8 @@ function MoreModelsSubmenu({
   modelValue: string;
   options: readonly PickerOption<string>[];
   onSelect: (value: string) => void;
+  isActive?: boolean;
+  id?: string;
 }) {
   const { isLastHovered, hoverProps } = useMenuItemHover();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -811,6 +1022,7 @@ function MoreModelsSubmenu({
         <button
           ref={triggerRef}
           type="button"
+          id={id}
           aria-haspopup="menu"
           aria-expanded={open}
           onClick={openSub}
@@ -842,6 +1054,7 @@ function MoreModelsSubmenu({
             "relative flex w-full cursor-default select-none items-center gap-1 rounded-sm px-2 py-[0.3125rem] text-xs text-muted-foreground outline-none hover:bg-state-hover hover:text-foreground",
             LIST_HOVER_TRANSITION,
             MENU_ITEM_LAST_HOVERED_CLASS,
+            isActive && "bg-state-active",
           )}
           data-last-hovered={hoverProps["data-last-hovered"]}
         >
@@ -892,12 +1105,16 @@ function MenuRowButton({
   label,
   selected,
   onClick,
+  isActive,
+  id,
   onPointerEnter: callerPointerEnter,
   onKeyDown: callerKeyDown,
 }: {
   label: string;
   selected: boolean;
   onClick: () => void;
+  isActive?: boolean;
+  id?: string;
   onPointerEnter?: PointerEventHandler<HTMLButtonElement>;
   onKeyDown?: KeyboardEventHandler<HTMLButtonElement>;
 }) {
@@ -910,11 +1127,13 @@ function MenuRowButton({
   return (
     <button
       type="button"
+      id={id}
       onClick={onClick}
       className={cn(
         "relative flex w-full cursor-default select-none items-center justify-between gap-3 rounded-sm px-2 text-xs outline-none hover:bg-state-hover hover:text-foreground",
         LIST_HOVER_TRANSITION,
         MENU_ITEM_LAST_HOVERED_CLASS,
+        isActive && "bg-state-active",
         isCompactViewport ? "py-2" : "py-[0.3125rem]",
       )}
       {...hoverProps}
@@ -968,5 +1187,39 @@ function MenuActionButton({
       <Icon name={iconName} className="size-3.5 shrink-0" aria-hidden />
       <span className="min-w-0 truncate">{label}</span>
     </button>
+  );
+}
+
+
+interface ModelSearchInputProps {
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  query: string;
+  onQueryChange: (query: string) => void;
+  onKeyDown: KeyboardEventHandler<HTMLInputElement>;
+}
+
+function ModelSearchInput({
+  inputRef,
+  query,
+  onQueryChange,
+  onKeyDown,
+}: ModelSearchInputProps) {
+  return (
+    <div className="shrink-0 border-b border-border p-1.5">
+      <div className="relative">
+        <Icon
+          name="Search"
+          className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+        />
+        <Input
+          ref={inputRef}
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder="Search models"
+          className="h-8 border-0 bg-transparent pl-8 pr-2 text-xs shadow-none focus-visible:ring-0"
+        />
+      </div>
+    </div>
   );
 }
