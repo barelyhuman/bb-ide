@@ -10,7 +10,7 @@ const mockActions = vi.hoisted(() => ({
   archiveThreadAndChildren: vi.fn(),
   requestRename: vi.fn(),
   requestDelete: vi.fn(),
-  sendToPopout: null,
+  sendToPopout: null as ((thread: Thread) => void) | null,
   togglePin: vi.fn(),
   toggleRead: vi.fn(),
   unarchiveThread: vi.fn(),
@@ -45,15 +45,23 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
   };
 }
 
-async function renderOpenMenu(thread: Thread) {
+async function renderOpenMenu(
+  thread: Thread,
+  { isCompactViewport = true }: { isCompactViewport?: boolean } = {},
+) {
   const onOpenChange = vi.fn();
   render(
-    <CompactViewportOverrideProvider isCompactViewport={true}>
+    <CompactViewportOverrideProvider isCompactViewport={isCompactViewport}>
       <ThreadActionsMenu thread={thread} onOpenChange={onOpenChange} />
     </CompactViewportOverrideProvider>,
   );
 
-  fireEvent.click(screen.getByRole("button", { name: "Thread actions" }));
+  const trigger = screen.getByRole("button", { name: "Thread actions" });
+  if (isCompactViewport) {
+    fireEvent.click(trigger);
+  } else {
+    fireEvent.pointerDown(trigger, { button: 0 });
+  }
   await screen.findByRole("menuitem", { name: /Mark / });
   expect(onOpenChange).toHaveBeenLastCalledWith(true);
   return onOpenChange;
@@ -64,10 +72,23 @@ function expectMenuItemIcon(label: string, iconName: string) {
   expect(menuItem.querySelector(`[data-icon="${iconName}"]`)).not.toBeNull();
 }
 
+function getMenuRoleSequence(): string[] {
+  return Array.from(
+    screen
+      .getByRole("menu")
+      .querySelectorAll('[role="menuitem"], [role="separator"]'),
+  ).map((element) =>
+    element.getAttribute("role") === "separator"
+      ? "separator"
+      : (element.textContent ?? "").trim(),
+  );
+}
+
 describe("ThreadActionsMenu", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    mockActions.sendToPopout = null;
   });
 
   it.each([
@@ -118,5 +139,33 @@ describe("ThreadActionsMenu", () => {
     expectMenuItemIcon("Rename", "Edit");
     expectMenuItemIcon("Archive", "Archive");
     expectMenuItemIcon("Delete", "Trash2");
+  });
+
+  it("omits dividers when rendering as a compact drawer", async () => {
+    await renderOpenMenu(makeThread(), { isCompactViewport: true });
+
+    expect(screen.queryAllByRole("separator")).toHaveLength(0);
+  });
+
+  it("renders one divider before lifecycle actions when the popout action is unavailable", async () => {
+    await renderOpenMenu(makeThread(), { isCompactViewport: false });
+
+    expect(screen.getAllByRole("separator")).toHaveLength(1);
+    expect(getMenuRoleSequence()).toEqual([
+      "Mark read",
+      "Pin",
+      "Rename",
+      "separator",
+      "Archive",
+      "Delete",
+    ]);
+  });
+
+  it("renders both dividers when the popout action is available", async () => {
+    mockActions.sendToPopout = vi.fn();
+
+    await renderOpenMenu(makeThread(), { isCompactViewport: false });
+
+    expect(screen.getAllByRole("separator")).toHaveLength(2);
   });
 });
