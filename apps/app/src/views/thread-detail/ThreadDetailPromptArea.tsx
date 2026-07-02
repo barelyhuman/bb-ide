@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { IconName } from "@/components/ui/icon.js";
 import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/prompt-mention-link";
 import { getFollowUpPromptPlaceholder } from "@/components/promptbox/follow-up-placeholder";
@@ -70,6 +71,9 @@ import { useThreadDefaultExecutionOptions } from "@/hooks/queries/thread-default
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { promptHistoryEntriesToDrafts } from "@/lib/prompt-history";
 import { promptDraftToInput } from "@/lib/prompt-draft";
+import { getProjectComposeRoutePath } from "@/lib/route-paths";
+import { getThreadDisplayTitle } from "@/lib/thread-title";
+import { buildThreadHandoffLocationState } from "@/lib/thread-handoff-request";
 import { appToast } from "@/components/ui/app-toast";
 import {
   FollowUpPromptBox,
@@ -212,6 +216,7 @@ export function ThreadDetailPromptArea({
   composerFocusRequestNonce,
   thread,
 }: ThreadDetailPromptAreaProps) {
+  const navigate = useNavigate();
   const defaultExecutionOptionsQuery = useThreadDefaultExecutionOptions(
     thread.id,
     {
@@ -833,6 +838,27 @@ export function ThreadDetailPromptArea({
   const handleUnarchiveCurrentThread = useCallback(() => {
     unarchiveThread.mutate({ id: thread.id });
   }, [thread.id, unarchiveThread]);
+  const sourceThreadDisplayTitle = getThreadDisplayTitle({
+    id: thread.id,
+    title: thread.title,
+    titleFallback: thread.titleFallback,
+  });
+  const handleHandoffToNewThread = useCallback(() => {
+    navigate(getProjectComposeRoutePath(thread.projectId), {
+      state: buildThreadHandoffLocationState({
+        environmentId: thread.environmentId,
+        projectId: thread.projectId,
+        sourceThreadId: thread.id,
+        sourceThreadTitle: sourceThreadDisplayTitle,
+      }),
+    });
+  }, [
+    navigate,
+    sourceThreadDisplayTitle,
+    thread.environmentId,
+    thread.id,
+    thread.projectId,
+  ]);
 
   const attachmentsConfig = useMemo(
     () => ({
@@ -919,10 +945,15 @@ export function ThreadDetailPromptArea({
         options: reasoningOptions,
         onChange: setReasoningLevel,
       },
+      footerAction: {
+        label: "Handoff to new thread",
+        onClick: handleHandoffToNewThread,
+      },
     }),
     [
       activeModel,
       hasMultipleProviders,
+      handleHandoffToNewThread,
       isLoadingModels,
       modelLoadFailed,
       modelLoadError,
