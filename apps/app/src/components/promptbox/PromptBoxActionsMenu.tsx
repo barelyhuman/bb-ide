@@ -26,10 +26,10 @@ interface PromptBoxActionsMenuProps {
   onAction: (action: PromptBoxAction) => void;
 }
 
-export const CREATE_LOOP_PROMPT = "Create a new bb loop to ";
 export const LOOP_PROMPT_ACTION: PromptBoxAction = {
   kind: "loop",
-  text: CREATE_LOOP_PROMPT,
+  command: { trigger: "/", name: "loop", trailingText: " " },
+  text: "/loop ",
 };
 
 const PROMPT_ACTION_ORDER: readonly PromptBoxActionKind[] = [
