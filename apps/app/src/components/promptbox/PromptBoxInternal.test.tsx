@@ -19,6 +19,7 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { emptyPromptDraftState } from "@/lib/prompt-draft";
 import { CREATE_LOOP_PROMPT } from "./PromptBoxActionsMenu";
 import {
   INERT_TYPEAHEAD_COMMAND_CONFIG,
@@ -137,6 +138,58 @@ function PromptBoxFocusOnMountHarness() {
 
   return (
     <PromptBoxInternal {...createPromptBoxProps()} promptBoxRef={promptBoxRef} />
+  );
+}
+
+function PromptBoxHistoryAutoFocusHarness({
+  historyResetKey,
+}: {
+  historyResetKey: string | number;
+}) {
+  return (
+    <>
+      <button type="button">Outside focus target</button>
+      <PromptBoxInternal
+        {...createPromptBoxProps({
+          history: {
+            currentDraft: emptyPromptDraftState(),
+            entries: [],
+            onSelectEntry: vi.fn(),
+            resetKey: historyResetKey,
+          },
+        })}
+      />
+    </>
+  );
+}
+
+function PromptBoxHistoryAutoFocusAfterLayoutStealHarness({
+  historyResetKey,
+}: {
+  historyResetKey: string | number;
+}) {
+  const outsideTargetRef = useRef<HTMLButtonElement>(null);
+
+  useLayoutEffect(() => {
+    outsideTargetRef.current?.focus();
+  }, [historyResetKey]);
+
+  return (
+    <>
+      <PromptBoxInternal
+        {...createPromptBoxProps({
+          history: {
+            currentDraft: emptyPromptDraftState(),
+            entries: [],
+            onSelectEntry: vi.fn(),
+            resetKey: historyResetKey,
+          },
+        })}
+      />
+      <button ref={outsideTargetRef} type="button">
+        Late layout focus target
+      </button>
+    </>
   );
 }
 
@@ -350,6 +403,71 @@ describe("PromptBoxInternal controlled value sync", () => {
         expect(getPromptEditorElement()).toBeInstanceOf(HTMLElement),
       );
       expect(document.activeElement).not.toBe(getPromptEditorElement());
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  it("refocuses when the history reset key changes on fine pointers", async () => {
+    const restoreMatchMedia = mockPointerCoarse(false);
+    try {
+      const view = render(
+        <PromptBoxHistoryAutoFocusHarness historyResetKey={0} />,
+      );
+
+      await waitForPromptFocus();
+      const outsideTarget = screen.getByRole("button", {
+        name: "Outside focus target",
+      });
+      outsideTarget.focus();
+      expect(document.activeElement).toBe(outsideTarget);
+
+      view.rerender(<PromptBoxHistoryAutoFocusHarness historyResetKey={1} />);
+
+      await waitForPromptFocus();
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  it("refocuses after another layout effect steals focus", async () => {
+    const restoreMatchMedia = mockPointerCoarse(false);
+    try {
+      const view = render(
+        <PromptBoxHistoryAutoFocusAfterLayoutStealHarness historyResetKey={0} />,
+      );
+
+      await waitForPromptFocus();
+
+      view.rerender(
+        <PromptBoxHistoryAutoFocusAfterLayoutStealHarness historyResetKey={1} />,
+      );
+
+      await waitForPromptFocus();
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
+  it("does not refocus for history reset key changes on coarse pointers", async () => {
+    const restoreMatchMedia = mockPointerCoarse(true);
+    try {
+      const view = render(
+        <PromptBoxHistoryAutoFocusHarness historyResetKey={0} />,
+      );
+
+      await waitFor(() =>
+        expect(getPromptEditorElement()).toBeInstanceOf(HTMLElement),
+      );
+      const outsideTarget = screen.getByRole("button", {
+        name: "Outside focus target",
+      });
+      outsideTarget.focus();
+      expect(document.activeElement).toBe(outsideTarget);
+
+      view.rerender(<PromptBoxHistoryAutoFocusHarness historyResetKey={1} />);
+
+      expect(document.activeElement).toBe(outsideTarget);
     } finally {
       restoreMatchMedia();
     }
