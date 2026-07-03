@@ -12,6 +12,10 @@ import { isAbsolute, join, resolve } from "node:path";
 import type { Plugin } from "esbuild";
 import { PLUGIN_SDK_MAJOR, PLUGIN_SDK_VERSION } from "@bb/domain";
 import { PLUGIN_SDK_APP_EXPORT_NAMES } from "@bb/plugin-sdk";
+import {
+  PLUGIN_THEME_CSS,
+  TW_ANIMATE_CSS,
+} from "./generated/plugin-theme.generated.js";
 import { RUNTIME_EXPORT_MANIFEST } from "./runtime-export-manifest.js";
 
 /**
@@ -19,8 +23,8 @@ import { RUNTIME_EXPORT_MANIFEST } from "./runtime-export-manifest.js";
  * runtime-loadable frontend bundle:
  *
  * - `dist/app.js` — single ESM file, production jsx-runtime forced. The
- *   shared-runtime modules (react, react-dom, react-dom/client,
- *   react/jsx-runtime, react/jsx-dev-runtime, @bb/plugin-sdk/app) are never
+ *   shared-runtime modules (react ×5, @bb/plugin-sdk/app, the portaling
+ *   radix families, sonner, vaul — see RUNTIME_SLOT_BY_SPECIFIER) are never
  *   bundled; an esbuild plugin swaps them for shims that read
  *   `globalThis.__bbPluginRuntime` — the host app provides one React, so a
  *   second copy (and its "Invalid hook call" crashes) is impossible.
@@ -32,7 +36,16 @@ import { RUNTIME_EXPORT_MANIFEST } from "./runtime-export-manifest.js";
  *   before loading the bundle.
  */
 
-/** Runtime slot on `globalThis.__bbPluginRuntime` per shimmed specifier. */
+/**
+ * Runtime slot on `globalThis.__bbPluginRuntime` per shimmed specifier.
+ * Shim policy (plugin design §5.5): ONLY packages with singleton/global
+ * behavior — one React, the portaling radix families (shared
+ * dismissable-layer/focus/scroll-lock/aria-hidden world), sonner (`toast()`
+ * must reach the host toaster), vaul (mutates document.body styles) — plus
+ * the SDK surface itself. Everything else (non-portal radix, cva/clsx/
+ * tailwind-merge, lucide-react, form/calendar/chart libs) bundles from the
+ * plugin's own node_modules.
+ */
 const RUNTIME_SLOT_BY_SPECIFIER: Record<string, string> = {
   react: "react",
   "react-dom": "reactDom",
@@ -40,6 +53,18 @@ const RUNTIME_SLOT_BY_SPECIFIER: Record<string, string> = {
   "react/jsx-runtime": "jsxRuntime",
   "react/jsx-dev-runtime": "jsxDevRuntime",
   "@bb/plugin-sdk/app": "pluginSdkApp",
+  "@radix-ui/react-alert-dialog": "radixAlertDialog",
+  "@radix-ui/react-context-menu": "radixContextMenu",
+  "@radix-ui/react-dialog": "radixDialog",
+  "@radix-ui/react-dropdown-menu": "radixDropdownMenu",
+  "@radix-ui/react-hover-card": "radixHoverCard",
+  "@radix-ui/react-menubar": "radixMenubar",
+  "@radix-ui/react-navigation-menu": "radixNavigationMenu",
+  "@radix-ui/react-popover": "radixPopover",
+  "@radix-ui/react-select": "radixSelect",
+  "@radix-ui/react-tooltip": "radixTooltip",
+  sonner: "sonner",
+  vaul: "vaul",
 };
 
 /**
@@ -80,8 +105,13 @@ function shimModuleSource(specifier: string, slot: string): string {
 }
 
 const SHIM_NAMESPACE = "bb-plugin-runtime-shim";
-const SHIM_FILTER =
-  /^(react|react-dom|react-dom\/client|react\/jsx-runtime|react\/jsx-dev-runtime|@bb\/plugin-sdk\/app)$/;
+// Derived from the slot map so the two can never drift; everything not
+// matched here bundles normally from the plugin's node_modules.
+const SHIM_FILTER = new RegExp(
+  `^(${Object.keys(RUNTIME_SLOT_BY_SPECIFIER)
+    .map((specifier) => specifier.replace(/[/@.-]/g, "\\$&"))
+    .join("|")})$`,
+);
 
 function runtimeShimPlugin(): Plugin {
   return {
@@ -154,6 +184,15 @@ async function readPluginAppConfig(rootDir: string): Promise<PluginAppConfig> {
  * runtime. Tailwind itself comes from the CLI's own installation (plugins do
  * not need tailwindcss installed), via `customCssResolver`.
  *
+ * The input embeds two generated constants (plugin-theme.generated.ts) so
+ * plugin utilities compile against the same tokens the host uses:
+ * - the host's `@theme` blocks — without the semantic-token bridge,
+ *   `bg-background`/`text-muted-foreground`/`rounded-lg` don't compile at all
+ *   (the default Tailwind theme has no such keys);
+ * - the vendored tw-animate-css source — the host ships it, component idiom
+ *   depends on it (`animate-in`/`fade-in-0`), and its style-only npm exports
+ *   can't be require.resolve'd from the packaged CLI.
+ *
  * The utilities are emitted inside `@scope ([data-bb-plugin-root])` — the
  * attribute every plugin mount root carries (PluginSlotMount) — so plugin
  * utility rules can never touch host elements. Without the scope, a plugin's
@@ -174,6 +213,10 @@ async function buildTailwindCss(rootDir: string): Promise<string> {
   const input = [
     `@layer theme, utilities;`,
     `@import "tailwindcss/theme.css" layer(theme);`,
+    // Same order as the host's theme.css: tw-animate first, then the host
+    // @theme blocks (so host tokens win any overlapping keys).
+    TW_ANIMATE_CSS,
+    PLUGIN_THEME_CSS,
     `@layer utilities {`,
     `  @scope ([data-bb-plugin-root]) {`,
     `    @tailwind utilities;`,

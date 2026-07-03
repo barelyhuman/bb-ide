@@ -1,7 +1,17 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PLUGIN_SDK_MAJOR, PLUGIN_SDK_VERSION } from "@bb/domain";
 import { scaffoldPlugin } from "@bb/templates/plugin-scaffold";
@@ -43,7 +53,11 @@ void createRoot;
 
 function Card() {
   const [count] = useState(0);
-  return <div className="line-clamp-3">count: {count}</div>;
+  return (
+    <div className="line-clamp-3 bg-background text-sm text-muted-foreground animate-in fade-in-0 rounded-lg">
+      count: {count}
+    </div>
+  );
 }
 
 export default definePluginApp(Card);
@@ -89,6 +103,20 @@ describe("buildPluginApp", () => {
 
     const css = await readFile(result.cssPath, "utf8");
     expect(css).toContain(".line-clamp-3");
+    // Host token bridge: semantic utilities compile against the live host
+    // CSS variables (no bridge → these classes are silently absent).
+    expect(css).toMatch(/\.bg-background\s*\{[^}]*var\(--background\)/);
+    expect(css).toMatch(/\.text-muted-foreground\s*\{[^}]*var\(--muted-foreground\)/);
+    expect(css).toMatch(/\.rounded-lg\s*\{[^}]*var\(--radius\)/);
+    // Host typography scale: the utility reads the token, and the plugin
+    // sheet carries the host's override (0.8125rem, not Tailwind's 0.875rem).
+    expect(css).toMatch(/\.text-sm\s*\{[^}]*var\(--text-sm/);
+    expect(css).toContain("--text-sm: 0.8125rem");
+    // tw-animate-css utilities (host idiom for overlay open/close animation).
+    expect(css).toContain(".animate-in");
+    expect(css).toContain(".fade-in-0");
+    // Utilities stay plugin-scoped.
+    expect(css).toContain("@scope ([data-bb-plugin-root])");
 
     const meta = JSON.parse(await readFile(result.metaPath, "utf8"));
     expect(meta).toEqual({
@@ -119,6 +147,34 @@ describe("buildPluginApp", () => {
     } finally {
       delete (globalThis as { __bbPluginRuntime?: unknown }).__bbPluginRuntime;
     }
+  });
+
+  it("shims the shared-singleton packages (portal radix, sonner, vaul)", async () => {
+    await writeFile(join(root, "package.json"), FIXTURE_PACKAGE_JSON);
+    await writeFile(
+      join(root, "app.tsx"),
+      [
+        `import * as Dialog from "@radix-ui/react-dialog";`,
+        `import * as AlertDialog from "@radix-ui/react-alert-dialog";`,
+        `import { toast } from "sonner";`,
+        `import { Drawer } from "vaul";`,
+        `export default () => [Dialog, AlertDialog, toast, Drawer];`,
+      ].join("\n"),
+    );
+    const { jsPath } = await buildPluginApp(root);
+    const js = await readFile(jsPath, "utf8");
+    for (const slot of [
+      "radixDialog",
+      "radixAlertDialog",
+      "sonner",
+      "vaul",
+    ]) {
+      expect(js).toContain(`.${slot}`);
+    }
+    // Never bundled, never left as bare imports — always the runtime shim.
+    expect(js).not.toMatch(/from\s*["']@radix-ui/);
+    expect(js).not.toMatch(/from\s*["']sonner/);
+    expect(js).not.toMatch(/from\s*["']vaul/);
   });
 
   it("shims explicit react/jsx-dev-runtime imports (dev-mode transform output)", async () => {
@@ -188,6 +244,17 @@ describe("buildPluginApp", () => {
       bbVersion: "0.9.0",
       app: true,
     });
+    // The vendored starter components bundle real npm deps (`bb plugin new`
+    // runs npm install for authors); the offline test links them from the
+    // repo's own install instead.
+    await linkScaffoldDeps(targetDir, [
+      "class-variance-authority",
+      "clsx",
+      "tailwind-merge",
+      "@radix-ui/react-slot",
+      "@hugeicons/react",
+      "@hugeicons/core-free-icons",
+    ]);
     const result = await buildPluginApp(targetDir);
     const js = await readFile(result.jsPath, "utf8");
     expect(js).toContain("globalThis.__bbPluginRuntime");
@@ -197,7 +264,9 @@ describe("buildPluginApp", () => {
     // The scaffold's default export must be a definePluginApp product the
     // host interpreter accepts (a stub runtime stands in for the BB app).
     (globalThis as { __bbPluginRuntime?: unknown }).__bbPluginRuntime = {
-      react: {},
+      // The vendored starter components bundle radix Slot, which calls
+      // forwardRef at module scope — the stub must provide it.
+      react: { forwardRef: (render: unknown) => render },
       jsxRuntime: { jsx: () => ({}), jsxs: () => ({}), Fragment: {} },
       pluginSdkApp: {
         definePluginApp: (setup: unknown) => ({
@@ -218,3 +287,39 @@ describe("buildPluginApp", () => {
     }
   });
 });
+
+/**
+ * Symlink packages from the repo's install (resolved the way apps/app sees
+ * them) into a scaffold's node_modules so esbuild can bundle the vendored
+ * starter components without a network install.
+ */
+async function linkScaffoldDeps(
+  targetDir: string,
+  packageNames: string[],
+): Promise<void> {
+  const testDir = dirname(fileURLToPath(import.meta.url));
+  const appRequire = createRequire(
+    join(testDir, "..", "..", "..", "app", "package.json"),
+  );
+  for (const name of packageNames) {
+    const entry = appRequire.resolve(name);
+    let packageRoot = dirname(entry);
+    while (true) {
+      const candidate = join(packageRoot, "package.json");
+      if (existsSync(candidate)) {
+        const parsed = JSON.parse(readFileSync(candidate, "utf8")) as {
+          name?: string;
+        };
+        if (parsed.name === name) break;
+      }
+      const parent = dirname(packageRoot);
+      if (parent === packageRoot) {
+        throw new Error(`could not find package root for ${name}`);
+      }
+      packageRoot = parent;
+    }
+    const linkPath = join(targetDir, "node_modules", name);
+    await mkdir(dirname(linkPath), { recursive: true });
+    await symlink(packageRoot, linkPath, "dir");
+  }
+}

@@ -6,7 +6,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { Command } from "commander";
 import { scaffoldPlugin } from "@bb/templates/plugin-scaffold";
 import { action } from "../action.js";
-import { buildPluginApp } from "@bb/plugin-build";
+import { buildPluginApp, buildPluginServer } from "@bb/plugin-build";
 import { createPluginDevLoop } from "../plugin-dev-loop.js";
 import { runPluginCliCommand } from "../plugin-cli-proxy.js";
 import { resolveBbCliVersion } from "../version.js";
@@ -335,8 +335,33 @@ export function registerPluginCommands(
           app: opts.app ?? false,
         });
         console.log(`Created ${packageName}/`);
+        // App scaffolds vendor components whose npm deps must be installed
+        // before `bb plugin build` bundles them. Best-effort: authors need
+        // npm anyway (design §5.5); a failure here just surfaces the manual
+        // step.
+        let installed = false;
+        if (opts.app) {
+          const { execFile } = await import("node:child_process");
+          const { promisify } = await import("node:util");
+          try {
+            await promisify(execFile)(
+              "npm",
+              ["install", "--no-fund", "--no-audit"],
+              { cwd: targetDir },
+            );
+            installed = true;
+            console.log("Installed component dependencies (npm install).");
+          } catch {
+            console.warn(
+              "Could not run npm install — run it in the plugin directory before `bb plugin build`.",
+            );
+          }
+        }
         console.log("Next steps:");
         console.log(`  cd ${packageName}`);
+        if (opts.app && !installed) {
+          console.log("  npm install");
+        }
         console.log("  bb plugin install .");
       }),
     );
@@ -344,13 +369,30 @@ export function registerPluginCommands(
   plugin
     .command("build [path]")
     .description(
-      "Compile the plugin's bb.app frontend entry into dist/ (app.js, app.css, app.meta.json; no server required)",
+      "Compile the plugin into dist/: the bb.server backend bundle (server.js, server.meta.json) and, when bb.app is declared, the frontend bundle (app.js, app.css, app.meta.json); no server required",
     )
     .action(
       action(async (path: string | undefined) => {
         const rootDir = resolve(process.cwd(), path ?? ".");
-        const result = await buildPluginApp(rootDir);
-        for (const file of [result.jsPath, result.cssPath, result.metaPath]) {
+        // buildPluginServer errors legibly on a missing/invalid bb.server —
+        // every plugin has one, so a headless plugin succeeds with just the
+        // backend bundle (prebuilt distribution, design §6).
+        const server = await buildPluginServer(rootDir);
+        const files = [server.jsPath, server.mapPath, server.metaPath];
+        let hasApp = false;
+        try {
+          const pkg = JSON.parse(
+            await readFile(join(rootDir, "package.json"), "utf8"),
+          ) as { bb?: { app?: unknown } };
+          hasApp = typeof pkg.bb?.app === "string";
+        } catch {
+          // Unreachable in practice: buildPluginServer already read it.
+        }
+        if (hasApp) {
+          const app = await buildPluginApp(rootDir);
+          files.push(app.jsPath, app.cssPath, app.metaPath);
+        }
+        for (const file of files) {
           console.log(relative(process.cwd(), file));
         }
       }),
