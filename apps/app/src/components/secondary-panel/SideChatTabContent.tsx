@@ -652,6 +652,7 @@ export function SideChatTabContent({
     ],
   );
 
+
   // A side chat hands results back to the main thread per agent message (the
   // "send to main thread" action under each reply) via the cross-thread
   // `senderThreadId` transport. Keep the action visible and guard the handler

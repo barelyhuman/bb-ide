@@ -596,6 +596,7 @@ export function ThreadDetailPromptArea({
     runtimeDisplayStatus,
   ]);
 
+
   const sendQueuedMessageById = useCallback(
     async ({ guard, messageId }: SendQueuedMessageByIdArgs) => {
       if (!queuedMessagesByIdRef.current.has(messageId)) {
