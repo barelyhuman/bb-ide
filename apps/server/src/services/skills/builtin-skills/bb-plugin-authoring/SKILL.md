@@ -165,6 +165,32 @@ inputs) — never both. Attribution is auto-filled: `origin: "plugin"` and
 threadId, mode: "auto", input: [...] })` starts a turn on an idle thread or
 queues/steers a running one.
 
+`bb.sdk.files` reads and writes files on a connected host (not just the
+server machine — this is the right primitive when the user's files may live
+on another host, and its `rootPath` confinement + compare-and-swap guard make
+it the right save path even locally):
+
+```ts
+const file = await bb.sdk.files.read({ path: "/home/me/notes/todo.md" });
+// → { content, contentEncoding, sha256, sizeBytes, modifiedAtMs?, ... }
+
+const saved = await bb.sdk.files.write({
+  path: "/home/me/notes/todo.md",
+  rootPath: "/home/me/notes",     // optional: confine writes beneath this root
+  content: "# Todo\n",
+  expectedSha256: file.sha256,    // CAS guard; omit for unconditional, null for create-only
+});
+if (saved.outcome === "conflict") {
+  // File changed since the read (saved.currentSha256, null = deleted) —
+  // re-read and merge instead of clobbering.
+}
+```
+
+`hostId` is optional everywhere (defaults to the primary/local host).
+`bb.sdk.files.list({ path, query?, limit? })` is a recursive fuzzy file
+listing under a directory. Writes cap at 25 MB and return
+`{ outcome: "written", sha256, sizeBytes }`.
+
 ### bb.on — thread lifecycle events
 
 ```ts
@@ -378,8 +404,14 @@ Slot props contracts (versioned, additive-only):
 
 - `homepageSection` → `{ projectId: string | null }` (project in view on
   the compose surface). Registration: `{ id, title, component }`.
-- `navPanel` → `{}` — owns the whole route at `/plugins/<pluginId>/<path>`
-  and gets its own sidebar entry.
+- `navPanel` → `{ subPath: string }` — owns the whole route at
+  `/plugins/<pluginId>/<path>/*` and gets its own sidebar entry. `subPath`
+  is the route remainder after the panel root (`""` at the root), so deep
+  links like `/plugins/notes/notes/work/ideas.md` land with
+  `subPath: "work/ideas.md"`. Navigate within the panel via
+  `useBbNavigate().toPluginPanel(path, { subPath, replace? })` — browser
+  back/forward then walks panel-internal history (prefer this over hash
+  routing).
   Registration: `{ id, title, icon, path, component, chrome?, headerContent? }`.
   The host renders your plugin logo + `title` into the SHARED app header
   (the same chrome as Settings/Automations) with your optional
@@ -409,6 +441,21 @@ Slot props contracts (versioned, additive-only):
   or async) are contained and logged, never breaking the launcher.
 - `composerAccessory` → `{ projectId: string | null, threadId: string | null }`
   — rendered in the composer footer. Registration: `{ id, component }`.
+- `fileOpener` → `{ path: string, source }` — register as a viewer/editor
+  for file extensions: `{ id, title, extensions: ["md"], component }`.
+  Users set the per-extension default under Settings → "File openers", and
+  right-clicking a file link in rendered markdown offers a one-off
+  "Open with …" choice; matching files opened in the right panel then
+  render your component in a plugin tab instead of the built-in preview —
+  this includes links clicked in rendered markdown, the file picker, and
+  `bb thread open`. `source` is
+  `{ kind: "workspace" | "host" | "thread-storage", threadId, environmentId,
+  projectId }` (nullable fields) and `path` follows the source (workspace:
+  worktree-relative; host: absolute; thread-storage: storage-relative).
+  Applies only to live file content — git-ref snapshots and deleted files
+  always use the built-in preview, and a removed/disabled opener degrades
+  back to it. Pair with `bb.sdk.files` (rpc from your server) to load and
+  CAS-save the content.
 
 Hooks:
 
@@ -419,7 +466,17 @@ Hooks:
 - `useSettings()` → `{ values, isLoading }` — effective non-secret values
   (secret settings are excluded; read them server-side only).
 - `useBbContext()` → `{ projectId, threadId }` from the current route.
-- `useBbNavigate()` → `{ toThread(id), toProject(id), toPluginPanel(path) }`.
+- `useBbNavigate()` → `{ toThread(id), toProject(id), toPluginPanel(path, { subPath?, replace? }?) }`.
+- `useComposer()` → programmatic access to the chat composer draft (the
+  same one the built-in "Add to chat" affordances write to):
+  `addQuote(text)` appends the text as a `> ` blockquote block and focuses
+  the composer — the "reference this selection in chat" primitive;
+  `insertMention({ provider, id, label })` inserts an @-mention pill bound
+  to one of YOUR `bb.ui.registerMentionProvider` providers, resolved to
+  fresh context at send time; `focus()` focuses the caret; `scope` reports
+  where writes land (`{ kind: "thread", threadId }` inside a thread
+  context, `{ kind: "new-thread", projectId }` from nav panels and
+  homepage sections — those seed the composer the user lands on next).
 
 UI components — **vendored shadcn source you own** (the shadcn model; the
 old host-provided component kit is REMOVED — `@bb/plugin-sdk/app` exports
@@ -507,10 +564,17 @@ hardcoded colors break custom palettes.
 Reference examples in `examples/plugins/` (a bb checkout):
 
 - `github` — vendored-component showcase: a gh-CLI-backed issue/PR browser
-  in a single navPanel (with `headerContent`), hash-based sub-navigation,
+  in a single navPanel (with `headerContent`), subPath-based sub-navigation,
   vendored Tabs/Select/DropdownMenu/Badge/Skeleton + sonner toast
   throughout, background sync service, rpc + realtime, project setting, a
   `bb github` CLI command, and agent-spawn buttons.
+- `notes` — full-surface markdown notes (Obsidian-style): mounted
+  directories via a setting, `bb.sdk.files` read/CAS-write, Milkdown Crepe
+  WYSIWYG bundled per-plugin (its theme CSS served from a `bb.http` route),
+  navPanel with `chrome: "none"` + subPath deep links, threadPanelAction,
+  a markdown `fileOpener`, `useComposer()` quote/mention buttons, an fs
+  watcher publishing realtime tree refreshes, and a `@Notes` mention
+  provider resolving note content at send.
 - `slack-bot` — headless webhook bot: `auth: "none"` route with signature
   verification, kv thread mapping, `thread.idle` handler, spawn/send,
   needsConfiguration.

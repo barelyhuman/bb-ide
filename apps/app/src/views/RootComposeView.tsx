@@ -95,6 +95,7 @@ import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useLocalOpenTargets } from "@/hooks/useLocalOpenTargets";
 import { useHosts } from "@/hooks/queries/host-queries";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
+import { subscribeComposerFocusRequests } from "@/lib/composer-focus-requests";
 import { useEscapeToHide } from "@/hooks/useEscapeToHide";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
 import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/prompt-mention-link";
@@ -927,6 +928,18 @@ export function RootComposeView(props: RootComposeViewProps) {
   const primaryHostId = primaryHost?.id ?? null;
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ kind: "new-thread" });
+  // Plugin useComposer() writes (from nav panels / homepage sections) target
+  // the new-thread draft; surface + focus the composer when they ask.
+  useEffect(
+    () =>
+      subscribeComposerFocusRequests(promptDraft.storageKey, () => {
+        setStartedComposing(true);
+        window.requestAnimationFrame(() => {
+          promptBoxRef.current?.focusEnd();
+        });
+      }),
+    [promptDraft.storageKey],
+  );
   const handleRootPanelSelectionAddToChat = useCallback(
     (text: string, attachments?: readonly PromptDraftAttachment[]) => {
       promptDraft.addQuote(text, attachments);
@@ -2035,6 +2048,7 @@ export function RootComposeView(props: RootComposeViewProps) {
     storageFiles: rootThreadStorageFiles?.files,
     terminalSessions: loadedTerminalSessions,
   });
+
   const activeRootHostFileThreadId =
     activeHostFileThreadId ??
     (activeHostFilePath !== null ? rootPanelThreadId : null);
@@ -2593,9 +2607,9 @@ export function RootComposeView(props: RootComposeViewProps) {
               onClose: () => closeTab(tab.id),
             };
           case "plugin-panel":
-            // Plugin panel tabs are opened from a thread's launcher; the root
-            // panel offers no plugin actions, but its persisted state must
-            // still render any tab kind without crashing.
+            // Plugin action tabs are opened from a thread's launcher; the
+            // root panel offers no plugin actions, but file-opener tabs open
+            // here too and persisted state must render any kind.
             return {
               id: tab.id,
               filename: tab.title,

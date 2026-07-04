@@ -65,12 +65,17 @@ refresh.
 
 Frontend entries (app.tsx) default-export `definePluginApp` from
 `@bb/plugin-sdk/app` and register UI slots: homepageSection (root compose),
-navPanel (own sidebar entry + /plugins/<id>/<path> route), threadPanelAction
+navPanel (own sidebar entry + /plugins/<id>/<path>/* route; the remainder
+arrives as the component's subPath prop for panel-internal deep links),
+threadPanelAction
 (an entry in the thread right panel's new-tab Actions list whose run() can
 open closable panel tabs with JSON params), composerAccessory (prompt box
-footer). Hooks:
+footer), and fileOpener (register as a per-extension file viewer/editor;
+users pick defaults under Settings → File openers and can right-click a
+file link for a one-off choice). Hooks:
 useRpc, useRealtime, useSettings (secrets excluded), useBbContext,
-useBbNavigate. Components are vendored shadcn source the plugin owns (the
+useBbNavigate, and useComposer (quote selections / insert mention pills
+into the chat composer draft). Components are vendored shadcn source the plugin owns (the
 shadcn model): `bb plugin new --app` pre-vendors a starter set into
 components/ui/ and `npx shadcn add @bb/<name>` pulls more from the BB
 component registry (the full stock shadcn set, version-matched to the
