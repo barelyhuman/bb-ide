@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -57,6 +58,10 @@ interface ModelLabelParts {
 
 const FAILED_TO_LOAD_MODELS_LABEL = "Failed to load models";
 
+// Below this many models (primary + selected-only) the list is short enough to
+// scan by eye, so the search box is more clutter than help.
+const MODEL_SEARCH_MIN_OPTIONS = 5;
+
 // Splits a trailing parenthetical off a model label (e.g. "Opus 4.8 (1M)" →
 // base "Opus 4.8", tag "1M") so the tag can render as a small, muted suffix
 // without the parentheses. Labels without a trailing "(…)" pass through
@@ -74,7 +79,7 @@ function splitModelLabelTag(label: string): ModelLabelParts {
  * Each character is matched in order with `.*` between them, so
  * "gpt4" matches "GPT-4 Turbo".
  */
-function buildFuzzyRegex(query: string): RegExp {
+export function buildFuzzyRegex(query: string): RegExp {
   const pattern = query
     .split("")
     .map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
@@ -82,13 +87,80 @@ function buildFuzzyRegex(query: string): RegExp {
   return new RegExp(pattern, "i");
 }
 
-function fuzzyFilter<T extends PickerOption<string>>(
+// Filter options by fuzzy-matching against text the caller derives from each
+// option. Pass the *rendered* text (see `modelSearchText`) so search matches
+// what the user actually sees on screen.
+function fuzzyFilter<T>(
   options: readonly T[],
   normalizedQuery: string,
+  getText: (option: T) => string,
 ): readonly T[] {
   if (!normalizedQuery) return options;
   const regex = buildFuzzyRegex(normalizedQuery);
-  return options.filter((option) => regex.test(option.label));
+  return options.filter((option) => regex.test(getText(option)));
+}
+
+// The text a model row is matched against: the visible (brand-stripped) label
+// plus the raw model id, so typing either the on-screen label or the id finds
+// the model. Filtering on the raw label would match brand words that were
+// stripped from the rendered row, surprising the user.
+function modelSearchText(
+  option: PickerOption<string>,
+  providerId: string,
+): string {
+  return `${stripModelBrandPrefix(option.label, providerId)} ${option.value}`;
+}
+
+/**
+ * A keyboard-navigable row in the model list. Each entry maps 1:1 to a rendered,
+ * highlightable row and drives arrow movement, Enter handling, and the active
+ * descendant id — so the fragile hand-computed index math lives in one tested
+ * place. The desktop "More models" submenu is intentionally excluded (it stays
+ * pointer/native-focus driven); during an active search its filtered options are
+ * flattened inline instead, keeping every match reachable from the keyboard.
+ */
+export type ModelNavRow =
+  | { kind: "model"; option: PickerOption<string> }
+  | { kind: "more-toggle" };
+
+export function buildModelNavRows({
+  modelOptions,
+  moreModelOptions,
+  isCompactViewport,
+  isSearching,
+  showMoreModels,
+}: {
+  modelOptions: readonly PickerOption<string>[];
+  moreModelOptions: readonly PickerOption<string>[];
+  isCompactViewport: boolean;
+  isSearching: boolean;
+  showMoreModels: boolean;
+}): ModelNavRow[] {
+  const rows: ModelNavRow[] = modelOptions.map(
+    (option): ModelNavRow => ({ kind: "model", option }),
+  );
+  if (moreModelOptions.length === 0) return rows;
+
+  // While searching, flatten every match into one list so results otherwise
+  // hidden behind the compact toggle or the desktop submenu stay reachable.
+  if (isSearching) {
+    for (const option of moreModelOptions) rows.push({ kind: "model", option });
+    return rows;
+  }
+
+  // Compact (not searching): a toggle expands the extra models inline.
+  if (isCompactViewport) {
+    rows.push({ kind: "more-toggle" });
+    if (showMoreModels) {
+      for (const option of moreModelOptions) {
+        rows.push({ kind: "model", option });
+      }
+    }
+  }
+
+  // Desktop (not searching): the extra models live in the hover submenu, which
+  // is rendered separately and left out of keyboard nav.
+  return rows;
 }
 
 interface ModelReasoningPickerProps {
@@ -183,6 +255,12 @@ export function ModelReasoningPicker({
   const [activeIndex, setActiveIndex] = useState(-1);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const normalizedQuery = searchQuery.trim().toLowerCase();
+  const isSearching = normalizedQuery.length > 0;
+  // Unique per picker instance so the active-descendant ids never collide when
+  // more than one ModelReasoningPicker is mounted on the page.
+  const navId = useId();
+  const listboxId = `${navId}-listbox`;
+  const optionDomId = (index: number) => `${navId}-opt-${index}`;
 
   // While the popover is open, the user can browse other providers without
   // committing. `previewProviderId` tracks which provider tab is active;
@@ -218,9 +296,9 @@ export function ModelReasoningPicker({
   const selectedModelLoadErrorText =
     selectedModelLoadErrorMatches && modelLoadError
       ? formatModelLoadErrorText({
-        error: modelLoadError,
-        providerLabel: selectedProviderLabel,
-      })
+          error: modelLoadError,
+          providerLabel: selectedProviderLabel,
+        })
       : "Could not load models.";
   // Strip the brand prefix at render — the trigger always shows the committed
   // provider, so we use `selectedProviderId` (not `activeProviderId`, which
@@ -330,9 +408,9 @@ export function ModelReasoningPicker({
   const activeModelLoadErrorMessage =
     activeModelLoadErrorMatches && activeModelLoadError
       ? formatModelLoadErrorText({
-        error: activeModelLoadError,
-        providerLabel: activeProviderLabel,
-      })
+          error: activeModelLoadError,
+          providerLabel: activeProviderLabel,
+        })
       : null;
   const activeModelLoadFailed = isPreviewing
     ? previewQuery.isError || activeModelLoadErrorMatches
@@ -353,14 +431,46 @@ export function ModelReasoningPicker({
     (!isShowingModelError || activeModelErrorIsProviderSpecific);
 
   // Filtered model lists (client-side fuzzy search scoped to the active
-  // provider).
+  // provider). Matching uses the rendered (brand-stripped) label plus the model
+  // id so search reflects what the user sees.
   const filteredModelOptions = useMemo(() => {
-    return fuzzyFilter(activeModelOptions, normalizedQuery);
-  }, [activeModelOptions, normalizedQuery]);
+    return fuzzyFilter(activeModelOptions, normalizedQuery, (option) =>
+      modelSearchText(option, activeProviderId),
+    );
+  }, [activeModelOptions, normalizedQuery, activeProviderId]);
 
   const filteredMoreModelOptions = useMemo(() => {
-    return fuzzyFilter(activeMoreModelOptions, normalizedQuery);
-  }, [activeMoreModelOptions, normalizedQuery]);
+    return fuzzyFilter(activeMoreModelOptions, normalizedQuery, (option) =>
+      modelSearchText(option, activeProviderId),
+    );
+  }, [activeMoreModelOptions, normalizedQuery, activeProviderId]);
+
+  // The single navigable-row model that drives arrow keys, Enter, active
+  // highlighting, and active-descendant ids.
+  const navRows = useMemo(
+    () =>
+      buildModelNavRows({
+        modelOptions: filteredModelOptions,
+        moreModelOptions: filteredMoreModelOptions,
+        isCompactViewport,
+        isSearching,
+        showMoreModels,
+      }),
+    [
+      filteredModelOptions,
+      filteredMoreModelOptions,
+      isCompactViewport,
+      isSearching,
+      showMoreModels,
+    ],
+  );
+
+  // The active index clamped to the rows currently on screen. When the list
+  // shrinks (e.g. the query narrows it) a now-out-of-range index simply reads as
+  // "nothing highlighted" until the user arrows again — no reactive clamping
+  // effect required, and it can never point past the end.
+  const highlightedIndex =
+    activeIndex >= 0 && activeIndex < navRows.length ? activeIndex : -1;
 
   // When previewing a different provider, resolve fast-mode toggle from that
   // provider's capabilities instead of the committed provider's.
@@ -447,119 +557,64 @@ export function ModelReasoningPicker({
     setMoreModelsOpen(false);
   }, [footerAction]);
 
+  // Typing resets the highlight to "none" so a narrowing query never leaves a
+  // stale row selected; the user arrows into the fresh results.
+  const handleQueryChange = useCallback((value: string) => {
+    setSearchQuery(value);
+    setActiveIndex(-1);
+  }, []);
+
   // Keyboard navigation inside the model list while the search input has focus.
-  const handleSearchKeyDown = useCallback<KeyboardEventHandler<HTMLInputElement>>(
+  // All movement/selection is driven by `navRows`, so the index math has a
+  // single source of truth shared with rendering. Arrow updates clamp any stale
+  // index (a list that shrank out from under the highlight) back into range.
+  const handleSearchKeyDown = useCallback<
+    KeyboardEventHandler<HTMLInputElement>
+  >(
     (event) => {
-      const getTotal = () => {
-        let count = filteredModelOptions.length;
-        if (filteredMoreModelOptions.length > 0) {
-          count += 1; // toggle or submenu trigger
-          if (isCompactViewport && showMoreModels) {
-            count += filteredMoreModelOptions.length;
-          }
-        }
-        return count;
-      };
+      const total = navRows.length;
 
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        const total = getTotal();
         if (total === 0) return;
-        setActiveIndex((current) =>
-          current >= total - 1 ? 0 : current + 1,
-        );
+        setActiveIndex((current) => {
+          const from = current >= total ? -1 : current;
+          return from >= total - 1 ? 0 : from + 1;
+        });
         return;
       }
 
       if (event.key === "ArrowUp") {
         event.preventDefault();
-        const total = getTotal();
         if (total === 0) return;
-        setActiveIndex((current) =>
-          current <= 0 ? total - 1 : current - 1,
-        );
+        setActiveIndex((current) => {
+          const from = current >= total ? -1 : current;
+          return from <= 0 ? total - 1 : from - 1;
+        });
         return;
       }
 
       if (event.key === "Enter") {
+        if (highlightedIndex < 0) return;
+        const row = navRows[highlightedIndex];
+        if (!row) return;
         event.preventDefault();
-        if (activeIndex < 0) return;
-
-        let idx = activeIndex;
-        if (idx < filteredModelOptions.length) {
-          handleModelSelect(filteredModelOptions[idx]!.value);
-          return;
-        }
-        idx -= filteredModelOptions.length;
-
-        if (filteredMoreModelOptions.length > 0) {
-          if (idx === 0) {
-            if (isCompactViewport) {
-              setShowMoreModels((current) => !current);
-            } else {
-              openSub();
-            }
-            return;
-          }
-          idx -= 1;
-          if (
-            isCompactViewport &&
-            showMoreModels &&
-            idx >= 0 &&
-            idx < filteredMoreModelOptions.length
-          ) {
-            handleModelSelect(filteredMoreModelOptions[idx]!.value);
-            return;
-          }
+        if (row.kind === "model") {
+          handleModelSelect(row.option.value);
+        } else {
+          setShowMoreModels((current) => !current);
         }
       }
-
     },
-    [
-      activeIndex,
-      filteredModelOptions,
-      filteredMoreModelOptions,
-      isCompactViewport,
-      showMoreModels,
-      handleModelSelect,
-      openSub,
-    ],
+    [navRows, highlightedIndex, handleModelSelect],
   );
-
-  // Clamp active index when the visible list changes size.
-  useEffect(() => {
-    let count = filteredModelOptions.length;
-    if (filteredMoreModelOptions.length > 0) {
-      count += 1;
-      if (isCompactViewport && showMoreModels) {
-        count += filteredMoreModelOptions.length;
-      }
-    }
-    setActiveIndex((current) => {
-      if (count === 0) return -1;
-      if (current >= count) return count - 1;
-      if (current < 0) return 0;
-      return current;
-    });
-  }, [
-    filteredModelOptions.length,
-    filteredMoreModelOptions.length,
-    isCompactViewport,
-    showMoreModels,
-  ]);
 
   // Scroll the active item into view.
   useEffect(() => {
-    if (activeIndex < 0) return;
-    const el = document.getElementById(`model-nav-${activeIndex}`);
+    if (highlightedIndex < 0) return;
+    const el = document.getElementById(`${navId}-opt-${highlightedIndex}`);
     el?.scrollIntoView({ block: "nearest" });
-  }, [activeIndex]);
-
-  // Clear search when the active provider changes (tab switch).
-  useEffect(() => {
-    setSearchQuery("");
-    setActiveIndex(-1);
-  }, [activeProviderId]);
+  }, [highlightedIndex, navId]);
 
   // Auto-focus the search input on open (desktop only).
   useEffect(() => {
@@ -649,7 +704,11 @@ export function ModelReasoningPicker({
   }
 
   const showSearchInput =
-    hasActiveModelOptions && !activeModelIsLoading && !isShowingModelError;
+    hasActiveModelOptions &&
+    !activeModelIsLoading &&
+    !isShowingModelError &&
+    activeModelOptions.length + activeMoreModelOptions.length >
+      MODEL_SEARCH_MIN_OPTIONS;
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal={modal}>
@@ -685,6 +744,12 @@ export function ModelReasoningPicker({
                           ? null
                           : provider.value,
                       );
+                      // The new tab lists a different provider's models, so drop
+                      // the query and highlight from the previous tab. (Committing
+                      // a provider closes the popover, where resetBrowseState
+                      // clears these anyway.)
+                      setSearchQuery("");
+                      setActiveIndex(-1);
                     }
                   }}
                   className={cn(
@@ -718,8 +783,12 @@ export function ModelReasoningPicker({
           <ModelSearchInput
             inputRef={searchInputRef}
             query={searchQuery}
-            onQueryChange={setSearchQuery}
+            onQueryChange={handleQueryChange}
             onKeyDown={handleSearchKeyDown}
+            listboxId={listboxId}
+            activeOptionId={
+              highlightedIndex >= 0 ? optionDomId(highlightedIndex) : undefined
+            }
           />
         ) : null}
 
@@ -731,10 +800,13 @@ export function ModelReasoningPicker({
             list always matches the active tab. */}
           <div
             key={activeProviderId || "no-provider"}
+            role={showSearchInput ? "listbox" : undefined}
+            id={showSearchInput ? listboxId : undefined}
+            aria-label={showSearchInput ? "Models" : undefined}
             className={cn(
               "overflow-y-auto px-1 pb-1 pt-0",
               !isCompactViewport &&
-              "max-h-[min(250px,var(--radix-popover-content-available-height,250px)-80px)]",
+                "max-h-[min(250px,var(--radix-popover-content-available-height,250px)-80px)]",
             )}
           >
             {isShowingModelError ? null : (
@@ -751,71 +823,60 @@ export function ModelReasoningPicker({
               </div>
             ) : hasActiveModelOptions ? (
               <>
-                {filteredModelOptions.map((option, index) => (
-                  <MenuRowButton
-                    key={option.value}
-                    id={`model-nav-${index}`}
-                    isActive={activeIndex === index}
-                    // The menu always reflects the provider whose models it lists
-                    // (either committed or previewed) — strip with `activeProviderId`.
-                    label={stripModelBrandPrefix(
-                      option.label,
-                      activeProviderId,
-                    )}
-                    selected={!isPreviewing && option.value === modelValue}
-                    onClick={() => handleModelSelect(option.value)}
-                  />
-                ))}
-                {filteredMoreModelOptions.length > 0 ? (
-                  isCompactViewport ? (
-                    <>
+                {navRows.map((row, index) => {
+                  const active = highlightedIndex === index;
+                  const domId = optionDomId(index);
+                  if (row.kind === "more-toggle") {
+                    return (
                       <MoreModelsToggleRow
-                        id={`model-nav-${filteredModelOptions.length}`}
-                        isActive={activeIndex === filteredModelOptions.length}
+                        key="more-toggle"
+                        id={domId}
+                        isActive={active}
                         expanded={showMoreModels}
                         onToggle={() =>
                           setShowMoreModels((current) => !current)
                         }
                       />
-                      {showMoreModels
-                        ? filteredMoreModelOptions.map((option, idx) => (
-                          <MenuRowButton
-                            key={option.value}
-                            id={`model-nav-${filteredModelOptions.length + 1 + idx}`}
-                            isActive={
-                              activeIndex ===
-                              filteredModelOptions.length + 1 + idx
-                            }
-                            label={stripModelBrandPrefix(
-                              option.label,
-                              activeProviderId,
-                            )}
-                            selected={
-                              !isPreviewing && option.value === modelValue
-                            }
-                            onClick={() => handleModelSelect(option.value)}
-                          />
-                        ))
-                        : null}
-                    </>
-                  ) : (
-                    <MoreModelsSubmenu
-                      id={`model-nav-${filteredModelOptions.length}`}
-                      isActive={activeIndex === filteredModelOptions.length}
-                      open={moreModelsOpen}
-                      onOpenChange={setMoreModelsOpen}
-                      openSub={openSub}
-                      activeProviderId={activeProviderId}
-                      isPreviewing={isPreviewing}
-                      modelValue={modelValue}
-                      options={filteredMoreModelOptions}
-                      onSelect={handleModelSelect}
+                    );
+                  }
+                  const option = row.option;
+                  return (
+                    <MenuRowButton
+                      key={option.value}
+                      id={domId}
+                      role={showSearchInput ? "option" : undefined}
+                      isActive={active}
+                      // The menu always reflects the provider whose models it
+                      // lists (committed or previewed) — strip with
+                      // `activeProviderId`.
+                      label={stripModelBrandPrefix(
+                        option.label,
+                        activeProviderId,
+                      )}
+                      selected={!isPreviewing && option.value === modelValue}
+                      onClick={() => handleModelSelect(option.value)}
                     />
-                  )
+                  );
+                })}
+                {/* Desktop, not searching: the selected-only models live in a
+                    hover submenu that is excluded from keyboard nav. During a
+                    search they are flattened into `navRows` above so every match
+                    stays reachable from the keyboard. */}
+                {!isCompactViewport &&
+                !isSearching &&
+                filteredMoreModelOptions.length > 0 ? (
+                  <MoreModelsSubmenu
+                    open={moreModelsOpen}
+                    onOpenChange={setMoreModelsOpen}
+                    openSub={openSub}
+                    activeProviderId={activeProviderId}
+                    isPreviewing={isPreviewing}
+                    modelValue={modelValue}
+                    options={filteredMoreModelOptions}
+                    onSelect={handleModelSelect}
+                  />
                 ) : null}
-                {normalizedQuery &&
-                  filteredModelOptions.length === 0 &&
-                  filteredMoreModelOptions.length === 0 ? (
+                {isSearching && navRows.length === 0 ? (
                   <div
                     className={cn(
                       "px-2 text-xs text-muted-foreground",
@@ -982,8 +1043,6 @@ function MoreModelsSubmenu({
   modelValue,
   options,
   onSelect,
-  isActive,
-  id,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -993,8 +1052,6 @@ function MoreModelsSubmenu({
   modelValue: string;
   options: readonly PickerOption<string>[];
   onSelect: (value: string) => void;
-  isActive?: boolean;
-  id?: string;
 }) {
   const { isLastHovered, hoverProps } = useMenuItemHover();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -1022,7 +1079,6 @@ function MoreModelsSubmenu({
         <button
           ref={triggerRef}
           type="button"
-          id={id}
           aria-haspopup="menu"
           aria-expanded={open}
           onClick={openSub}
@@ -1054,7 +1110,6 @@ function MoreModelsSubmenu({
             "relative flex w-full cursor-default select-none items-center gap-1 rounded-sm px-2 py-[0.3125rem] text-xs text-muted-foreground outline-none hover:bg-state-hover hover:text-foreground",
             LIST_HOVER_TRANSITION,
             MENU_ITEM_LAST_HOVERED_CLASS,
-            isActive && "bg-state-active",
           )}
           data-last-hovered={hoverProps["data-last-hovered"]}
         >
@@ -1107,6 +1162,7 @@ function MenuRowButton({
   onClick,
   isActive,
   id,
+  role,
   onPointerEnter: callerPointerEnter,
   onKeyDown: callerKeyDown,
 }: {
@@ -1115,6 +1171,7 @@ function MenuRowButton({
   onClick: () => void;
   isActive?: boolean;
   id?: string;
+  role?: React.AriaRole;
   onPointerEnter?: PointerEventHandler<HTMLButtonElement>;
   onKeyDown?: KeyboardEventHandler<HTMLButtonElement>;
 }) {
@@ -1128,6 +1185,11 @@ function MenuRowButton({
     <button
       type="button"
       id={id}
+      role={role}
+      // In the searchable listbox the active row is the combobox's
+      // aria-activedescendant, so it carries aria-selected; reasoning/submenu
+      // rows keep default button semantics.
+      aria-selected={role === "option" ? Boolean(isActive) : undefined}
       onClick={onClick}
       className={cn(
         "relative flex w-full cursor-default select-none items-center justify-between gap-3 rounded-sm px-2 text-xs outline-none hover:bg-state-hover hover:text-foreground",
@@ -1189,13 +1251,15 @@ function MenuActionButton({
     </button>
   );
 }
-
-
 interface ModelSearchInputProps {
   inputRef: React.RefObject<HTMLInputElement | null>;
   query: string;
   onQueryChange: (query: string) => void;
   onKeyDown: KeyboardEventHandler<HTMLInputElement>;
+  /** Id of the listbox this combobox controls (for `aria-controls`). */
+  listboxId: string;
+  /** Id of the virtually-focused option, or undefined when none is active. */
+  activeOptionId: string | undefined;
 }
 
 function ModelSearchInput({
@@ -1203,13 +1267,18 @@ function ModelSearchInput({
   query,
   onQueryChange,
   onKeyDown,
+  listboxId,
+  activeOptionId,
 }: ModelSearchInputProps) {
   return (
-    <div className="shrink-0 border-b border-border p-1.5">
+    <div className="shrink-0 border-b border-border px-1.5 py-1">
       <div className="relative">
         <Icon
           name="Search"
-          className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+          // size-4 + left-1.5 puts this icon at the same x (12px from the
+          // popover edge, center 20px) as the Fast mode "Zap" icon below, so the
+          // two leading icons line up vertically.
+          className="pointer-events-none absolute left-1.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
         />
         <Input
           ref={inputRef}
@@ -1217,7 +1286,13 @@ function ModelSearchInput({
           onChange={(event) => onQueryChange(event.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Search models"
-          className="h-8 border-0 bg-transparent pl-8 pr-2 text-xs shadow-none focus-visible:ring-0"
+          aria-label="Search models"
+          role="combobox"
+          aria-expanded
+          aria-controls={listboxId}
+          aria-autocomplete="list"
+          aria-activedescendant={activeOptionId}
+          className="h-7 border-0 bg-transparent pl-8 pr-2 text-xs shadow-none focus-visible:ring-0"
         />
       </div>
     </div>
