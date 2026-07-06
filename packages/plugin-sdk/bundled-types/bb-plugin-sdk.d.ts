@@ -262,6 +262,16 @@ interface BbNavigate {
         subPath?: string;
         replace?: boolean;
     }): void;
+    /**
+     * Navigate to the root compose surface (the new-thread screen). Pass
+     * `initialPrompt` to seed the composer draft and `focusPrompt` to focus the
+     * composer on arrival — the pairing behind "Create via chat" style entry
+     * points that drop the user into chat with a prefilled prompt.
+     */
+    toCompose(options?: {
+        initialPrompt?: string;
+        focusPrompt?: boolean;
+    }): void;
 }
 /**
  * Everything `@bb/plugin-sdk/app` resolves to at runtime. The BB app builds
@@ -339,8 +349,6 @@ declare const changedMessageSchema: z$1.ZodDiscriminatedUnion<[z$1.ZodObject<{
         "project-sources-changed": "project-sources-changed";
         "threads-changed": "threads-changed";
         "project-order-changed": "project-order-changed";
-        "automations-changed": "automations-changed";
-        "automation-runs-changed": "automation-runs-changed";
     }>>>;
 }, z$1.core.$strict>, z$1.ZodObject<{
     type: z$1.ZodLiteral<"changed">;
@@ -424,155 +432,13 @@ declare const threadTimelinePendingTodosSchema: z$1.ZodObject<{
         id: z$1.ZodString;
         text: z$1.ZodString;
         status: z$1.ZodEnum<{
+            completed: "completed";
             pending: "pending";
             in_progress: "in_progress";
-            completed: "completed";
         }>;
     }, z$1.core.$strip>>;
 }, z$1.core.$strip>;
 type ThreadTimelinePendingTodos = z$1.infer<typeof threadTimelinePendingTodosSchema>;
-
-declare const createAutomationRequestSchema: z$1.ZodObject<{
-    name: z$1.ZodString;
-    enabled: z$1.ZodDefault<z$1.ZodBoolean>;
-    trigger: z$1.ZodDiscriminatedUnion<[z$1.ZodObject<{
-        triggerType: z$1.ZodLiteral<"schedule">;
-        cron: z$1.ZodString;
-        timezone: z$1.ZodString;
-    }, z$1.core.$strip>, z$1.ZodObject<{
-        triggerType: z$1.ZodLiteral<"once">;
-        runAt: z$1.ZodNumber;
-    }, z$1.core.$strip>], "triggerType">;
-    execution: z$1.ZodDiscriminatedUnion<[z$1.ZodObject<{
-        mode: z$1.ZodLiteral<"agent">;
-        prompt: z$1.ZodString;
-        providerId: z$1.ZodString;
-        model: z$1.ZodString;
-        permissionMode: z$1.ZodEnum<{
-            readonly: "readonly";
-            full: "full";
-            "workspace-write": "workspace-write";
-        }>;
-        targetThreadId: z$1.ZodOptional<z$1.ZodString>;
-    }, z$1.core.$strip>, z$1.ZodObject<{
-        mode: z$1.ZodLiteral<"script">;
-        script: z$1.ZodOptional<z$1.ZodString>;
-        scriptFile: z$1.ZodOptional<z$1.ZodString>;
-        interpreter: z$1.ZodOptional<z$1.ZodEnum<{
-            bash: "bash";
-            sh: "sh";
-            node: "node";
-            python3: "python3";
-        }>>;
-        timeoutMs: z$1.ZodDefault<z$1.ZodNumber>;
-        env: z$1.ZodOptional<z$1.ZodRecord<z$1.ZodString, z$1.ZodString>>;
-    }, z$1.core.$strip>], "mode">;
-    environment: z$1.ZodDiscriminatedUnion<[z$1.ZodObject<{
-        type: z$1.ZodLiteral<"reuse">;
-        environmentId: z$1.ZodString;
-    }, z$1.core.$strip>, z$1.ZodObject<{
-        type: z$1.ZodLiteral<"host">;
-        hostId: z$1.ZodOptional<z$1.ZodString>;
-        workspace: z$1.ZodDiscriminatedUnion<[z$1.ZodObject<{
-            type: z$1.ZodLiteral<"unmanaged">;
-            path: z$1.ZodNullable<z$1.ZodString>;
-            branch: z$1.ZodOptional<z$1.ZodDiscriminatedUnion<[z$1.ZodObject<{
-                kind: z$1.ZodLiteral<"existing">;
-                name: z$1.ZodString;
-            }, z$1.core.$strict>, z$1.ZodObject<{
-                kind: z$1.ZodLiteral<"new">;
-                baseBranch: z$1.ZodString;
-            }, z$1.core.$strict>], "kind">>;
-        }, z$1.core.$strip>, z$1.ZodObject<{
-            type: z$1.ZodLiteral<"managed-worktree">;
-            baseBranch: z$1.ZodDiscriminatedUnion<[z$1.ZodObject<{
-                kind: z$1.ZodLiteral<"named">;
-                name: z$1.ZodString;
-            }, z$1.core.$strip>, z$1.ZodObject<{
-                kind: z$1.ZodLiteral<"default">;
-            }, z$1.core.$strip>], "kind">;
-        }, z$1.core.$strip>, z$1.ZodObject<{
-            type: z$1.ZodLiteral<"personal">;
-        }, z$1.core.$strip>], "type">;
-    }, z$1.core.$strip>], "type">;
-    autoArchive: z$1.ZodDefault<z$1.ZodBoolean>;
-    origin: z$1.ZodEnum<{
-        agent: "agent";
-        human: "human";
-        app: "app";
-    }>;
-    createdByThreadId: z$1.ZodOptional<z$1.ZodString>;
-}, z$1.core.$strict>;
-type CreateAutomationRequest = z$1.input<typeof createAutomationRequestSchema>;
-declare const updateAutomationRequestSchema: z$1.ZodObject<{
-    name: z$1.ZodOptional<z$1.ZodString>;
-    trigger: z$1.ZodOptional<z$1.ZodDiscriminatedUnion<[z$1.ZodObject<{
-        triggerType: z$1.ZodLiteral<"schedule">;
-        cron: z$1.ZodString;
-        timezone: z$1.ZodString;
-    }, z$1.core.$strip>, z$1.ZodObject<{
-        triggerType: z$1.ZodLiteral<"once">;
-        runAt: z$1.ZodNumber;
-    }, z$1.core.$strip>], "triggerType">>;
-    execution: z$1.ZodOptional<z$1.ZodDiscriminatedUnion<[z$1.ZodObject<{
-        mode: z$1.ZodLiteral<"agent">;
-        prompt: z$1.ZodString;
-        providerId: z$1.ZodString;
-        model: z$1.ZodString;
-        permissionMode: z$1.ZodEnum<{
-            readonly: "readonly";
-            full: "full";
-            "workspace-write": "workspace-write";
-        }>;
-        targetThreadId: z$1.ZodOptional<z$1.ZodString>;
-    }, z$1.core.$strip>, z$1.ZodObject<{
-        mode: z$1.ZodLiteral<"script">;
-        script: z$1.ZodOptional<z$1.ZodString>;
-        scriptFile: z$1.ZodOptional<z$1.ZodString>;
-        interpreter: z$1.ZodOptional<z$1.ZodEnum<{
-            bash: "bash";
-            sh: "sh";
-            node: "node";
-            python3: "python3";
-        }>>;
-        timeoutMs: z$1.ZodDefault<z$1.ZodNumber>;
-        env: z$1.ZodOptional<z$1.ZodRecord<z$1.ZodString, z$1.ZodString>>;
-    }, z$1.core.$strip>], "mode">>;
-    environment: z$1.ZodOptional<z$1.ZodDiscriminatedUnion<[z$1.ZodObject<{
-        type: z$1.ZodLiteral<"reuse">;
-        environmentId: z$1.ZodString;
-    }, z$1.core.$strip>, z$1.ZodObject<{
-        type: z$1.ZodLiteral<"host">;
-        hostId: z$1.ZodOptional<z$1.ZodString>;
-        workspace: z$1.ZodDiscriminatedUnion<[z$1.ZodObject<{
-            type: z$1.ZodLiteral<"unmanaged">;
-            path: z$1.ZodNullable<z$1.ZodString>;
-            branch: z$1.ZodOptional<z$1.ZodDiscriminatedUnion<[z$1.ZodObject<{
-                kind: z$1.ZodLiteral<"existing">;
-                name: z$1.ZodString;
-            }, z$1.core.$strict>, z$1.ZodObject<{
-                kind: z$1.ZodLiteral<"new">;
-                baseBranch: z$1.ZodString;
-            }, z$1.core.$strict>], "kind">>;
-        }, z$1.core.$strip>, z$1.ZodObject<{
-            type: z$1.ZodLiteral<"managed-worktree">;
-            baseBranch: z$1.ZodDiscriminatedUnion<[z$1.ZodObject<{
-                kind: z$1.ZodLiteral<"named">;
-                name: z$1.ZodString;
-            }, z$1.core.$strip>, z$1.ZodObject<{
-                kind: z$1.ZodLiteral<"default">;
-            }, z$1.core.$strip>], "kind">;
-        }, z$1.core.$strip>, z$1.ZodObject<{
-            type: z$1.ZodLiteral<"personal">;
-        }, z$1.core.$strip>], "type">;
-    }, z$1.core.$strip>], "type">>;
-    autoArchive: z$1.ZodOptional<z$1.ZodBoolean>;
-}, z$1.core.$strict>;
-type UpdateAutomationRequest = z$1.infer<typeof updateAutomationRequestSchema>;
-declare const runAutomationRequestSchema: z$1.ZodObject<{
-    idempotencyKey: z$1.ZodOptional<z$1.ZodString>;
-}, z$1.core.$strict>;
-type RunAutomationRequest = z$1.infer<typeof runAutomationRequestSchema>;
 
 /**
  * `POST /connect/pair` — redeem a one-time connect code so this server is
@@ -780,7 +646,6 @@ declare const createThreadRequestSchema: z$1.ZodObject<{
     origin: z$1.ZodEnum<{
         plugin: "plugin";
         app: "app";
-        automation: "automation";
         cli: "cli";
         sdk: "sdk";
     }>;
@@ -1229,59 +1094,6 @@ type PublicApiEndpointOutput<TEndpoint> = TEndpoint extends {
 } ? Status extends SuccessfulHttpStatus ? Output : never : never;
 type SuccessfulHttpStatus = 200 | 201 | 202 | 203 | 204 | 205 | 206 | 207 | 208 | 226;
 type PublicApiOutput<TPath extends keyof PublicApiSchema, TMethod extends keyof PublicApiSchema[TPath]> = PublicApiEndpointOutput<PublicApiSchema[TPath][TMethod]>;
-
-interface AutomationCreateArgs extends CreateAutomationRequest {
-    projectId?: string;
-}
-interface AutomationListArgs {
-    projectId?: string;
-}
-interface AutomationGetArgs {
-    projectId?: string;
-    automationId: string;
-}
-interface AutomationUpdateArgs extends UpdateAutomationRequest {
-    projectId?: string;
-    automationId: string;
-}
-interface AutomationActionArgs {
-    projectId?: string;
-    automationId: string;
-}
-interface AutomationRunArgs extends RunAutomationRequest {
-    projectId?: string;
-    automationId: string;
-}
-interface AutomationRunsArgs {
-    projectId?: string;
-    automationId: string;
-    limit?: number;
-    cursor?: string;
-}
-type AutomationCreateResult = PublicApiOutput<"/projects/:id/automations", "$post">;
-type AutomationListResult = PublicApiOutput<"/projects/:id/automations", "$get">;
-type AutomationGetResult = PublicApiOutput<"/projects/:id/automations/:automationId", "$get">;
-type AutomationUpdateResult = PublicApiOutput<"/projects/:id/automations/:automationId", "$patch">;
-type AutomationPauseResult = PublicApiOutput<"/projects/:id/automations/:automationId/pause", "$post">;
-type AutomationResumeResult = PublicApiOutput<"/projects/:id/automations/:automationId/resume", "$post">;
-type AutomationRunResult = PublicApiOutput<"/projects/:id/automations/:automationId/run", "$post">;
-type AutomationRunsResult = PublicApiOutput<"/projects/:id/automations/:automationId/runs", "$get">;
-type AutomationsOverviewResult = PublicApiOutput<"/automations", "$get">;
-interface AutomationsArea {
-    create(args: AutomationCreateArgs): Promise<AutomationCreateResult>;
-    delete(args: AutomationActionArgs): Promise<{
-        ok: true;
-    }>;
-    get(args: AutomationGetArgs): Promise<AutomationGetResult>;
-    list(args?: AutomationListArgs): Promise<AutomationListResult>;
-    overview(): Promise<AutomationsOverviewResult>;
-    pause(args: AutomationActionArgs): Promise<AutomationPauseResult>;
-    resume(args: AutomationActionArgs): Promise<AutomationResumeResult>;
-    run(args: AutomationRunArgs): Promise<AutomationRunResult>;
-    runs(args: AutomationRunsArgs): Promise<AutomationRunsResult>;
-    update(args: AutomationUpdateArgs): Promise<AutomationUpdateResult>;
-}
-declare function createAutomationsArea(args: CreateSdkAreaArgs): AutomationsArea;
 
 interface ConnectPairArgs extends ConnectPairRequest {
 }
@@ -1782,7 +1594,6 @@ interface ThreadsArea {
 declare function createThreadsArea(args: CreateSdkAreaArgs): ThreadsArea;
 
 interface BbSdk extends BbRealtime {
-    automations: ReturnType<typeof createAutomationsArea>;
     connect: ReturnType<typeof createConnectArea>;
     environments: ReturnType<typeof createEnvironmentsArea>;
     files: ReturnType<typeof createFilesArea>;
@@ -1893,6 +1704,7 @@ interface PluginStorage {
  * block or veto it. `thread` is the same public DTO GET /threads/:id serves.
  */
 interface PluginThreadEventPayloads {
+    /** Fired after a thread row is created. */
     "thread.created": {
         thread: ThreadResponse;
     };
@@ -1907,6 +1719,10 @@ interface PluginThreadEventPayloads {
     "thread.failed": {
         thread: ThreadResponse;
         error: string | null;
+    };
+    /** Fired after a thread is soft-deleted. */
+    "thread.deleted": {
+        thread: ThreadResponse;
     };
 }
 type PluginThreadEventName = keyof PluginThreadEventPayloads;

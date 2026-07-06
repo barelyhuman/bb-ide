@@ -197,9 +197,10 @@ listing under a directory. Writes cap at 25 MB and return
 bb.on("thread.created", ({ thread }) => { ... });
 bb.on("thread.idle", ({ thread, lastAssistantText }) => { ... });   // lastAssistantText: string | null
 bb.on("thread.failed", ({ thread, error }) => { ... });             // error: string | null
+bb.on("thread.deleted", ({ thread }) => { ... });
 ```
 
-Exactly three events. Observe-only: handlers run fire-and-forget after the
+Exactly four events. Observe-only: handlers run fire-and-forget after the
 transition and can never block or veto it. `thread` is the same DTO
 `GET /api/v1/threads/:id` serves. Errors are caught, logged, and counted in
 the plugin's handler stats (`bb plugin list`).
@@ -414,7 +415,7 @@ Slot props contracts (versioned, additive-only):
   routing).
   Registration: `{ id, title, icon, path, component, chrome?, headerContent? }`.
   The host renders your plugin logo + `title` into the SHARED app header
-  (the same chrome as Settings/Automations) with your optional
+  (the same chrome as Settings pages) with your optional
   `headerContent` component as the header actions on the right — so do NOT
   repeat the title inside your component; the body below is yours,
   full-width. `headerContent` is plugin code inside host chrome and is
@@ -466,7 +467,7 @@ Hooks:
 - `useSettings()` → `{ values, isLoading }` — effective non-secret values
   (secret settings are excluded; read them server-side only).
 - `useBbContext()` → `{ projectId, threadId }` from the current route.
-- `useBbNavigate()` → `{ toThread(id), toProject(id), toPluginPanel(path, { subPath?, replace? }?) }`.
+- `useBbNavigate()` → `{ toThread(id), toProject(id), toPluginPanel(path, { subPath?, replace? }?), toCompose({ initialPrompt?, focusPrompt? }?) }`. `toCompose` opens the root compose screen; pass `initialPrompt` to seed the composer draft and `focusPrompt: true` to focus it (the "Create via chat" pattern — drop the user into chat with a prefilled prompt).
 - `useComposer()` → programmatic access to the chat composer draft (the
   same one the built-in "Add to chat" affordances write to):
   `addQuote(text)` appends the text as a `> ` blockquote block and focuses
@@ -482,6 +483,8 @@ UI components — **vendored shadcn source you own** (the shadcn model; the
 old host-provided component kit is REMOVED — `@bb/plugin-sdk/app` exports
 only `definePluginApp` + the hooks):
 
+- Builtin plugins in this repo import shared UI from `@bb/plugin-ui`;
+  external and example plugins still vendor source through the registry.
 - `bb plugin new --app` pre-vendors button, card, input, dialog (plus their
   support files: `lib/utils`, `lib/portal-scope`, icon, responsive-overlay,
   drawer, hooks) into `components/ui/` etc., and writes a `components.json`
@@ -667,8 +670,8 @@ Reference examples in `examples/plugins/` (a bb checkout):
 - `storage.migrate` is append-only by statement index.
 - Settings saves do NOT auto-reload the plugin; `bb plugin reload <id>`.
 - Descriptors without `default` produce `| undefined` values.
-- Thread events are observe-only; there are exactly three
-  (`thread.created`, `thread.idle`, `thread.failed`).
+- Thread events are observe-only; there are exactly four
+  (`thread.created`, `thread.idle`, `thread.failed`, `thread.deleted`).
 - Service throw of NeedsConfigurationError changes plugin status; schedule
   throws only set the schedule's last_error. Name-matching means no import
   is needed for the error class.

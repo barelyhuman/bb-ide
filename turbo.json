@@ -91,7 +91,13 @@
         "$TURBO_ROOT$/packages/sdk/package.json",
         "$TURBO_ROOT$/packages/sdk/src/**",
         "$TURBO_ROOT$/packages/sdk/tsconfig.json",
+        "$TURBO_ROOT$/packages/plugin-ui/package.json",
+        "$TURBO_ROOT$/packages/plugin-ui/src/**",
+        "$TURBO_ROOT$/packages/plugin-ui/tsconfig.json",
         "$TURBO_ROOT$/packages/tsconfig/*.json",
+        "$TURBO_ROOT$/plugins/automations/**",
+        "!$TURBO_ROOT$/plugins/automations/dist/**",
+        "!$TURBO_ROOT$/plugins/automations/node_modules/**",
         "$TURBO_ROOT$/scripts/*.mjs"
       ],
       "outputs": [
@@ -240,6 +246,11 @@
       "outputs": []
     },
     "typecheck": {},
+    "bb-plugin-automations#typecheck": {
+      "dependsOn": [
+        "@bb/plugin-ui#typecheck"
+      ]
+    },
     "@bb/integration-tests#typecheck": {
       "inputs": [
         "$TURBO_DEFAULT$",
